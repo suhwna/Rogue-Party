@@ -1,0 +1,64 @@
+# 2D Web Game Prompt Pack v2
+
+PixiJS v8 + TypeScript + Vite + GSAP 기반 2D 웹게임 개발용 역할별/기능별 프롬프트 세트입니다.
+
+## 구성
+
+- `00_MASTER.md`
+- `01_ROLE_ARCHITECT.md`
+- `02_ROLE_GAMEPLAY.md`
+- `03_ROLE_GRAPHICS.md`
+- `04_ROLE_UIUX.md`
+- `05_ROLE_AI.md`
+- `06_ROLE_PERFORMANCE.md`
+- `07_ROLE_CODE_REVIEW.md`
+- `08_ROLE_TEST.md`
+- `09_ROLE_ASSET.md`
+- `10_ROLE_RELEASE.md`
+- `11_ROLE_NETWORK.md`
+- `12_ROLE_AUDIO.md`
+- `13_ROLE_SAVE.md`
+- `14_ROLE_SHADER.md`
+- `15_ROLE_PARTICLE.md`
+- `16_ROLE_LEVEL_DESIGN.md`
+- `17_ROLE_GAME_BALANCE.md`
+- `18_ROLE_SECURITY.md`
+- `19_ROLE_BUILD.md`
+- `20_ROLE_DEBUG.md`
+- `21_ROLE_REFACTOR.md`
+- `22_ROLE_DOCUMENT.md`
+- `23_ROLE_DATABASE.md`
+- `24_ROLE_API.md`
+- `25_ROLE_DEVOPS.md`
+- `26_ROLE_REVIEWER.md`
+- `27_ROLE_PRODUCT_OWNER.md`
+- `28_ROLE_ART_DIRECTOR.md`
+- `29_ROLE_PROMPT_ENGINEER.md`
+- `30_ROLE_BUG_HUNTER.md`
+- `31_FEATURE_PLAYER.md`
+- `32_FEATURE_ENEMY.md`
+- `33_FEATURE_SKILL.md`
+- `34_FEATURE_PROJECTILE.md`
+- `35_FEATURE_INVENTORY.md`
+- `36_FEATURE_STAGE.md`
+- `37_FEATURE_CAMERA.md`
+- `38_FEATURE_COLLISION.md`
+- `39_FEATURE_PARTICLE_ENGINE.md`
+- `40_FEATURE_LOADING.md`
+- `41_FEATURE_SCENE.md`
+- `42_FEATURE_INPUT.md`
+- `43_FEATURE_EFFECTS.md`
+- `44_FEATURE_UI_HUD.md`
+- `45_FEATURE_SETTINGS.md`
+- `46_FEATURE_SAVE_LOAD.md`
+- `47_FEATURE_MINIMAP.md`
+- `48_FEATURE_BOSS.md`
+- `49_FEATURE_DIALOGUE.md`
+- `50_FEATURE_QUEST.md`
+
+## 사용 방법
+
+1. `00_MASTER.md`를 먼저 AI에게 붙여넣습니다.
+2. 작업 성격에 맞는 `ROLE` 문서를 추가로 붙여넣습니다.
+3. 실제 구현할 기능에 맞는 `FEATURE` 문서를 붙여넣습니다.
+4. 결과 코드가 나오면 `07_ROLE_CODE_REVIEW.md`, `20_ROLE_DEBUG.md`, `30_ROLE_BUG_HUNTER.md`로 검수합니다.

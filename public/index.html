@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Rogue Party</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="stage" aria-label="Game screen">
+        <canvas id="game" width="1280" height="720"></canvas>
+        <div class="top-hud" aria-label="Run info">
+          <span class="top-stat">ROOM <strong id="roomCode">----</strong></span>
+          <span class="top-stat">STAGE <strong id="wave">-</strong></span>
+          <button id="settingsButton" class="hud-icon-button" type="button" aria-label="Open settings">OPT</button>
+          <span id="connection" class="connection-state">OFFLINE</span>
+        </div>
+        <button id="startButton" class="start-run stage-start hidden" type="button">START RUN</button>
+        <div id="centerBanner" class="center-banner hidden"></div>
+
+        <section id="lobbyPanel" class="lobby-panel hidden" aria-label="Lobby">
+          <div class="lobby-head">
+            <div>
+              <span>READY ROOM</span>
+              <h2>Loadout Test</h2>
+              <p>직업을 바꾸며 평타, 대시, Q/E/R/F 스킬을 바로 시험하세요. 준비 완료 후 방장이 시작합니다.</p>
+            </div>
+            <div id="lobbyReadyCount" class="lobby-ready-count">0/0 READY</div>
+          </div>
+
+          <div class="lobby-body">
+            <div class="lobby-class-area">
+              <div class="lobby-section-label">CLASSES</div>
+              <div id="lobbyClassGrid" class="lobby-class-grid" aria-label="Change class">
+                <button class="lobby-class-card" type="button" data-class="warrior">
+                  <strong>전사</strong>
+                  <em>전열 탱커</em>
+                  <span>도발과 방패 돌진으로 적을 붙잡는 근접 전열.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="ranger">
+                  <strong>궁수</strong>
+                  <em>원거리 딜러</em>
+                  <span>긴 사거리와 2단 대시, 화살비로 거리를 지배.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="mage">
+                  <strong>마법사</strong>
+                  <em>광역 마법</em>
+                  <span>빙결 파동, 운석, 연쇄 번개로 한 번에 쓸어냄.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="engineer">
+                  <strong>기계공</strong>
+                  <em>설치형 딜러</em>
+                  <span>터렛, 지뢰, 드론을 깔아 전장을 자동화.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="puppeteer">
+                  <strong>인형사</strong>
+                  <em>조작형 딜러</em>
+                  <span>인형과 본체를 함께 운용해 실 결계와 교대 공격.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="martialist">
+                  <strong>무투가</strong>
+                  <em>근접 콤보</em>
+                  <span>빠른 연격과 충격파로 적진을 흔드는 기동 전사.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="alchemist">
+                  <strong>연금술사</strong>
+                  <em>장판/보조</em>
+                  <span>산성, 화염 장판과 영약으로 공간을 제어.</span>
+                </button>
+                <button class="lobby-class-card" type="button" data-class="assassin">
+                  <strong>암살자</strong>
+                  <em>기동 폭딜</em>
+                  <span>표식, 그림자 찌르기, 연막으로 빠르게 처형.</span>
+                </button>
+              </div>
+              <div id="lobbyClassDetail" class="lobby-class-detail" aria-live="polite"></div>
+            </div>
+
+            <div class="lobby-party-area">
+              <div class="lobby-section-label">PARTY STATUS</div>
+              <div id="lobbyPartyList" class="lobby-party-list" aria-label="Lobby party"></div>
+            </div>
+          </div>
+
+          <div class="lobby-actions">
+            <div id="lobbyBotControl" class="lobby-bot-control">
+              <span id="lobbyBotCount">BOT 0</span>
+              <button id="removeBotButton" class="lobby-bot-button" type="button" aria-label="Remove bot">-</button>
+              <button id="addBotButton" class="lobby-bot-button" type="button" aria-label="Add bot">+</button>
+            </div>
+            <div class="lobby-primary-actions">
+              <button id="spectatorButton" class="lobby-spectator-button" type="button">SPECTATE</button>
+              <button id="readyButton" class="lobby-ready-button" type="button">READY</button>
+              <button id="lobbyStartButton" class="lobby-start-button hidden" type="button">START RUN</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="bottom-hud" aria-label="Player info">
+          <div id="partyList" class="party-footer" aria-label="Party info"></div>
+          <div id="skillDock" class="skill-dock" aria-label="Skill cooldowns"></div>
+          <div id="relicDock" class="relic-dock hidden" aria-label="Owned relics"></div>
+        </div>
+      </section>
+    </main>
+
+    <div id="joinOverlay" class="overlay front-door">
+      <section id="titleScreen" class="front-screen title-screen" aria-label="Title">
+        <div class="title-copy">
+          <span class="front-kicker">PIXEL ROGUELIKE RAID</span>
+          <h1>Rogue Party</h1>
+          <p>4인 협동 로그라이크 RPG. 직업을 고르고, 루트를 투표하고, 보스 패턴을 뚫어 챕터를 밀어붙이세요.</p>
+          <div class="title-badges" aria-label="Game features">
+            <span>4P Co-op</span>
+            <span>Class Skills</span>
+            <span>Route Vote</span>
+          </div>
+          <button id="titleStartButton" class="front-primary" type="button">PRESS START</button>
+        </div>
+        <div class="title-scene" aria-hidden="true">
+          <div class="gate-frame">
+            <strong>RP</strong>
+            <span></span>
+            <i></i>
+          </div>
+          <div class="party-silhouettes">
+            <b class="hero-warrior"></b>
+            <b class="hero-ranger"></b>
+            <b class="hero-mage"></b>
+          </div>
+        </div>
+      </section>
+
+      <section id="loadingScreen" class="front-screen loading-screen hidden" aria-label="Loading">
+        <span class="front-kicker">SYNCING PARTY GATE</span>
+        <h2>Loading</h2>
+        <div class="loading-track"><i></i></div>
+        <p id="loadingText">Checking open rooms...</p>
+      </section>
+
+      <section id="mainMenuScreen" class="front-screen main-menu-screen hidden" aria-label="Main menu">
+        <div class="main-menu-layout">
+          <div class="main-menu-head">
+            <span class="front-kicker">OPEN PARTY GATE</span>
+            <h2>Rogue Party</h2>
+            <p>방을 만들거나 열린 방에 합류하세요. 대기방에서는 직업을 자유롭게 바꾸고 스킬을 테스트할 수 있습니다.</p>
+
+            <div class="menu-brief" aria-label="Quick controls">
+              <div>
+                <strong>Move</strong>
+                <span>WASD + mouse aim</span>
+              </div>
+              <div>
+                <strong>Attack</strong>
+                <span>Left click</span>
+              </div>
+              <div>
+                <strong>Skills</strong>
+                <span>Q / E / R / F</span>
+              </div>
+              <div>
+                <strong>Dash</strong>
+                <span>Space</span>
+              </div>
+            </div>
+          </div>
+
+          <form id="joinForm" class="room-screen join-panel" aria-label="Room entry">
+            <div class="room-screen-head">
+              <div>
+                <span id="roomModeLabel" class="front-kicker">ROOM ACCESS</span>
+                <h2 id="roomScreenTitle">Enter Gate</h2>
+              </div>
+              <button id="refreshRooms" class="ghost-button" type="button">Refresh</button>
+            </div>
+
+            <div class="room-fields">
+              <label>
+                CALLSIGN
+                <input id="nameInput" maxlength="16" autocomplete="off" value="Player" />
+              </label>
+
+              <label>
+                ROOM CODE
+                <input id="roomInput" maxlength="8" autocomplete="off" value="TAVERN" />
+              </label>
+            </div>
+
+            <div class="quick-room-actions">
+              <button id="menuCreateButton" class="menu-action primary-action" type="button">
+                <strong>New Room</strong>
+                <span>새 파티방을 만들고 바로 대기방으로 이동</span>
+              </button>
+              <button id="roomSubmitButton" class="menu-action" type="button">
+                <strong>Enter Code</strong>
+                <span>입력한 코드로 파티방 합류</span>
+              </button>
+            </div>
+
+            <div class="room-browser">
+              <div class="room-browser-head">
+                <span>Open Rooms</span>
+                <em>Click a room to join</em>
+              </div>
+              <div id="roomList" class="room-list"></div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div id="choiceOverlay" class="overlay choice hidden">
+      <div class="modal choice-modal">
+        <div class="modal-heading">
+          <span class="brand-mark">UP</span>
+          <div>
+            <h2>Relic Chest</h2>
+            <p id="choiceSubtitle">Pick one before the timer ends</p>
+          </div>
+        </div>
+        <div id="choiceRewardSummary" class="reward-summary hidden"></div>
+        <div id="choices" class="choices"></div>
+      </div>
+    </div>
+
+    <div id="skillOverlay" class="overlay choice hidden">
+      <div class="modal choice-modal">
+        <div class="modal-heading">
+          <span class="brand-mark">LV</span>
+          <div>
+            <h2 id="skillChoiceTitle">Skill Upgrade</h2>
+            <p id="skillChoiceSubtitle">Choose one upgrade when you level up</p>
+          </div>
+        </div>
+        <div id="skillChoices" class="choices"></div>
+      </div>
+    </div>
+
+    <div id="mapOverlay" class="overlay choice hidden">
+      <div class="modal choice-modal map-modal">
+        <div class="modal-heading">
+          <span class="brand-mark">MP</span>
+          <div>
+            <h2>Route Vote</h2>
+            <p id="mapSubtitle">Vote for the next route</p>
+          </div>
+        </div>
+        <div id="mapRewardSummary" class="reward-summary hidden"></div>
+        <div id="mapBoard" class="map-board"></div>
+        <div id="mapChoices" class="choices map-choices"></div>
+      </div>
+    </div>
+
+    <div id="resultOverlay" class="overlay result-overlay hidden">
+      <div class="modal result-modal">
+        <div class="modal-heading">
+          <span id="resultMark" class="brand-mark">END</span>
+          <div>
+            <p id="resultKicker" class="result-kicker">RUN REPORT</p>
+            <h2 id="resultTitle">Run Ended</h2>
+            <p id="resultSubtitle">Review your run summary</p>
+          </div>
+        </div>
+        <div id="resultStats" class="result-stats"></div>
+        <div id="resultPlayers" class="result-players"></div>
+        <div class="result-actions">
+          <button id="resultStartButton" class="primary" type="button">NEW RUN</button>
+          <span id="resultActionNote">Host can start the next run.</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsOverlay" class="overlay settings-overlay hidden">
+      <div class="modal settings-modal">
+        <div class="modal-heading">
+          <span class="brand-mark">OP</span>
+          <div>
+            <p class="result-kicker">OPTIONS</p>
+            <h2>Settings</h2>
+            <p>그래픽 품질과 조작 키를 조정합니다.</p>
+          </div>
+        </div>
+        <section class="settings-section">
+          <div class="settings-section-head">
+            <strong>Graphics Quality</strong>
+            <span>즉시 렌더러에 반영됩니다.</span>
+          </div>
+          <div class="settings-segment" id="settingsQualityGroup">
+            <button type="button" data-quality="low">Low</button>
+            <button type="button" data-quality="medium">Medium</button>
+            <button type="button" data-quality="high">High</button>
+          </div>
+        </section>
+        <section class="settings-section">
+          <div class="settings-section-head">
+            <strong>Language</strong>
+            <span>현재는 UI 저장값만 유지합니다.</span>
+          </div>
+          <select id="settingsLanguage" class="settings-select" aria-label="Language">
+            <option value="ko">한국어</option>
+            <option value="en">English</option>
+          </select>
+        </section>
+        <section class="settings-section">
+          <div class="settings-section-head">
+            <strong>Key Bindings</strong>
+            <span>버튼을 누른 뒤 새 키를 입력하세요.</span>
+          </div>
+          <div id="settingsKeyList" class="settings-key-list"></div>
+        </section>
+        <div class="settings-actions">
+          <button id="settingsResetButton" class="ghost-button" type="button">Reset</button>
+          <button id="settingsCloseButton" class="primary" type="button">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/client-runtime.js"></script>
+    <script src="/client-save.js"></script>
+    <script src="/client-input.js"></script>
+    <script src="/client-network.js"></script>
+    <script src="/client-hud.js"></script>
+    <script src="/client-choice.js"></script>
+    <script src="/client-lobby.js"></script>
+    <script src="/client-map.js"></script>
+    <script src="/client-result.js"></script>
+    <script src="/pixi-assets.js"></script>
+    <script src="/pixi-runtime.js"></script>
+    <script src="/pixi-texture-factory.js"></script>
+    <script src="/pixi-pools.js"></script>
+    <script src="/pixi-camera.js"></script>
+    <script src="/pixi-scene.js"></script>
+    <script src="/pixi-world.js"></script>
+    <script src="/pixi-pickups.js"></script>
+    <script src="/pixi-projectiles.js"></script>
+    <script src="/pixi-hazards.js"></script>
+    <script src="/pixi-enemies.js"></script>
+    <script src="/pixi-players.js"></script>
+    <script src="/pixi-effects.js"></script>
+    <script src="/pixi-primitives.js"></script>
+    <script src="/pixi-pixel-drawing.js"></script>
+    <script src="/pixi-palettes.js"></script>
+    <script src="/pixi-actor-textures.js"></script>
+    <script src="/pixi-enemy-textures.js"></script>
+    <script src="/pixi-boss-textures.js"></script>
+    <script src="/pixi-texture-keys.js"></script>
+    <script src="/pixi-world-textures.js"></script>
+    <script src="/pixi-common-textures.js"></script>
+    <script src="/pixi-melee-textures.js"></script>
+    <script src="/pixi-ranged-textures.js"></script>
+    <script src="/pixi-elemental-textures.js"></script>
+    <script src="/pixi-class-textures.js"></script>
+    <script src="/pixi-skill-effects.js"></script>
+    <script src="/pixi-particles.js"></script>
+    <script src="/vendor/pixi.js"></script>
+    <script src="/pixi-renderer.js"></script>
+    <script src="/client.js"></script>
+  </body>
+</html>

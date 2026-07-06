@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="384" height="64" viewBox="0 0 384 64" shape-rendering="crispEdges">
+  <g transform="translate(0 0)" opacity=".25"><rect x="29" y="29" width="7" height="7" fill="#f8f3e9"/></g>
+  <g transform="translate(64 0)" opacity=".54"><rect x="26" y="22" width="12" height="20" fill="#f8f3e9"/><rect x="22" y="26" width="20" height="12" fill="#fde68a"/></g>
+  <g transform="translate(128 0)" opacity=".9"><polygon points="32,5 39,24 59,32 39,40 32,59 25,40 5,32 25,24" fill="#f8f3e9"/><rect x="13" y="30" width="38" height="5" fill="#fde68a"/><rect x="30" y="13" width="5" height="38" fill="#f97316"/></g>
+  <g transform="translate(192 0)" opacity=".78"><polygon points="32,8 38,25 56,32 38,39 32,56 26,39 8,32 26,25" fill="#fde68a"/><rect x="11" y="30" width="42" height="4" fill="#f8f3e9"/><rect x="30" y="11" width="4" height="42" fill="#f97316"/></g>
+  <g transform="translate(256 0)" opacity=".42"><polygon points="32,14 37,28 50,32 37,37 32,50 27,37 14,32 27,28" fill="#fde68a"/></g>
+  <g transform="translate(320 0)" opacity=".16"><rect x="27" y="29" width="10" height="8" fill="#f8f3e9"/></g>
+</svg>
