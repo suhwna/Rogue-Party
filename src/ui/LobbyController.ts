@@ -2,8 +2,7 @@ export interface LobbyClassDescription {
   label: string;
   role: string;
   summary: string;
-  passive: string;
-  skills: Array<[string, string]>;
+  skills: Array<[string, string, string?]>;
 }
 
 export interface LobbyPlayerView {
@@ -40,9 +39,8 @@ export class LobbyController {
         <strong>스킬 전체 해금</strong>
       </div>
       <p>${this.options.escapeHtml(meta.summary)}</p>
-      <p class="lobby-class-passive"><b>패시브</b> ${this.options.escapeHtml(meta.passive)}</p>
       <div class="lobby-skill-tags">
-        ${meta.skills.map(([key, name]) => `<span class="lobby-skill-tag"><b>${this.options.escapeHtml(key)}</b>${this.options.escapeHtml(name)}</span>`).join("")}
+        ${meta.skills.map(([key, name, detail]) => `<span class="lobby-skill-tag"><b>${this.options.escapeHtml(key)}</b><span><strong>${this.options.escapeHtml(name)}</strong>${detail ? `<small>${this.options.escapeHtml(detail)}</small>` : ""}</span></span>`).join("")}
       </div>
     `;
   }

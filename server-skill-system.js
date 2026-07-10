@@ -4,6 +4,7 @@ const SLOT_COOLDOWN_MUL = {
   r: 1.12,
   f: 1.24
 };
+const ENGINEER_MECHA_COOLDOWN_MUL = 2;
 
 function hasSkillUpgrade(player, upgradeId) {
   return (player.skillUpgrades || []).includes(upgradeId);
@@ -27,7 +28,8 @@ function canTriggerSkillSlot(player, slot, skillUpgrades) {
 function getSkillCooldown(player, slot, classes) {
   const def = classes[player.classId];
   const slotMul = SLOT_COOLDOWN_MUL[slot] || 1;
-  return def.skillCd * slotMul * player.skillCooldownMul;
+  const classSlotMul = player.classId === "engineer" && slot === "e" ? ENGINEER_MECHA_COOLDOWN_MUL : 1;
+  return def.skillCd * slotMul * classSlotMul * player.skillCooldownMul;
 }
 
 function applySkillCooldown(player, slot, classes) {

@@ -76,7 +76,7 @@
   function renderActorSections(context) {
     const renderer = context.renderer;
     const state = context.state;
-    renderer.renderEnemies(state.enemies || [], context.now);
+    renderer.renderEnemies(state.enemies || [], context.now, state.room.world);
     renderer.renderPlayers(state.players || [], context.now);
   }
 

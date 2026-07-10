@@ -1,5 +1,24 @@
+export interface GrowthLoadoutMessage {
+  readonly version?: number;
+  readonly classId?: string;
+  readonly accountLevel?: number;
+  readonly ascensionLevel?: number;
+  readonly points?: number;
+  readonly nodes?: Record<string, number>;
+  readonly gearBonuses?: Record<string, number>;
+  readonly challenge?: {
+    readonly mode?: "standard" | "daily" | "weekly";
+    readonly key?: string;
+    readonly seed?: number;
+    readonly modifierId?: string;
+    readonly ruleId?: string;
+  };
+  readonly cosmetic?: { readonly title?: string; readonly skin?: string };
+  readonly startPerkId?: string;
+}
+
 export type ClientMessage =
-  | { type: "join"; room: string; name: string; classId?: string }
+  | { type: "join"; room: string; name: string; classId?: string; growthLoadout?: GrowthLoadoutMessage }
   | {
       type: "input";
       mx: number;
@@ -11,7 +30,8 @@ export type ClientMessage =
       dashSeq: number;
     }
   | { type: "start" }
-  | { type: "changeClass"; classId: string }
+  | { type: "changeClass"; classId: string; growthLoadout?: GrowthLoadoutMessage }
+  | { type: "setGrowthLoadout"; growthLoadout?: GrowthLoadoutMessage }
   | { type: "toggleReady" }
   | { type: "toggleSpectator" }
   | { type: "addBot" }

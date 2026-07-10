@@ -4,6 +4,7 @@ export const SLOT_COOLDOWN_MUL: Readonly<Record<string, number>> = {
   r: 1.12,
   f: 1.24,
 };
+const ENGINEER_MECHA_COOLDOWN_MUL = 2;
 
 export interface PlayerSkillLike {
   readonly classId: string;
@@ -60,7 +61,8 @@ export function getSkillCooldown(
   const def = classes[player.classId];
   if (!def) return 0;
   const slotMul = SLOT_COOLDOWN_MUL[slot] || 1;
-  return def.skillCd * slotMul * player.skillCooldownMul;
+  const classSlotMul = player.classId === "engineer" && slot === "e" ? ENGINEER_MECHA_COOLDOWN_MUL : 1;
+  return def.skillCd * slotMul * classSlotMul * player.skillCooldownMul;
 }
 
 export interface PlayerSkillTimerLike extends PlayerSkillLike {

@@ -10,7 +10,6 @@ export const WARRIOR_TAUNT_DAMAGE_MUL = 0.72;
 export const WARRIOR_TAUNT_SIZE_SCALE = 1.3;
 
 export const RELIC_DROP_CHANCE = 0.008;
-export const RELIC_EFFECT_MUL = 0.5;
 export const RELIC_CHOICE_TIMEOUT_MS = 10000;
 export const ADVANCEMENT_CHOICE_TIMEOUT_MS = 15000;
 export const MAP_VOTE_TIMEOUT_MS = 15000;
@@ -35,6 +34,9 @@ export const XP_ASSIST_SHARE = 0.34;
 export const PLAYER_POISON_TICK_INTERVAL = 1.15;
 export const PLAYER_HIT_IFRAME_DURATION = 0.22;
 export const PLAYER_HAZARD_IFRAME_DURATION = 0.15;
+export const BASE_HEALTH_REGEN = 0.5;
+export const STAGE_CLEAR_HEAL_RATIO = 0.15;
+export const STAGE_CLEAR_REVIVE_RATIO = 0.35;
 export const SHAMAN_TARGET_HEAL_LOCK_MS = 1400;
 export const CHEST_PITY_KILLS = 105;
 

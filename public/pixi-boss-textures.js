@@ -1,20 +1,10 @@
 (function () {
-  const pixels = window.RoguePixiPixelDrawing || {};
-
   function px(ctx, x, y, w, h, color) {
-    if (pixels.px) {
-      pixels.px(ctx, x, y, w, h, color);
-      return;
-    }
     ctx.fillStyle = color;
     ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   }
 
   function linePx(ctx, x1, y1, x2, y2, color) {
-    if (pixels.linePx) {
-      pixels.linePx(ctx, x1, y1, x2, y2, color);
-      return;
-    }
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -24,10 +14,6 @@
   }
 
   function outline(ctx, x, y, w, h) {
-    if (pixels.outline) {
-      pixels.outline(ctx, x, y, w, h);
-      return;
-    }
     ctx.fillStyle = "rgba(10,10,9,0.42)";
     ctx.fillRect(Math.round(x + 5), Math.round(y + h - 2), Math.round(w - 10), 2);
   }

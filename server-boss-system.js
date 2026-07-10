@@ -28,10 +28,20 @@ function bossProfileView(profile) {
     pattern: profile.pattern,
     patternTags: Array.isArray(profile.patternTags) ? profile.patternTags : [],
     signaturePatterns: Array.isArray(profile.signaturePatterns) ? profile.signaturePatterns : [],
+    phasePatterns: profile.phasePatterns || null,
     phaseTitles: Array.isArray(profile.phaseTitles) ? profile.phaseTitles : [],
     telegraph: profile.telegraph || null,
     patternMix: profile.patternMix || null
   };
+}
+
+function getPhasePatterns(profile, phase, fallbackPatterns) {
+  const phaseKey = String(Math.max(1, Math.floor(phase || 1)));
+  const phasePatterns = profile?.phasePatterns?.[phaseKey] || profile?.phasePatterns?.[Number(phaseKey)];
+  if (Array.isArray(phasePatterns) && phasePatterns.length) {
+    return phasePatterns.filter((pattern) => typeof pattern === "string" && pattern.trim());
+  }
+  return getSignaturePatterns(profile, fallbackPatterns);
 }
 
 function getSignaturePatterns(profile, fallbackPatterns) {
@@ -43,11 +53,15 @@ function getSignaturePatterns(profile, fallbackPatterns) {
 }
 
 function nextBossPattern(enemy, profile, fallbackPatterns) {
-  const patterns = getSignaturePatterns(profile, fallbackPatterns);
+  const patterns = getPhasePatterns(profile, enemy.bossPhase, fallbackPatterns);
   if (!patterns.length) return "";
   const cursor = Math.max(0, Math.floor(enemy.bossPatternCursor || 0));
-  const pattern = patterns[cursor % patterns.length];
-  enemy.bossPatternCursor = cursor + 1;
+  let patternIndex = cursor % patterns.length;
+  if (patterns.length > 1 && patterns[patternIndex] === enemy.currentBossPattern) {
+    patternIndex = (patternIndex + 1) % patterns.length;
+  }
+  const pattern = patterns[patternIndex];
+  enemy.bossPatternCursor = patternIndex + 1;
   enemy.bossCycle = (enemy.bossCycle || 0) + 1;
   enemy.currentBossPattern = pattern;
   return pattern;
@@ -87,5 +101,6 @@ module.exports = {
   getBossProfileById,
   getChapterBossProfile,
   getMiniBossProfile,
+  getPhasePatterns,
   nextBossPattern
 };

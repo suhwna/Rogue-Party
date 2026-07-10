@@ -125,6 +125,7 @@ export interface ProjectileView {
 export interface MovementLike {
   readonly key?: string;
   readonly style?: string;
+  readonly angle?: number;
   readonly elapsed: number;
   readonly duration: number;
   readonly startX?: number;
@@ -137,6 +138,7 @@ export interface MovementView {
   readonly active: true;
   readonly key?: string;
   readonly style?: string;
+  readonly angle?: number;
   readonly progress: number;
   readonly fromX?: number;
   readonly fromY?: number;
@@ -163,9 +165,11 @@ export interface EnemyLike {
   readonly hp: number;
   readonly maxHp: number;
   readonly barrier?: number;
+  readonly poisonDotStacks?: number;
   readonly radius: number;
   readonly role?: string;
   readonly blockadeRunner?: boolean;
+  readonly executionBoss?: boolean;
   readonly elite?: boolean;
   readonly affix?: string;
   readonly windup?: unknown;
@@ -187,9 +191,11 @@ export interface EnemyView {
   readonly hp: number;
   readonly maxHp: number;
   readonly barrier: number;
+  readonly poisonStacks: number;
   readonly radius: number;
   readonly role: string | undefined;
   readonly blockadeRunner: boolean;
+  readonly executionBoss: boolean;
   readonly elite: boolean;
   readonly affix: string;
   readonly statusEffects: readonly string[];
@@ -368,7 +374,6 @@ export interface PlayerIdentityLike {
 export interface PlayerIdentityViewOptions {
   readonly classDef?: ClassVisualLike;
   readonly classLabel: string;
-  readonly passive: unknown;
 }
 
 export interface PlayerIdentityView {
@@ -378,7 +383,6 @@ export interface PlayerIdentityView {
   readonly spectator: boolean;
   readonly classId: string;
   readonly classLabel: string;
-  readonly passive: unknown;
   readonly icon: string;
   readonly color: string;
 }
@@ -535,16 +539,29 @@ export interface RunResultPlayerLike {
   readonly score: number;
   readonly relics: readonly unknown[];
   readonly hp: number;
+  readonly classId: string;
+  readonly runStats?: {
+    readonly damage?: number;
+    readonly poisonDamage?: number;
+    readonly burnDamage?: number;
+    readonly kills?: number;
+    readonly turretKills?: number;
+    readonly bossKills?: number;
+    readonly downs?: number;
+    readonly bossDefeats?: readonly string[];
+  };
 }
 
 export interface RunResultPlayerViewOptions {
   readonly classLabel: string;
   readonly relicStacks: RelicStackLike;
+  readonly bossDefeats?: readonly string[];
 }
 
 export interface RunResultPlayerView {
   readonly id: string;
   readonly name: string;
+  readonly classId: string;
   readonly classLabel: string;
   readonly level: number;
   readonly score: number;
@@ -552,11 +569,27 @@ export interface RunResultPlayerView {
   readonly relicMaxCount: number;
   readonly uniqueRelicCount: number;
   readonly downed: boolean;
+  readonly noDown: boolean;
+  readonly combatStats: { readonly damage: number; readonly poisonDamage: number; readonly burnDamage: number; readonly kills: number; readonly turretKills: number; readonly bossKills: number; readonly downs: number };
+  readonly bossDefeats: readonly string[];
 }
 
 export interface RunResultRoomLike {
   readonly floor: number;
   readonly wave: number;
+  readonly abyssDepth?: number;
+  readonly ascensionLevel?: number;
+  readonly challengeMode?: string;
+  readonly challengeKey?: string;
+  readonly challengeModifierId?: string;
+  readonly challengeRuleId?: string;
+  readonly weeklyBossId?: string;
+}
+
+export interface RunRewardBreakdownView {
+  readonly id: string;
+  readonly label: string;
+  readonly value: number | string;
 }
 
 export interface RunResultSummaryViewOptions {
@@ -570,6 +603,16 @@ export interface RunResultSummaryViewOptions {
   readonly totalRelics: number;
   readonly totalRelicMax: number;
   readonly highestLevel: number;
+  readonly earnedShards?: number;
+  readonly earnedAccountXp?: number;
+  readonly abyssDepth?: number;
+  readonly ascensionLevel?: number;
+  readonly challengeMode?: string;
+  readonly challengeKey?: string;
+  readonly challengeModifierId?: string;
+  readonly challengeRuleId?: string;
+  readonly weeklyBossId?: string;
+  readonly rewardBreakdown?: readonly RunRewardBreakdownView[];
   readonly players: readonly RunResultPlayerView[];
 }
 
@@ -688,6 +731,7 @@ export function movementView(move: MovementLike | null | undefined, includeKey =
     active: true;
     key?: string;
     style?: string;
+    angle?: number;
     progress: number;
     fromX?: number;
     fromY?: number;
@@ -704,7 +748,11 @@ export function movementView(move: MovementLike | null | undefined, includeKey =
     view.fromY = round2(move.startY ?? 0);
     view.toX = round2(move.x ?? 0);
     view.toY = round2(move.y ?? 0);
+    const dx = Number(move.x ?? 0) - Number(move.startX);
+    const dy = Number(move.y ?? 0) - Number(move.startY ?? 0);
+    if (Math.hypot(dx, dy) > 0.01) view.angle = round2(Math.atan2(dy, dx));
   }
+  if (Number.isFinite(move.angle)) view.angle = round2(move.angle as number);
   return view;
 }
 
@@ -725,9 +773,11 @@ export function enemyView(enemy: EnemyLike, options: EnemyViewOptions): EnemyVie
     hp: Math.max(0, Math.ceil(enemy.hp)),
     maxHp: enemy.maxHp,
     barrier: Math.max(0, Math.ceil(enemy.barrier || 0)),
+    poisonStacks: Math.max(0, Math.floor(enemy.poisonDotStacks || 0)),
     radius: enemy.radius,
     role: enemy.role,
     blockadeRunner: Boolean(enemy.blockadeRunner),
+    executionBoss: Boolean(enemy.executionBoss),
     elite: Boolean(enemy.elite),
     affix: enemy.affix || "",
     statusEffects: getStatusEffects(enemy),
@@ -869,7 +919,6 @@ export function playerIdentityView(
     spectator: Boolean(player.spectator),
     classId: player.classId,
     classLabel: options.classLabel,
-    passive: options.passive,
     icon: options.classDef?.icon || "",
     color: options.classDef?.color || "",
   };
@@ -969,6 +1018,7 @@ export function runResultPlayerView(
   return {
     id: player.id,
     name: player.name,
+    classId: player.classId,
     classLabel: options.classLabel,
     level: player.level,
     score: player.score,
@@ -976,6 +1026,17 @@ export function runResultPlayerView(
     relicMaxCount: options.relicStacks.max,
     uniqueRelicCount: player.relics.length,
     downed: player.hp <= 0,
+    noDown: (player.runStats?.downs || 0) === 0,
+    combatStats: {
+      damage: Math.round(player.runStats?.damage || 0),
+      poisonDamage: Math.round(player.runStats?.poisonDamage || 0),
+      burnDamage: Math.round(player.runStats?.burnDamage || 0),
+      kills: player.runStats?.kills || 0,
+      turretKills: player.runStats?.turretKills || 0,
+      bossKills: player.runStats?.bossKills || 0,
+      downs: player.runStats?.downs || 0,
+    },
+    bossDefeats: [...(options.bossDefeats || player.runStats?.bossDefeats || [])],
   };
 }
 
@@ -998,6 +1059,16 @@ export function runResultSummaryView(
     totalRelics: options.totalRelics,
     totalRelicMax: options.totalRelicMax,
     highestLevel: options.highestLevel,
+    earnedShards: options.earnedShards ?? 0,
+    earnedAccountXp: options.earnedAccountXp ?? 0,
+    abyssDepth: options.abyssDepth ?? room.abyssDepth ?? 0,
+    ascensionLevel: options.ascensionLevel ?? room.ascensionLevel ?? 0,
+    challengeMode: options.challengeMode ?? room.challengeMode ?? "standard",
+    challengeKey: options.challengeKey ?? room.challengeKey ?? "",
+    challengeModifierId: options.challengeModifierId ?? room.challengeModifierId ?? "",
+    challengeRuleId: options.challengeRuleId ?? room.challengeRuleId ?? "",
+    weeklyBossId: options.weeklyBossId ?? room.weeklyBossId ?? "",
+    rewardBreakdown: options.rewardBreakdown ?? [],
     players: options.players,
   };
 }

@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "scope": "visual-only",
   "audio": false,
   "directories": {
@@ -9,67 +9,31 @@
   },
   "generatedAssets": [
     {
-      "id": "warrior-idle-sheet",
-      "kind": "sprites",
-      "file": "classes/warrior-idle.png",
-      "textureKey": "actor:warrior:0:idle",
-      "aliases": ["actor:warrior:1:idle", "actor:warrior:2:idle"],
-      "owner": "warrior",
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 3,
-      "anchorX": 0.5,
-      "anchorY": 0.5
+      "id": "neon-warrior-symbol",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:actor:warrior",
+      "aliases": ["neon:actor:ranger", "neon:actor:mage"],
+      "owner": "renderer",
+      "description": "Primary actors are drawn by Pixi Graphics neon symbols, not pixel sprites."
     },
     {
-      "id": "slime-base-sheet",
-      "kind": "sprites",
-      "file": "enemies/slime-base.png",
-      "textureKey": "enemy:slime:0",
-      "aliases": ["enemy:slime:1", "enemy:slime:2"],
-      "owner": "slime",
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 3,
-      "anchorX": 0.5,
-      "anchorY": 0.5
+      "id": "neon-enemy-silhouette",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:enemy:slime",
+      "aliases": ["neon:enemy:guardian", "neon:enemy:charger"],
+      "owner": "renderer",
+      "description": "Primary enemies are drawn by role-specific neon silhouettes."
     },
     {
-      "id": "iron-warden-phase-one",
-      "kind": "sprites",
-      "file": "bosses/iron-warden-phase-one.png",
-      "textureKey": "boss:iron_warden:1:0",
-      "aliases": ["boss:iron_warden:1:1", "boss:iron_warden:1:2"],
-      "owner": "iron_warden",
-      "frameWidth": 128,
-      "frameHeight": 128,
-      "frames": 3,
-      "anchorX": 0.5,
-      "anchorY": 0.58
-    },
-    {
-      "id": "warrior-blade-effect",
-      "kind": "effects",
-      "file": "skills/warrior-blade.png",
-      "textureKey": "fx-warrior-blade",
-      "owner": "warrior",
-      "frameWidth": 176,
-      "frameHeight": 58,
-      "frames": 1,
-      "anchorX": 0.5,
-      "anchorY": 0.5
-    },
-    {
-      "id": "relic-flame-core-icon",
-      "kind": "icons",
-      "file": "relics/flame-core.png",
-      "textureKey": "icon:relic:flame-core",
-      "owner": "relic",
-      "frameWidth": 48,
-      "frameHeight": 48,
-      "frames": 1,
-      "anchorX": 0.5,
-      "anchorY": 0.5
+      "id": "neon-skill-effect",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:effect:slash",
+      "aliases": ["neon:effect:spin", "neon:effect:meteor", "neon:effect:warning"],
+      "owner": "renderer",
+      "description": "Primary skill effects are drawn by geometry, particles, and trails."
     }
   ]
 }

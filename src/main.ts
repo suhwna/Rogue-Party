@@ -4,12 +4,11 @@ import { getClassDefinition, STARTING_CLASS_IDS } from "./data/classes";
 import { MAP_DEPTH, RELIC_DROP_CHANCE } from "./data/balance";
 import { getStageDifficulty } from "./data/difficulty";
 import { getEnemyDefinition, isEnemyTypeUnlocked } from "./data/enemies";
-import { getRarityLabel } from "./data/rarity";
 import { getRelicChoiceWeight, getRelicMaxLevel, getRelicsForClass } from "./data/relics";
 import { getStageRewardRule } from "./data/rewards";
 import { getRiskById } from "./data/risks";
 import { getPrimarySkillName, getSkillDefinition } from "./data/skills";
-import { getSkillChoiceWeight, getSkillUpgradeById, getSkillUpgradeRarity } from "./data/skillUpgrades";
+import { getSkillChoiceWeight, getSkillUpgradeById } from "./data/skillUpgrades";
 import { getStageNodeMeta } from "./data/stages";
 import { pickWaveTraitForWave } from "./data/waveTraits";
 import { defaultActionMap } from "./input/ActionMap";
@@ -52,6 +51,7 @@ export const modernizationRuntime: ModernizationRuntimeInfo = {
 };
 
 window.__rogueModernization = modernizationRuntime;
+const warriorRelicsForSmoke = getRelicsForClass("warrior");
 window.__rogueModernizationSmoke = {
   settingsVersion: defaultSettings.version,
   dashKey: defaultActionMap.dash,
@@ -61,7 +61,6 @@ window.__rogueModernizationSmoke = {
     startingClasses: STARTING_CLASS_IDS.length,
     warriorHp: getClassDefinition("warrior").maxHp,
     relicDropChance: RELIC_DROP_CHANCE,
-    rareLabel: getRarityLabel("rare"),
     bossRewardXp: getStageRewardRule("boss").clearXp,
     mapDepth: MAP_DEPTH,
     stageEightHpMul: getStageDifficulty(8).hpMul,
@@ -73,12 +72,9 @@ window.__rogueModernizationSmoke = {
     swarmSpawnMul: getRiskById("swarm_contract").spawnMul,
     warriorPrimary: getPrimarySkillName("warrior"),
     rangerRSkill: getSkillDefinition("ranger", "r")?.name,
-    warriorColossusRarity: getSkillUpgradeById("warrior_legend_colossus")
-      ? getSkillUpgradeRarity(getSkillUpgradeById("warrior_legend_colossus")!)
-      : "",
     rangerPierceWeight: getSkillUpgradeById("ranger_pierce") ? getSkillChoiceWeight(getSkillUpgradeById("ranger_pierce")!, 2) : 0,
-    warriorRelics: getRelicsForClass("warrior").length,
-    mythicRelicMaxLevel: getRelicMaxLevel({ rarity: "mythic", maxLevel: 1 }),
-    rareRelicWeight: getRelicChoiceWeight({ rarity: "rare" }, 0.2, 1.3),
+    warriorRelics: warriorRelicsForSmoke.length,
+    firstWarriorRelicMaxLevel: warriorRelicsForSmoke[0] ? getRelicMaxLevel(warriorRelicsForSmoke[0]) : 0,
+    baseRelicWeight: getRelicChoiceWeight({ id: "power_core" }, 0, 1),
   },
 };

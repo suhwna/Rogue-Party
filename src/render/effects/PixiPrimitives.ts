@@ -155,18 +155,25 @@ export function lightningPoints(fromX: number, fromY: number, toX: number, toY: 
   const uy = dy / len;
   const px = -uy;
   const py = ux;
-  const count = safeCount(segments, 2, 48);
+  const count = safeCount(segments, 2, 64);
+  const safeJitter = Math.max(0, Number(jitter) || 0);
+  const snapPhase = Math.floor((Number(phase) || 0) * 18);
   const points: Point2D[] = [];
   for (let i = 0; i <= count; i += 1) {
     const t = i / count;
     const edge = i === 0 || i === count ? 0 : 1;
-    const offset = Math.sin(phase * 6.1 + i * 2.47 + len * 0.013) * jitter * edge;
+    const taper = Math.sin(t * Math.PI);
+    const seed = snapPhase * 1.73 + i * 5.19 + len * 0.017;
+    const zigzag = (i % 2 === 0 ? 1 : -1) * (0.56 + Math.abs(Math.sin(seed * 1.31)) * 0.72);
+    const fracture = Math.sin(seed * 2.07) * 0.46 + Math.sin(seed * 3.41) * 0.18;
+    const offset = (zigzag + fracture) * safeJitter * taper * edge;
+    const slide = Math.sin(seed * 0.73 + snapPhase * 0.37) * safeJitter * 0.16 * taper * edge;
     points.push({
-      x: fromX + dx * t + px * offset,
-      y: fromY + dy * t + py * offset,
+      x: fromX + dx * t + px * offset + ux * slide,
+      y: fromY + dy * t + py * offset + uy * slide,
     });
   }
-  return { points, ux, uy, px, py, jitter };
+  return { points, ux, uy, px, py, jitter: safeJitter };
 }
 
 export function starPoints(x: number, y: number, radius: number, points = 8): Point2D[] {

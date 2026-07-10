@@ -3,7 +3,6 @@ export * from "./bosses";
 export * from "./classes";
 export * from "./difficulty";
 export * from "./enemies";
-export * from "./rarity";
 export * from "./relics";
 export * from "./rewards";
 export * from "./risks";

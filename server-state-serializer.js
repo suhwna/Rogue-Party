@@ -88,9 +88,10 @@ function playerIdentityView(player, options = {}) {
     spectator: Boolean(player.spectator),
     classId: player.classId,
     classLabel: options.classLabel || "",
-    passive: options.passive || null,
     icon: classDef.icon || "",
-    color: classDef.color || ""
+    color: player.appearanceColor || classDef.color || "",
+    title: player.cosmeticTitle || "",
+    skin: player.cosmeticSkin || ""
   };
 }
 
@@ -134,7 +135,11 @@ function movementView(move, includeKey = false) {
     view.fromY = round2(move.startY);
     view.toX = round2(move.x);
     view.toY = round2(move.y);
+    const dx = Number(move.x) - Number(move.startX);
+    const dy = Number(move.y) - Number(move.startY);
+    if (Math.hypot(dx, dy) > 0.01) view.angle = round2(Math.atan2(dy, dx));
   }
+  if (Number.isFinite(move.angle)) view.angle = round2(move.angle);
   return view;
 }
 
@@ -162,10 +167,13 @@ function enemyView(enemy, options = {}) {
     hp: Math.max(0, Math.ceil(enemy.hp)),
     maxHp: enemy.maxHp,
     barrier: Math.max(0, Math.ceil(enemy.barrier || 0)),
+    poisonStacks: Math.max(0, Math.floor(enemy.poisonDotStacks || 0)),
+    poisonMaxStacks: Math.max(3, Math.floor(enemy.poisonMaxStacks || 3)),
     radius: enemy.radius,
     role: enemy.role,
     aiState: getAiState(enemy),
     blockadeRunner: Boolean(enemy.blockadeRunner),
+    executionBoss: Boolean(enemy.executionBoss),
     elite: Boolean(enemy.elite),
     affix: enemy.affix || "",
     statusEffects: getStatusEffects(enemy),
@@ -375,13 +383,25 @@ function runResultPlayerView(player, options = {}) {
   return {
     id: player.id,
     name: player.name,
+    classId: player.classId,
     classLabel: options.classLabel || "",
     level: player.level,
     score: player.score,
     relicCount: relicStacks.current,
     relicMaxCount: relicStacks.max,
     uniqueRelicCount: player.relics.length,
-    downed: player.hp <= 0
+    downed: player.hp <= 0,
+    noDown: (player.runStats?.downs || 0) === 0,
+    combatStats: {
+      damage: Math.round(player.runStats?.damage || 0),
+      poisonDamage: Math.round(player.runStats?.poisonDamage || 0),
+      burnDamage: Math.round(player.runStats?.burnDamage || 0),
+      kills: player.runStats?.kills || 0,
+      turretKills: player.runStats?.turretKills || 0,
+      bossKills: player.runStats?.bossKills || 0,
+      downs: player.runStats?.downs || 0
+    },
+    bossDefeats: [...(options.bossDefeats || player.runStats?.bossDefeats || [])]
   };
 }
 
@@ -402,6 +422,16 @@ function runResultSummaryView(room, options = {}) {
     totalRelics: options.totalRelics || 0,
     totalRelicMax: options.totalRelicMax || 0,
     highestLevel: options.highestLevel || 1,
+    earnedShards: options.earnedShards || 0,
+    earnedAccountXp: options.earnedAccountXp || 0,
+    abyssDepth: options.abyssDepth || room.abyssDepth || 0,
+    ascensionLevel: options.ascensionLevel || room.ascensionLevel || 0,
+    challengeMode: room.challengeMode || "standard",
+    challengeKey: room.challengeKey || "",
+    challengeModifierId: room.challengeModifierId || "",
+    challengeRuleId: room.challengeRuleId || "",
+    weeklyBossId: room.weeklyBossId || "",
+    rewardBreakdown: options.rewardBreakdown || [],
     players: options.players || []
   };
 }

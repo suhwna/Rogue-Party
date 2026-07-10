@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="384" height="64" viewBox="0 0 384 64" shape-rendering="crispEdges">
-  <g transform="translate(0 0)" opacity=".22"><rect x="29" y="27" width="6" height="10" fill="#93c5fd"/></g>
-  <g transform="translate(64 0)" opacity=".52"><rect x="27" y="20" width="8" height="24" fill="#dbeafe"/><rect x="18" y="29" width="28" height="6" fill="#93c5fd"/></g>
-  <g transform="translate(128 0)" opacity=".9"><polygon points="32,4 39,25 60,32 39,39 32,60 25,39 4,32 25,25" fill="#dbeafe"/><rect x="14" y="30" width="36" height="5" fill="#93c5fd"/><rect x="30" y="14" width="5" height="36" fill="#93c5fd"/></g>
-  <g transform="translate(192 0)" opacity=".78"><polygon points="32,7 38,24 56,32 38,40 32,57 25,40 8,32 25,24" fill="#dbeafe"/><rect x="10" y="30" width="44" height="4" fill="#93c5fd"/><rect x="30" y="10" width="4" height="44" fill="#93c5fd"/></g>
-  <g transform="translate(256 0)" opacity=".42"><polygon points="32,13 37,27 51,32 37,38 32,52 27,38 13,32 27,27" fill="#93c5fd"/></g>
-  <g transform="translate(320 0)" opacity=".16"><rect x="26" y="29" width="12" height="6" fill="#dbeafe"/></g>
+  <g transform="translate(0 0)" opacity=".35"><rect x="29" y="22" width="6" height="22" fill="#bfdbfe"/><rect x="21" y="30" width="22" height="6" fill="#67e8f9"/></g>
+  <g transform="translate(64 0)" opacity=".6"><polygon points="32,5 38,25 58,31 38,38 32,59 26,38 6,31 26,25" fill="#e0f2fe"/><rect x="28" y="20" width="8" height="24" fill="#38bdf8"/><rect x="20" y="28" width="24" height="8" fill="#93c5fd"/></g>
+  <g transform="translate(128 0)" opacity=".95"><polygon points="32,1 41,23 63,32 41,41 32,63 23,41 1,32 23,23" fill="#f0f9ff"/><polygon points="32,10 38,27 55,32 38,37 32,54 26,37 9,32 26,27" fill="#38bdf8"/><rect x="29" y="7" width="6" height="50" fill="#dbeafe"/></g>
+  <g transform="translate(192 0)" opacity=".82"><polygon points="32,3 43,21 61,32 43,43 32,61 21,43 3,32 21,21" fill="#dbeafe"/><polygon points="32,13 38,27 51,32 38,37 32,51 26,37 13,32 26,27" fill="#22d3ee"/></g>
+  <g transform="translate(256 0)" opacity=".52"><polygon points="32,8 40,25 56,32 40,39 32,56 24,39 8,32 24,25" fill="#bae6fd"/><rect x="16" y="30" width="32" height="5" fill="#38bdf8"/></g>
+  <g transform="translate(320 0)" opacity=".25"><polygon points="32,15 39,28 51,32 39,36 32,49 25,36 13,32 25,28" fill="#dbeafe"/></g>
 </svg>

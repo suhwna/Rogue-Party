@@ -1,14 +1,16 @@
 const vm = require("node:vm");
+const fs = require("node:fs");
 
 const ORIGIN = process.env.SMOKE_ORIGIN || "http://localhost:5173";
 const WS_ORIGIN = ORIGIN.replace(/^http/, "ws");
+const MIN_LINKED_ASSET_COUNT = 38;
 
 async function checkLinkedAssetResponses(html) {
   const refs = [...html.matchAll(/<(?:script|link)\b[^>]+(?:src|href)="([^"]+)"/g)]
     .map((match) => match[1])
     .filter((ref) => ref && ref.startsWith("/") && !ref.startsWith("//"));
   const uniqueRefs = [...new Set(refs)];
-  if (uniqueRefs.length < 40) {
+  if (uniqueRefs.length < MIN_LINKED_ASSET_COUNT) {
     throw new Error(`linked asset coverage is too low: ${uniqueRefs.length}`);
   }
 
@@ -40,22 +42,237 @@ async function loadWindowBridge(path, globalName) {
   return bridge;
 }
 
+function checkServerCollisionContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const roomManagerSource = fs.readFileSync("server-room-manager.js", "utf8");
+  if (
+    !serverSource.includes("MAP_EDGE_WALL_THICKNESS = 36") ||
+    !serverSource.includes("function ensureRoomEdgeWalls") ||
+    !serverSource.includes("function getRoomCollisionWalls") ||
+    !serverSource.includes("createWorldEdgeWalls(room.world)") ||
+    !serverSource.includes("const walls = getRoomCollisionWalls(room)") ||
+    !serverSource.includes("for (const wall of getRoomCollisionWalls(room))") ||
+    !serverSource.includes("function stopProjectileOnMapWall") ||
+    !serverSource.includes("function getProjectileWallCollision") ||
+    !serverSource.includes("function clipSegmentAxis") ||
+    !serverSource.includes("const prevX = projectile.x") ||
+    !serverSource.includes("if (stopProjectileOnMapWall(room, projectile, prevX, prevY))") ||
+    !roomManagerSource.includes("mapEdgeWalls") ||
+    !roomManagerSource.includes("mapEdgeWallsKey")
+  ) {
+    throw new Error("map edge wall collision contract failed");
+  }
+  console.log("collision contract ok");
+}
+
+function checkBossPatternContract() {
+  const bossSystem = require("./server-boss-system");
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const clientSource = fs.readFileSync("public/client.js", "utf8");
+  const pixiEnemySource = fs.readFileSync("public/pixi-enemies.js", "utf8");
+  const profile = {
+    signaturePatterns: ["phase_one", "phase_two", "phase_three"],
+    phasePatterns: {
+      1: ["phase_one"],
+      2: ["phase_two", "phase_three"]
+    }
+  };
+  const enemy = { bossPhase: 1, bossPatternCursor: 0, currentBossPattern: "" };
+  if (bossSystem.nextBossPattern(enemy, profile) !== "phase_one") {
+    throw new Error("boss phase-one pattern deck contract failed");
+  }
+  enemy.bossPhase = 2;
+  enemy.bossPatternCursor = 0;
+  enemy.currentBossPattern = "phase_two";
+  if (bossSystem.nextBossPattern(enemy, profile) !== "phase_three") {
+    throw new Error("boss immediate pattern repeat guard failed");
+  }
+
+  const expandedPatterns = [
+    "iron_sweeping_arc",
+    "iron_fortress_gap",
+    "hive_safe_bloom",
+    "hive_venom_fan",
+    "void_mirror_volley",
+    "void_collapse",
+    "duelist_blade_fan",
+    "duelist_guard_break",
+    "plague_safe_bloom",
+    "plague_venom_fan",
+    "hunter_crossfire",
+    "hunter_marked_blast"
+  ];
+  if (
+    expandedPatterns.some((pattern) => !serverSource.includes(pattern)) ||
+    !serverSource.includes("function getMiniBossPhaseTransition") ||
+    !serverSource.includes("function startBossProjectileVolley") ||
+    !serverSource.includes("function castBossGapBloom") ||
+    !serverSource.includes("if ((enemy.phaseTransitionTimer || 0) > 0) return true") ||
+    !clientSource.includes('"boss_volley"') ||
+    !pixiEnemySource.includes('"boss_volley"')
+  ) {
+    throw new Error("expanded boss pattern contract failed");
+  }
+  console.log("boss pattern contract ok");
+}
+
+function checkDefensePushbackContract() {
+  const enemySystem = require("./server-enemy-system");
+  const firstTrigger = enemySystem.getDefensePushbackTriggerCount(70, 66, 100, 0);
+  const beforeSecondTrigger = enemySystem.getDefensePushbackTriggerCount(66, 34, 100, firstTrigger);
+  const secondTrigger = enemySystem.getDefensePushbackTriggerCount(34, 33, 100, beforeSecondTrigger);
+  const largeHitTriggersBoth = enemySystem.getDefensePushbackTriggerCount(100, 20, 100, 0);
+  const repeatedDamageStaysCapped = enemySystem.getDefensePushbackTriggerCount(33, 10, 100, secondTrigger);
+  if (
+    firstTrigger !== 1 ||
+    beforeSecondTrigger !== 1 ||
+    secondTrigger !== 2 ||
+    largeHitTriggersBoth !== 2 ||
+    repeatedDamageStaysCapped !== 2
+  ) {
+    throw new Error("defense pushback threshold contract failed");
+  }
+
+  const horizontalPush = enemySystem.getDefenseWallPush(
+    { w: 1800, h: 1120 },
+    { x: 900, y: 560 },
+    { id: "right", x: 1000, y: 560, radius: 20 }
+  );
+  const verticalPush = enemySystem.getDefenseWallPush(
+    { w: 1800, h: 1120 },
+    { x: 900, y: 560 },
+    { id: "top", x: 900, y: 400, radius: 20 }
+  );
+  if (
+    Math.abs(horizontalPush.dirX - 1) > 0.001 ||
+    Math.abs(horizontalPush.dirY) > 0.001 ||
+    Math.abs(horizontalPush.distance - 736) > 0.001 ||
+    Math.abs(verticalPush.dirX) > 0.001 ||
+    Math.abs(verticalPush.dirY + 1) > 0.001 ||
+    Math.abs(verticalPush.distance - 336) > 0.001
+  ) {
+    throw new Error("defense wall push destination contract failed");
+  }
+  console.log("defense pushback contract ok");
+}
+
+function checkHostileProjectileContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const hazardSource = fs.readFileSync("public/pixi-hazards.js", "utf8");
+  if (
+    !serverSource.includes("HOSTILE_PROJECTILE_TRAVEL_DISTANCE") ||
+    !serverSource.includes("function launchMortarBlast") ||
+    !serverSource.includes('type: "mortar_blast"') ||
+    !serverSource.includes('damageType: "mortar_blast"') ||
+    !serverSource.includes("hostileAttackInFlight") ||
+    !serverSource.includes("projectile.hostile && !projectile.dead") ||
+    serverSource.includes("function castMortarPool") ||
+    !hazardSource.includes("function renderMortarBlast")
+  ) {
+    throw new Error("hostile projectile persistence contract failed");
+  }
+  console.log("hostile projectile contract ok");
+}
+
+function checkWarriorUpgradeContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const skillSource = fs.readFileSync("src/data/skillUpgrades.ts", "utf8");
+  const cleaveStart = serverSource.indexOf('if (slot === "f" && hasUpgrade(player, "warrior_cleave"))');
+  const cleaveEnd = serverSource.indexOf('if (player.classId === "martialist")', cleaveStart);
+  const cleaveSource = serverSource.slice(cleaveStart, cleaveEnd);
+  const damageIndex = cleaveSource.indexOf("const dealt = dealDamage");
+  const executeCheckIndex = cleaveSource.indexOf("const executionReady = dealt > 0 && hasExecution && canWarriorCleaveExecute(enemy)");
+  if (
+    cleaveStart < 0 ||
+    cleaveEnd < 0 ||
+    damageIndex < 0 ||
+    executeCheckIndex <= damageIndex ||
+    cleaveSource.includes("executionReady ? 1.65") ||
+    !serverSource.includes("WARRIOR_CHARGE_GATHER_RADIUS_MUL = 1.6") ||
+    !serverSource.includes("gatherRadius: options.gatherRadius") ||
+    !serverSource.includes("pathDistance <= enemy.radius + gatherRadius") ||
+    !skillSource.includes("피해가 적용된 뒤 남은 체력이 최대 체력의 25% 이하") ||
+    !skillSource.includes("끌어모으는 반경이 일반 돌진보다 60% 넓어집니다")
+  ) {
+    throw new Error("warrior execute/gather upgrade contract failed");
+  }
+  console.log("warrior upgrade contract ok");
+}
+
+function checkSurvivalModeContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const hudSource = fs.readFileSync("public/client-hud.js", "utf8");
+  const enemySource = fs.readFileSync("public/pixi-enemies.js", "utf8");
+  if (
+    !serverSource.includes("SURVIVAL_DURATION_SEC = 9 * 60") ||
+    !serverSource.includes("SURVIVAL_BOSS_CHECKPOINTS") ||
+    !serverSource.includes("function startSurvivalMode") ||
+    !serverSource.includes("function updateSurvivalMode") ||
+    !serverSource.includes("function spawnSurvivalCheckpointBoss") ||
+    !serverSource.includes("function spawnSurvivalExecutionBoss") ||
+    !serverSource.includes('boss.bossId = "fate_executioner"') ||
+    !hudSource.includes("9:00") ||
+    !enemySource.includes("enemy.executionBoss")
+  ) {
+    throw new Error("nine-minute survival contract failed");
+  }
+  console.log("survival contract ok");
+}
+
+function checkLongTermProgressionContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const progressionSource = fs.readFileSync("public/client-progression.js", "utf8");
+  const requiredServer = [
+    "function nextRoomRandom",
+    "challengeLeaderboards",
+    "ascension >= 1 ? 1.12",
+    "ascension >= 2 ? 0.1",
+    "room?.ascensionLevel || 0) >= 3",
+    "room.ascensionLevel || 0) >= 4",
+    "room.ascensionLevel || 0) >= 5",
+    "turretKillDurationBonus",
+    "stats.poisonDamage",
+    "weeklyBossId"
+  ];
+  const requiredProgression = [
+    "BOSS_RECIPES",
+    "SET_BONUSES",
+    "SEASON_REWARDS",
+    "combatByClass",
+    "startPerks",
+    "bossMaterials",
+    "dashFollowupMul",
+    "burnDamageMul"
+  ];
+  if (requiredServer.some((value) => !serverSource.includes(value)) || requiredProgression.some((value) => !progressionSource.includes(value))) {
+    throw new Error("long-term progression detail contract failed");
+  }
+  console.log("long-term progression contract ok");
+}
+
 async function checkHttp() {
   const response = await fetch(ORIGIN);
   const html = await response.text();
   const linkedAssetCount = await checkLinkedAssetResponses(html);
-  if (linkedAssetCount < 40) {
+  if (linkedAssetCount < MIN_LINKED_ASSET_COUNT) {
     throw new Error("linked asset contract check failed");
   }
-  if (!response.ok || !html.includes("Rogue Party")) {
+  if (!response.ok || !html.includes("roomSubmitButton")) {
     throw new Error("HTTP 확인 실패");
   }
   if (
-    !html.includes("title-badges") ||
-    !html.includes("Loadout Test") ||
-    !html.includes("PIXEL ROGUELIKE RAID") ||
+    !html.includes("전투 준비실") ||
+    !html.includes("방 입장") ||
+    !html.includes("menuCreateButton") ||
+    !html.includes("roomList") ||
     !html.includes("settingsOverlay") ||
-    !html.includes("Graphics Quality")
+    !html.includes("Graphics Quality") ||
+    !html.includes("lobbyWorkspaceNav") ||
+    !html.includes("lobbyArenaToggle") ||
+    !html.includes("lobbyArenaDock") ||
+    !html.includes('data-lobby-view="challenges"') ||
+    !html.includes("runContext") ||
+    !html.includes("result-report-layout")
   ) {
     throw new Error("Phase 10 UI shell 확인 실패");
   }
@@ -69,7 +286,13 @@ async function checkHttp() {
     !styleSource.includes(".choice-action-row") ||
     !styleSource.includes(".map-choice-top") ||
     !styleSource.includes(".settings-modal") ||
-    !styleSource.includes(".settings-key-button")
+    !styleSource.includes(".settings-key-button") ||
+    !styleSource.includes("--neon-bg") ||
+    !styleSource.includes(".lobby-workspace-nav") ||
+    !styleSource.includes(".lobby-panel.arena-focus") ||
+    !styleSource.includes(".lobby-arena-skill-list") ||
+    !styleSource.includes(".run-context") ||
+    !styleSource.includes(".result-player-metrics")
   ) {
     throw new Error("Phase 10 UI style 확인 실패");
   }
@@ -77,6 +300,11 @@ async function checkHttp() {
   const roomsPayload = await roomsResponse.json();
   if (!roomsResponse.ok || !Array.isArray(roomsPayload.rooms)) {
     throw new Error("방 목록 API 확인 실패");
+  }
+  const leaderboardResponse = await fetch(`${ORIGIN}/leaderboards`);
+  const leaderboardPayload = await leaderboardResponse.json();
+  if (!leaderboardResponse.ok || !leaderboardPayload.leaderboards || typeof leaderboardPayload.leaderboards !== "object") {
+    throw new Error("leaderboard API contract failed");
   }
   for (const room of roomsPayload.rooms) {
     if (
@@ -99,71 +327,35 @@ async function checkHttp() {
     !assetManifest.directories?.sprites ||
     !assetManifest.directories?.icons ||
     !assetManifest.directories?.effects ||
-    !assetManifest.texturePolicy?.priority?.includes("skill effects use external spritesheet assets first") ||
-    !assetManifest.texturePolicy?.priority?.includes("generatedAssets entry with matching textureKey or alias") ||
-    !assetManifest.texturePolicy?.skillEffects?.includes("External spritesheet asset") ||
+    !assetManifest.texturePolicy?.priority?.includes("Pixi Graphics neon vector renderer is the primary path for actors, enemies, hazards, world, and skill effects") ||
+    !assetManifest.texturePolicy?.priority?.includes("generatedAssets entries document procedural neon keys only") ||
+    !assetManifest.texturePolicy?.skillEffects?.includes("Pixi Graphics neon vector effects are the only active skill effect path") ||
     !assetManifest.textureKeyGuide?.actor ||
-    !assetManifest.textureKeyGuide?.effect
+    !assetManifest.textureKeyGuide?.effect ||
+    !assetManifest.generatedAssets?.some((asset) => asset.textureKey === "neon:effect:slash") ||
+    assetManifest.generatedAssets?.some((asset) => String(asset.textureKey || "").startsWith("asset-fx"))
   ) {
     throw new Error("Phase 11 visual asset manifest 확인 실패");
   }
-  const requiredEffectSheets = [
-    "asset-fx-slash",
-    "asset-fx-shield",
-    "asset-fx-shout",
-    "asset-fx-arrow",
-    "asset-fx-arrow-rain",
-    "asset-fx-frost",
-    "asset-fx-meteor",
-    "asset-fx-lightning",
-    "asset-fx-engineer",
-    "asset-fx-puppet",
-    "asset-fx-martial",
-    "asset-fx-alchemy",
-    "asset-fx-shadow",
-    "asset-fx-impact"
-  ];
-  for (const textureKey of requiredEffectSheets) {
-    const asset = assetManifest.generatedAssets?.find((entry) => entry.textureKey === textureKey);
-    if (!asset || asset.animation !== "spritesheet" || asset.frameWidth !== 64 || asset.frameHeight !== 64 || asset.frames !== 6) {
-      throw new Error(`effect spritesheet manifest missing: ${textureKey}`);
-    }
-    const source = `${assetManifest.directories.effects}${asset.file}`;
-    const response = await fetch(`${ORIGIN}${source}`);
-    const body = await response.text();
-    if (!response.ok || !body.includes("<svg") || !body.includes("shape-rendering=\"crispEdges\"")) {
-      throw new Error(`effect spritesheet asset failed: ${source}`);
-    }
+  if (!assetManifest.texturePolicy?.skillEffects?.includes("External spritesheet and Canvas 2D skill rendering are not used")) {
+    throw new Error("neon effect policy check failed");
   }
   const assetManifestSampleResponse = await fetch(`${ORIGIN}/assets/asset-manifest.sample.json`);
   const assetManifestSample = await assetManifestSampleResponse.json();
   if (
     !assetManifestSampleResponse.ok ||
     assetManifestSample.audio !== false ||
-    !assetManifestSample.generatedAssets?.some((asset) => asset.textureKey === "fx-warrior-blade") ||
-    !assetManifestSample.generatedAssets?.some((asset) => Array.isArray(asset.aliases) && asset.aliases.includes("enemy:slime:1"))
+    !assetManifestSample.generatedAssets?.some((asset) => asset.textureKey === "neon:actor:warrior") ||
+    !assetManifestSample.generatedAssets?.some((asset) => Array.isArray(asset.aliases) && asset.aliases.includes("neon:enemy:charger")) ||
+    !assetManifestSample.generatedAssets?.some((asset) => asset.textureKey === "neon:effect:slash")
   ) {
     throw new Error("Phase 11 visual asset manifest sample check failed");
-  }
-  const pixiAssetsResponse = await fetch(`${ORIGIN}/pixi-assets.js`);
-  const pixiAssetsSource = await pixiAssetsResponse.text();
-  if (
-    !pixiAssetsResponse.ok ||
-    !pixiAssetsSource.includes("RogueVisualAssets") ||
-    !pixiAssetsSource.includes("loadAssetManifest") ||
-    !pixiAssetsSource.includes("assetPath") ||
-    !pixiAssetsSource.includes("findTextureAsset") ||
-    !pixiAssetsSource.includes("assetDescriptorForTexture") ||
-    !pixiAssetsSource.includes("preloadAssetManifest")
-  ) {
-    throw new Error("Phase 11 visual asset helper 확인 실패");
   }
   const pixiRendererResponse = await fetch(`${ORIGIN}/pixi-renderer.js`);
   const pixiRendererSource = await pixiRendererResponse.text();
   if (
     !pixiRendererResponse.ok ||
     !pixiRendererSource.includes("RoguePixiRuntime") ||
-    !pixiRendererSource.includes("RoguePixiTextureFactory") ||
     !pixiRendererSource.includes("RoguePixiPools") ||
     !pixiRendererSource.includes("RoguePixiScene") ||
     !pixiRendererSource.includes("RoguePixiWorld") ||
@@ -175,11 +367,6 @@ async function checkHttp() {
     !pixiRendererSource.includes("RoguePixiEffects") ||
     !pixiRendererSource.includes("RoguePixiSkillEffects") ||
     !pixiRendererSource.includes("RoguePixiParticles") ||
-    !pixiRendererSource.includes("RogueVisualAssets") ||
-    !pixiRendererSource.includes("assetDescriptorForTexture") ||
-    !pixiRendererSource.includes("assetEffectFrameTexture") ||
-    !pixiRendererSource.includes("assetEffectFx") ||
-    !pixiRendererSource.includes("assetTextures") ||
     !pixiRendererSource.includes("RoguePixiPrimitives") ||
     !pixiRendererSource.includes("RoguePixiPalettes") ||
     !pixiRendererSource.includes("EFFECT_DRAW_BUDGET") ||
@@ -190,12 +377,20 @@ async function checkHttp() {
     !pixiRendererSource.includes("particleBudget") ||
     !pixiRendererSource.includes("getParticleBudget") ||
     !pixiRendererSource.includes("renderStyledSkillEffect") ||
+    !pixiRendererSource.includes("renderSkillEffectPolishLayer") ||
     !pixiRendererSource.includes("renderCrispStyledSkillEffect") ||
     !pixiRendererSource.includes("renderCrispPrimaryClassStyledEffect") ||
     !pixiRendererSource.includes("renderCrispClassStyledEffect") ||
     !pixiRendererSource.includes("renderCrispCommonStyledEffect")
   ) {
     throw new Error("Pixi 렌더러 배포 확인 실패");
+  }
+  if (
+    pixiRendererSource.includes("RogueVisualAssets") ||
+    pixiRendererSource.includes("assetDescriptorForTexture") ||
+    pixiRendererSource.includes("assetEffectFx")
+  ) {
+    throw new Error("legacy visual asset renderer path should be removed");
   }
   const pixiRuntimeResponse = await fetch(`${ORIGIN}/pixi-runtime.js`);
   const pixiRuntimeSource = await pixiRuntimeResponse.text();
@@ -214,19 +409,6 @@ async function checkHttp() {
     !pixiRuntimeSource.includes("particleBudget")
   ) {
     throw new Error("pixi runtime bridge check failed");
-  }
-  const pixiTextureFactoryResponse = await fetch(`${ORIGIN}/pixi-texture-factory.js`);
-  const pixiTextureFactorySource = await pixiTextureFactoryResponse.text();
-  if (
-    !pixiTextureFactoryResponse.ok ||
-    !pixiTextureFactorySource.includes("RoguePixiTextureFactory") ||
-    !pixiTextureFactorySource.includes("createCanvasTexture") ||
-    !pixiTextureFactorySource.includes("createExternalAssetTexture") ||
-    !pixiTextureFactorySource.includes("createTextureRegistry") ||
-    !pixiTextureFactorySource.includes("getOrCreateCanvasTexture") ||
-    !pixiTextureFactorySource.includes("getOrCreateTextureWithAsset")
-  ) {
-    throw new Error("pixi texture factory bridge check failed");
   }
   const pixiPoolsResponse = await fetch(`${ORIGIN}/pixi-pools.js`);
   const pixiPoolsSource = await pixiPoolsResponse.text();
@@ -356,7 +538,8 @@ async function checkHttp() {
     !pixiEffectsSource.includes("renderWarningEffect") ||
     !pixiEffectsSource.includes("renderExplosionEffect") ||
     !pixiEffectsSource.includes("renderSecondaryEffect") ||
-    !pixiEffectsSource.includes("renderDefaultBurstEffect")
+    !pixiEffectsSource.includes("renderDefaultBurstEffect") ||
+    !pixiEffectsSource.includes("renderNeonEffect")
   ) {
     throw new Error("pixi effects bridge check failed");
   }
@@ -377,24 +560,22 @@ async function checkHttp() {
   ) {
     throw new Error("pixi primitives bridge check failed");
   }
-  const pixiPixelDrawingResponse = await fetch(`${ORIGIN}/pixi-pixel-drawing.js`);
-  const pixiPixelDrawingSource = await pixiPixelDrawingResponse.text();
-  if (
-    !pixiPixelDrawingResponse.ok ||
-    !pixiPixelDrawingSource.includes("RoguePixiPixelDrawing") ||
-    !pixiPixelDrawingSource.includes("px") ||
-    !pixiPixelDrawingSource.includes("linePx") ||
-    !pixiPixelDrawingSource.includes("outline") ||
-    !pixiPixelDrawingSource.includes("pixelDiamond")
-  ) {
-    throw new Error("pixi pixel drawing bridge check failed");
-  }
   const pixiActorTexturesResponse = await fetch(`${ORIGIN}/pixi-actor-textures.js`);
   const pixiActorTexturesSource = await pixiActorTexturesResponse.text();
   if (
     !pixiActorTexturesResponse.ok ||
     !pixiActorTexturesSource.includes("RoguePixiActorTextures") ||
     !pixiActorTexturesSource.includes("drawActorSheetFrame") ||
+    !pixiActorTexturesSource.includes("drawWarrior") ||
+    !pixiActorTexturesSource.includes("drawRanger") ||
+    !pixiActorTexturesSource.includes("drawMage") ||
+    !pixiActorTexturesSource.includes("drawEngineer") ||
+    !pixiActorTexturesSource.includes("drawPuppeteer") ||
+    !pixiActorTexturesSource.includes("drawMartialist") ||
+    !pixiActorTexturesSource.includes("gem") ||
+    !pixiActorTexturesSource.includes("buckle") ||
+    !pixiActorTexturesSource.includes("hairSpike") ||
+    !pixiActorTexturesSource.includes("bootStraps") ||
     !pixiActorTexturesSource.includes("warrior") ||
     !pixiActorTexturesSource.includes("ranger") ||
     !pixiActorTexturesSource.includes("mage") ||
@@ -629,8 +810,15 @@ async function checkHttp() {
     !pixiSkillEffectsSource.includes("renderCrispMartialEffect") ||
     !pixiSkillEffectsSource.includes("renderCrispAssassinEffect") ||
     !pixiSkillEffectsSource.includes("renderSkillEffectPolishLayer") ||
-    !pixiSkillEffectsSource.includes("assetSkillSheetKey") ||
-    !pixiSkillEffectsSource.includes("renderAssetStyledSkillEffect")
+    !pixiSkillEffectsSource.includes("renderNeonClassSignatureLayer") ||
+    !pixiSkillEffectsSource.includes("renderSkillDirectionPolish") ||
+    !pixiSkillEffectsSource.includes("renderSkillImpactPolish") ||
+    !pixiSkillEffectsSource.includes("renderSkillAuraPolish") ||
+    !pixiSkillEffectsSource.includes('kind === "warning" && !s.includes("taunt")') ||
+    !pixiSkillEffectsSource.includes("coneHalfAngleFromArcDot") ||
+    !pixiSkillEffectsSource.includes("warrior_basic") ||
+    !pixiSkillEffectsSource.includes("warrior_cleave") ||
+    !pixiSkillEffectsSource.includes("warrior_spin")
   ) {
     throw new Error("pixi skill effects bridge check failed");
   }
@@ -671,6 +859,13 @@ async function checkHttp() {
     !clientSource.includes("importUserProgress") ||
     !clientSource.includes("RogueClientRuntime") ||
     !clientSource.includes("RogueInputManager") ||
+    !clientSource.includes("lobbySetSkillUpgrade") ||
+    !clientSource.includes("lobbySetRelicLevel") ||
+    !clientSource.includes("renderLobbyTestCustomizer") ||
+    !clientSource.includes("renderLobbyWorkspaceChrome") ||
+    !clientSource.includes("renderLobbyArenaMode") ||
+    !clientSource.includes("requestLobbyClassChange") ||
+    !clientSource.includes("renderRunContextHud") ||
     !clientSource.includes("sendClientMessage") ||
     !clientSource.includes("startHeartbeat") ||
     !clientSource.includes("scheduleReconnect")
@@ -702,7 +897,10 @@ async function checkHttp() {
     !clientSaveSource.includes("migrateProgress") ||
     !clientSaveSource.includes("exportUserProgress") ||
     !clientSaveSource.includes("importUserProgress") ||
-    !clientSaveSource.includes("recordRunResult")
+    !clientSaveSource.includes("recordRunResult") ||
+    !clientSaveSource.includes("calculateRunRewards") ||
+    !clientSaveSource.includes("spendMasteryPoint") ||
+    !clientSaveSource.includes("getGrowthLoadout")
   ) {
     throw new Error("client save manager bridge check failed");
   }
@@ -777,7 +975,8 @@ async function checkHttp() {
     !clientResultResponse.ok ||
     !clientResultSource.includes("RogueResultController") ||
     !clientResultSource.includes("renderStats") ||
-    !clientResultSource.includes("renderPlayers")
+    !clientResultSource.includes("renderPlayers") ||
+    !clientResultSource.includes("result-player-metrics")
   ) {
     throw new Error("client result controller check failed");
   }
@@ -807,33 +1006,136 @@ async function checkClientSaveRuntimeContract() {
     JSON,
     Date
   };
+  sandbox.window.localStorage = sandbox.localStorage;
   vm.runInNewContext(clientSaveSource, sandbox, { filename: "client-save.js" });
+  const clientProgressionResponse = await fetch(`${ORIGIN}/client-progression.js`);
+  const clientProgressionSource = await clientProgressionResponse.text();
+  if (!clientProgressionResponse.ok) {
+    throw new Error("client progression runtime contract fetch failed");
+  }
+  if (
+    !clientProgressionSource.includes("BOSS_RECIPES") ||
+    !clientProgressionSource.includes("SET_BONUSES") ||
+    !clientProgressionSource.includes("ranger_poison_million") ||
+    !clientProgressionSource.includes("turretKillDurationBonus") ||
+    !clientProgressionSource.includes("SEASON_REWARDS") ||
+    !clientProgressionSource.includes("meta-leaderboard")
+  ) {
+    throw new Error("detailed progression content contract missing");
+  }
+  vm.runInNewContext(clientProgressionSource, sandbox, { filename: "client-progression.js" });
   const manager = sandbox.window.RogueSaveManager;
-  if (!manager || manager.SAVE_VERSION !== 1 || !manager.PROGRESS_KEY) {
+  if (!manager || manager.SAVE_VERSION !== 3 || !manager.PROGRESS_KEY || !manager.LEGACY_PROGRESS_KEYS) {
     throw new Error("client save runtime manager missing");
   }
 
   const result = manager.recordRunResult(manager.defaultProgress, {
     outcome: "victory",
+    resultKey: "contract-run-1",
     chapter: 2,
     wave: 5,
     highestLevel: 7,
     totalScore: 1234,
     totalRelics: 6,
-    durationSec: 91
+    durationSec: 91,
+    abyssDepth: 2,
+    ascensionLevel: 3,
+    classId: "mage",
+    combatStats: { damage: 12345, poisonDamage: 220, burnDamage: 3300, kills: 41, turretKills: 0, bossKills: 1 },
+    bossDefeats: ["hive_prophet"],
+    noDown: true
   });
   if (
+    result.version !== 3 ||
     result.statistics.runs !== 1 ||
     result.statistics.victories !== 1 ||
     result.statistics.highestChapter !== 2 ||
-    result.bestClear.outcome !== "victory"
+    result.bestClear.outcome !== "victory" ||
+    result.currencies.abyssShards <= 0 ||
+    result.account.xp <= 0 ||
+    result.records.highestAbyssDepth !== 2 ||
+    result.records.highestAscension !== 3 ||
+    result.records.classBestAscension.mage !== 3 ||
+    result.inventory.items.length === 0 ||
+    result.inventory.runes.length === 0 ||
+    result.currencies.enhancementStones <= 0 ||
+    result.inventory.bossMaterials.hive_prophet !== 1 ||
+    result.combatByClass.mage.burnDamage !== 3300 ||
+    result.combatByClass.mage.noDownWins !== 1
   ) {
     throw new Error("client save runtime result recording failed");
+  }
+  if (!manager.getLiveEvent || !manager.getLiveEvent(new Date("2026-07-11T12:00:00")).active) {
+    throw new Error("client progression live event failed");
+  }
+  const duplicate = manager.recordRunResult(result, {
+    outcome: "victory",
+    resultKey: "contract-run-1",
+    chapter: 2,
+    wave: 5,
+    highestLevel: 7,
+    totalScore: 1234,
+    totalRelics: 6,
+    durationSec: 91,
+    abyssDepth: 2,
+    ascensionLevel: 3
+  });
+  if (duplicate.statistics.runs !== 1 || duplicate.currencies.abyssShards !== result.currencies.abyssShards) {
+    throw new Error("client save runtime duplicate reward guard failed");
+  }
+
+  const spendable = manager.normalizeProgress({
+    ...result,
+    currencies: { abyssShards: 999 },
+    mastery: {
+      ...result.mastery,
+      warrior: { points: 0, nodes: { attack: 0, survival: 0, speed: 0, special: 0 } }
+    }
+  });
+  const masterySpend = manager.spendMasteryPoint(spendable, "warrior", "attack");
+  const invested = masterySpend.progress;
+  if (
+    !masterySpend.spent ||
+    masterySpend.cost <= 0 ||
+    invested.mastery.warrior.nodes.attack !== 1 ||
+    invested.currencies.abyssShards >= spendable.currencies.abyssShards
+  ) {
+    throw new Error("client save runtime mastery spend failed");
+  }
+  const growthLoadout = manager.getGrowthLoadout(invested, "warrior", 2);
+  if (
+    growthLoadout.classId !== "warrior" ||
+    growthLoadout.nodes.attack !== 1 ||
+    growthLoadout.ascensionLevel !== 2 ||
+    !growthLoadout.gearBonuses ||
+    !growthLoadout.challenge ||
+    !growthLoadout.cosmetic ||
+    typeof growthLoadout.startPerkId !== "string"
+  ) {
+    throw new Error("client save runtime growth loadout failed");
+  }
+
+  const lootItem = invested.inventory.items[0];
+  const equipped = manager.performProgressionAction(invested, {
+    action: "equip-item",
+    classId: lootItem.classId === "all" ? "warrior" : lootItem.classId,
+    itemId: lootItem.id
+  });
+  if (!equipped.changed || !equipped.affectsLoadout) {
+    throw new Error("client progression equipment action failed");
+  }
+  const challenge = manager.performProgressionAction(equipped.progress, {
+    action: "challenge-mode",
+    classId: "warrior",
+    mode: "daily"
+  });
+  if (!challenge.changed || manager.getActiveChallenge(challenge.progress).mode !== "daily") {
+    throw new Error("client progression challenge action failed");
   }
 
   const exported = manager.exportUserProgress(result);
   const imported = manager.importUserProgress(exported);
-  if (imported.statistics.totalScore !== 1234 || imported.statistics.totalRelics !== 6) {
+  if (imported.statistics.totalScore !== 1234 || imported.statistics.totalRelics !== 6 || imported.version !== 3) {
     throw new Error("client save runtime import/export failed");
   }
 
@@ -847,8 +1149,20 @@ async function checkClientSaveRuntimeContract() {
 
   storage.set(manager.PROGRESS_KEY, "{broken-json");
   const recovered = manager.loadUserProgress();
-  if (recovered.statistics.runs !== 0 || recovered.bestClear.outcome !== "none") {
+  if (recovered.statistics.runs !== 0 || recovered.bestClear.outcome !== "none" || recovered.currencies.abyssShards !== 0) {
     throw new Error("client save runtime broken json recovery failed");
+  }
+
+  storage.delete(manager.PROGRESS_KEY);
+  storage.set(manager.LEGACY_PROGRESS_KEYS[0], JSON.stringify({
+    version: 1,
+    unlockedClasses: ["warrior"],
+    statistics: { runs: 2, totalScore: 77 },
+    bestClear: { outcome: "defeat", chapter: 1, stage: 2, cleared: false, completedAt: null }
+  }));
+  const migrated = manager.loadUserProgress();
+  if (migrated.version !== 3 || migrated.statistics.runs !== 2 || migrated.statistics.totalScore !== 77 || !storage.has(manager.PROGRESS_KEY)) {
+    throw new Error("client save runtime v1 migration failed");
   }
 
   console.log("save contract ok");
@@ -857,7 +1171,6 @@ async function checkClientSaveRuntimeContract() {
 async function checkClientUiControllerRuntimeContract() {
   const choiceBridge = await loadWindowBridge("/client-choice.js", "RogueChoiceController");
   const choiceController = choiceBridge.create({
-    getChoiceRarityLabel: (choice) => `RARITY:${choice.rarity || "common"}`,
     getRelicStackLabel: () => "1/3",
     getSkillTypeLabel: () => "Q"
   });
@@ -867,13 +1180,12 @@ async function checkClientUiControllerRuntimeContract() {
       name: "<Blade>",
       text: "Power & speed",
       icon: "B",
-      rarity: "rare",
       target: "Warrior"
     }
   ]);
   if (
     !relicHtml.includes('data-relic="relic-test"') ||
-    !relicHtml.includes('data-rarity="rare"') ||
+    relicHtml.includes("data-rarity") ||
     !relicHtml.includes("&lt;Blade&gt;") ||
     relicHtml.includes("<Blade>")
   ) {
@@ -885,8 +1197,7 @@ async function checkClientUiControllerRuntimeContract() {
       id: "skill-test",
       name: "Wide Cut",
       text: "Bigger arc",
-      icon: "Q",
-      rarity: "epic"
+      icon: "Q"
     }
   ]);
   if (!skillHtml.includes('data-skill="skill-test"') || !skillHtml.includes("choice-action-row")) {
@@ -897,11 +1208,21 @@ async function checkClientUiControllerRuntimeContract() {
   const resultController = resultBridge.create({ formatRelicCount: () => "2/5" });
   const statsHtml = resultController.renderStats([["Score", 1000]]);
   const playersHtml = resultController.renderPlayers([
-    { name: "<Hero>", classLabel: "Warrior", level: 3, score: 120, downed: true, relicCount: 2 }
+    {
+      name: "<Hero>",
+      classLabel: "Warrior",
+      level: 3,
+      score: 120,
+      downed: true,
+      relicCount: 2,
+      combatStats: { damage: 12000, poisonDamage: 300, burnDamage: 700, kills: 24, bossKills: 1 }
+    }
   ]);
   if (
     !statsHtml.includes("result-stat") ||
     !playersHtml.includes("result-player downed") ||
+    !playersHtml.includes("result-player-metrics") ||
+    !playersHtml.includes("상태 피해") ||
     !playersHtml.includes("&lt;Hero&gt;") ||
     playersHtml.includes("<Hero>")
   ) {
@@ -962,11 +1283,37 @@ function checkWebSocket() {
     let requestedLobbyAction = false;
     let confirmedLobbyAction = false;
     let changedClass = false;
-    const lobbyClassCheckOrder = ["martialist", "alchemist", "assassin", "mage"];
+    const lobbyClassCheckOrder = ["ranger", "warrior", "engineer", "mage"];
     let lobbyClassCheckIndex = 0;
     let startedRun = false;
-    let votedMap = false;
     let sawPong = false;
+    const mageGrowthLoadout = {
+      version: 3,
+      classId: "mage",
+      accountLevel: 12,
+      ascensionLevel: 2,
+      points: 8,
+      nodes: { attack: 2, survival: 2, speed: 2, special: 2 },
+      gearBonuses: {
+        damageMul: 1.12,
+        maxHpMul: 1.1,
+        skillCooldownMul: 0.92,
+        wallBounceBonus: 1,
+        poisonStackCapBonus: 1,
+        lowHpShieldRatio: 0.18,
+        burnDamageMul: 1.2,
+        dashFollowupMul: 1.35,
+        turretKillDurationBonus: 0.8
+      },
+      cosmetic: { title: "스모크 칭호", skin: "season_ember" },
+      startPerkId: "quick_start",
+      challenge: {
+        mode: "daily",
+        key: "SMOKE-DAILY",
+        seed: 42,
+        modifierId: "glass_cannon"
+      }
+    };
 
     socket.addEventListener("open", () => {
       socket.send(JSON.stringify({ type: "ping", t: Date.now() }));
@@ -975,7 +1322,8 @@ function checkWebSocket() {
           type: "join",
           name: "스모크",
           room: "SMOKE",
-          classId: "warrior"
+          classId: "warrior",
+          intent: "create"
         })
       );
     });
@@ -1049,14 +1397,27 @@ function checkWebSocket() {
             socket.close();
             return;
           }
-          if (["martialist", "alchemist", "assassin"].includes(expectedClass) && !self.passive?.name) {
-            reject(new Error(`${expectedClass} 직업 패시브 정보가 없습니다`));
+          if (
+            expectedClass === "mage" &&
+            (!self.growth?.applied ||
+              self.growth.accountLevel !== 12 ||
+              self.growth.gearBonuses?.wallBounceBonus !== 1 ||
+              self.growth.gearBonuses?.dashFollowupMul !== 1.35 ||
+              self.growth.challenge?.modifierId !== "glass_cannon" ||
+              self.growth.startPerkId !== "quick_start")
+          ) {
+            reject(new Error("permanent equipment growth was not applied in lobby"));
             socket.close();
             return;
           }
           lobbyClassCheckIndex += 1;
           if (lobbyClassCheckIndex < lobbyClassCheckOrder.length) {
-            socket.send(JSON.stringify({ type: "changeClass", classId: lobbyClassCheckOrder[lobbyClassCheckIndex] }));
+            const nextClassId = lobbyClassCheckOrder[lobbyClassCheckIndex];
+            socket.send(JSON.stringify({
+              type: "changeClass",
+              classId: nextClassId,
+              growthLoadout: nextClassId === "mage" ? mageGrowthLoadout : undefined
+            }));
             return;
           }
           changedClass = true;
@@ -1071,27 +1432,18 @@ function checkWebSocket() {
         return;
       }
 
-      if (message.room.status === "map") {
-        if (!Array.isArray(message.room.mapChoices) || message.room.mapChoices.length === 0 || !message.room.stageMap) {
-          reject(new Error("지도 선택지가 없습니다"));
-          socket.close();
-          return;
-        }
-        const bossNode = (message.room.stageMap.nodes || []).find((node) => node.kind === "boss" || node.stage?.kind === "boss");
-        if (!bossNode?.boss || !Array.isArray(bossNode.boss.signaturePatterns) || bossNode.boss.signaturePatterns.length === 0) {
-          reject(new Error("boss signature pattern metadata is missing from stage map"));
-          socket.close();
-          return;
-        }
-        if (!votedMap) {
-          votedMap = true;
-          socket.send(JSON.stringify({ type: "chooseMap", nodeId: message.room.mapChoices[0].id }));
-        }
+      if (message.room.status !== "combat") {
+        reject(new Error(`런 시작 직후 생존 전투 상태여야 합니다. 현재 상태: ${message.room.status}`));
+        socket.close();
         return;
       }
-
-      if (message.room.status !== "combat") {
-        reject(new Error(`지도 투표 후 전투 상태여야 합니다. 현재 상태: ${message.room.status}`));
+      if (
+        !message.room.survival?.active ||
+        message.room.survival.duration !== 540 ||
+        typeof message.room.survival.elapsed !== "number" ||
+        message.room.mapChoices?.length
+      ) {
+        reject(new Error("nine-minute survival state is missing after run start"));
         socket.close();
         return;
       }
@@ -1106,6 +1458,17 @@ function checkWebSocket() {
       }
       if (message.room.maxChapters !== 3) {
         reject(new Error(`3챕터 구조여야 합니다. 현재: ${message.room.maxChapters}`));
+        socket.close();
+        return;
+      }
+      if (
+        message.room.challengeMode !== "daily" ||
+        message.room.challengeModifierId !== "glass_cannon" ||
+        !Array.isArray(message.room.challengeLeaderboard) ||
+        !self.growth?.applied ||
+        self.growth.gearBonuses?.wallBounceBonus !== 1
+      ) {
+        reject(new Error("challenge or equipment growth state is missing after run start"));
         socket.close();
         return;
       }
@@ -1194,7 +1557,8 @@ function checkRoomListVisibility() {
           type: "join",
           name: "ListHost",
           room,
-          classId: "warrior"
+          classId: "warrior",
+          intent: "create"
         })
       );
     });
@@ -1232,13 +1596,71 @@ function checkRoomListVisibility() {
   });
 }
 
-function checkAllPlayerMapVote() {
+function checkCodeJoinRequiresExistingRoom() {
   return new Promise((resolve, reject) => {
-    const room = `VOTE${Date.now().toString(36).slice(-4)}`.toUpperCase();
+    const room = `MISS${Date.now().toString(36).slice(-4)}`.toUpperCase();
+    const socket = new WebSocket(`${WS_ORIGIN}/ws`);
+    const timer = setTimeout(() => finish(new Error("missing room join check timed out")), 4000);
+    let finished = false;
+
+    async function finish(error) {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      socket.close();
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      try {
+        const roomsResponse = await fetch(`${ORIGIN}/rooms`);
+        const roomsPayload = await roomsResponse.json();
+        if (roomsPayload.rooms.some((entry) => entry.code === room)) {
+          reject(new Error("missing room join created a public room"));
+          return;
+        }
+        console.log("code join ok");
+        resolve();
+      } catch (fetchError) {
+        reject(fetchError);
+      }
+    }
+
+    socket.addEventListener("open", () => {
+      socket.send(
+        JSON.stringify({
+          type: "join",
+          name: "MissingJoin",
+          room,
+          classId: "warrior",
+          intent: "join"
+        })
+      );
+    });
+
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "state" || message.type === "joined") {
+        finish(new Error("missing room join unexpectedly succeeded"));
+        return;
+      }
+      if (message.type === "error" && String(message.message || "").includes("존재하지")) {
+        finish();
+      }
+    });
+
+    socket.addEventListener("error", () => finish(new Error("missing room join WebSocket failed")));
+  });
+}
+
+function checkAllPlayerSurvivalStart() {
+  return new Promise((resolve, reject) => {
+    const room = `SURV${Date.now().toString(36).slice(-4)}`.toUpperCase();
     const sockets = [new WebSocket(`${WS_ORIGIN}/ws`), new WebSocket(`${WS_ORIGIN}/ws`)];
-    const voted = new Set();
     const readySent = new Set();
-    const timer = setTimeout(() => finish(new Error("전원 지도 투표 즉시 진행 확인 실패")), 5000);
+    const combatSeen = new Set();
+    const timer = setTimeout(() => finish(new Error("전원 생존 전투 즉시 진입 확인 실패")), 5000);
     let started = false;
     let finished = false;
 
@@ -1251,7 +1673,7 @@ function checkAllPlayerMapVote() {
         reject(error);
         return;
       }
-      console.log("map vote ok");
+      console.log("survival start ok");
       resolve();
     }
 
@@ -1260,9 +1682,10 @@ function checkAllPlayerMapVote() {
         socket.send(
           JSON.stringify({
             type: "join",
-            name: `투표${index + 1}`,
+            name: `생존${index + 1}`,
             room,
-            classId: index === 0 ? "warrior" : "ranger"
+            classId: index === 0 ? "warrior" : "ranger",
+            intent: index === 0 ? "create" : "join"
           })
         );
       });
@@ -1285,18 +1708,17 @@ function checkAllPlayerMapVote() {
           return;
         }
 
-        if (started && message.room.status === "map" && message.room.mapChoices?.length && !voted.has(index)) {
-          voted.add(index);
-          socket.send(JSON.stringify({ type: "chooseMap", nodeId: message.room.mapChoices[0].id }));
-          return;
-        }
-
-        if (voted.size === 2 && message.room.status === "combat") {
-          finish();
+        if (started && message.room.status === "combat") {
+          if (!message.room.survival?.active || message.room.survival.duration !== 540 || message.room.mapChoices?.length) {
+            finish(new Error("survival room state is invalid"));
+            return;
+          }
+          combatSeen.add(index);
+          if (combatSeen.size === 2) finish();
         }
       });
 
-      socket.addEventListener("error", () => finish(new Error("전원 지도 투표 WebSocket 실패")));
+      socket.addEventListener("error", () => finish(new Error("전원 생존 시작 WebSocket 실패")));
     });
   });
 }
@@ -1309,7 +1731,6 @@ function checkBotPlayer() {
     let addedBot = false;
     let readied = false;
     let started = false;
-    let voted = false;
     let finished = false;
 
     function finish(error) {
@@ -1331,7 +1752,8 @@ function checkBotPlayer() {
           type: "join",
           name: "BotHost",
           room,
-          classId: "warrior"
+          classId: "warrior",
+          intent: "create"
         })
       );
     });
@@ -1364,15 +1786,13 @@ function checkBotPlayer() {
         return;
       }
 
-      if (started && message.room.status === "map" && message.room.mapChoices?.length && !voted) {
-        voted = true;
-        socket.send(JSON.stringify({ type: "chooseMap", nodeId: message.room.mapChoices[0].id }));
-        return;
-      }
-
-      if (started && voted && message.room.status === "combat") {
+      if (started && message.room.status === "combat") {
         if (message.room.botCount !== 1 || !message.players.some((player) => player.bot)) {
           finish(new Error("bot missing after run start"));
+          return;
+        }
+        if (!message.room.survival?.active) {
+          finish(new Error("bot run did not enter survival mode"));
           return;
         }
         finish();
@@ -1411,7 +1831,8 @@ function checkSpectatorBots() {
           type: "join",
           name: "SpectatorHost",
           room,
-          classId: "mage"
+          classId: "mage",
+          intent: "create"
         })
       );
     });
@@ -1462,12 +1883,91 @@ function checkSpectatorBots() {
   });
 }
 
-checkHttp()
+function checkWeeklyProgressionState() {
+  return new Promise((resolve, reject) => {
+    const socket = new WebSocket(`${WS_ORIGIN}/ws`);
+    const room = `WEEK${Date.now().toString(36).slice(-4).toUpperCase()}`;
+    const timer = setTimeout(() => reject(new Error("weekly progression state timeout")), 5000);
+    let started = false;
+    let finished = false;
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      socket.close();
+      if (error) reject(error);
+      else {
+        console.log("weekly progression state ok");
+        resolve();
+      }
+    };
+    socket.addEventListener("open", () => socket.send(JSON.stringify({
+      type: "join",
+      name: "주간검증",
+      room,
+      classId: "engineer",
+      intent: "create",
+      growthLoadout: {
+        version: 3,
+        classId: "engineer",
+        ascensionLevel: 5,
+        nodes: { attack: 0, survival: 0, speed: 0, special: 0 },
+        gearBonuses: { dashFollowupMul: 1.35, burnDamageMul: 1.2, turretKillDurationBonus: 0.8 },
+        cosmetic: { title: "주간왕", skin: "season_ember" },
+        startPerkId: "supply_cache",
+        challenge: { mode: "weekly", key: "SMOKE-WEEK", seed: 73, modifierId: "elite_hunt", ruleId: "venom_week" }
+      }
+    })));
+    socket.addEventListener("message", (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type !== "state") return;
+      const self = message.players.find((player) => player.id === message.selfId);
+      if (message.room.status === "lobby") {
+        if (!self.ready) socket.send(JSON.stringify({ type: "toggleReady" }));
+        else if (!started && message.room.canStart) {
+          started = true;
+          socket.send(JSON.stringify({ type: "start" }));
+        }
+        return;
+      }
+      if (!started || message.room.status !== "combat") return;
+      if (
+        message.room.challengeMode !== "weekly" ||
+        message.room.challengeRuleId !== "venom_week" ||
+        typeof message.room.weeklyBossId !== "string" ||
+        !message.room.weeklyBossId ||
+        !message.room.survival?.active ||
+        !Array.isArray(message.room.mapWalls) ||
+        message.room.mapWalls.length < 4 ||
+        self.title !== "주간왕" ||
+        self.color !== "#fb923c" ||
+        self.growth?.startPerkId !== "supply_cache"
+      ) {
+        finish(new Error("weekly progression state is incomplete"));
+        return;
+      }
+      finish();
+    });
+    socket.addEventListener("error", () => finish(new Error("weekly progression WebSocket failed")));
+  });
+}
+
+Promise.resolve()
+  .then(checkServerCollisionContract)
+  .then(checkBossPatternContract)
+  .then(checkDefensePushbackContract)
+  .then(checkHostileProjectileContract)
+  .then(checkWarriorUpgradeContract)
+  .then(checkSurvivalModeContract)
+  .then(checkLongTermProgressionContract)
+  .then(checkHttp)
   .then(checkClientSaveRuntimeContract)
   .then(checkClientUiControllerRuntimeContract)
   .then(checkWebSocket)
+  .then(checkWeeklyProgressionState)
   .then(checkRoomListVisibility)
-  .then(checkAllPlayerMapVote)
+  .then(checkCodeJoinRequiresExistingRoom)
+  .then(checkAllPlayerSurvivalStart)
   .then(checkBotPlayer)
   .then(checkSpectatorBots)
   .then(() => {

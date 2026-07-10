@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 3,
   "scope": "visual-only",
   "audio": false,
   "directories": {
@@ -8,18 +8,18 @@
     "effects": "/assets/effects/"
   },
   "style": {
-    "genre": "pixel-art fantasy roguelike",
+    "genre": "neon vector roguelike",
     "renderer": "PixiJS",
-    "background": "transparent or pure black",
+    "background": "dark neon grid",
     "rules": [
-      "2D game asset",
-      "animation-ready",
+      "procedural neon visual first",
+      "not required for active actor, enemy, map, hazard, or skill rendering",
       "clean silhouette",
       "high contrast",
       "no text",
       "no logo",
       "no watermark",
-      "sprite sheet friendly"
+      "sprite sheets are not part of the active runtime path"
     ]
   },
   "effects": [
@@ -39,179 +39,54 @@
   ],
   "texturePolicy": {
     "priority": [
-      "skill effects use external spritesheet assets first",
-      "generatedAssets entry with matching textureKey or alias",
-      "code-generated Pixi canvas texture fallback for legacy non-skill textures only"
+      "Pixi Graphics neon vector renderer is the primary path for actors, enemies, hazards, world, and skill effects",
+      "geometry, particles, trails, and procedural primitives are preferred over pixel or SVG sprites",
+      "generatedAssets entries document procedural neon keys only",
+      "external actor and skill spritesheets are not required for active gameplay rendering",
+      "code-generated texture fallback is allowed only for tiny shared primitives"
     ],
-    "descriptorMissing": "Use generated fallback texture.",
-    "descriptorFailure": "Keep generated fallback available and report through renderer diagnostics.",
-    "skillEffects": "External spritesheet asset path is the primary skill effect renderer. Canvas-generated effect textures should not be used when an asset sheet exists.",
+    "descriptorMissing": "No external descriptor is required; use procedural neon renderer output.",
+    "descriptorFailure": "Keep procedural neon rendering active and report through renderer diagnostics.",
+    "skillEffects": "Pixi Graphics neon vector effects are the only active skill effect path. External spritesheet and Canvas 2D skill rendering are not used while Pixi is active.",
     "audio": "Excluded. Visual special effects only."
   },
   "textureKeyGuide": {
-    "actor": "actor:{classId}:{frame}:{state}",
-    "enemy": "enemy:{type}:{frame}",
-    "boss": "boss:{bossId}:{phase}:{frame}",
-    "projectile": "projectile:{style}",
-    "floor": "floor-tile-{chapter}-{variant}",
-    "wall": "wall-block-{chapter}",
-    "effect": "fx-{effect-name}",
+    "actor": "neon:actor:{classId}",
+    "enemy": "neon:enemy:{type}",
+    "boss": "neon:boss:{bossId}:{phase}",
+    "projectile": "neon:projectile:{style}",
+    "floor": "neon:floor:{chapter}:{variant}",
+    "wall": "neon:wall:{chapter}",
+    "effect": "neon:effect:{effect-name}",
     "common": "shadow | reticle | xp | chest | warning-ring | slash-arc | burst | beam"
   },
   "generatedAssets": [
     {
-      "id": "effect-slash-sheet",
-      "kind": "effects",
-      "file": "effect-slash-sheet.svg",
-      "textureKey": "asset-fx-slash",
-      "aliases": ["asset-fx-cleave", "asset-fx-spin"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
+      "id": "neon-warrior-symbol",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:actor:warrior",
+      "aliases": ["neon:actor:ranger", "neon:actor:mage"],
+      "owner": "renderer",
+      "description": "Primary actors are drawn by Pixi Graphics neon symbols."
     },
     {
-      "id": "effect-shield-sheet",
-      "kind": "effects",
-      "file": "effect-shield-sheet.svg",
-      "textureKey": "asset-fx-shield",
-      "aliases": ["asset-fx-shield-charge", "asset-fx-shield-slam"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
+      "id": "neon-enemy-silhouette",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:enemy:slime",
+      "aliases": ["neon:enemy:guardian", "neon:enemy:charger"],
+      "owner": "renderer",
+      "description": "Primary enemies are drawn by role-specific neon silhouettes."
     },
     {
-      "id": "effect-shout-sheet",
-      "kind": "effects",
-      "file": "effect-shout-sheet.svg",
-      "textureKey": "asset-fx-shout",
-      "aliases": ["asset-fx-taunt"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-arrow-sheet",
-      "kind": "effects",
-      "file": "effect-arrow-sheet.svg",
-      "textureKey": "asset-fx-arrow",
-      "aliases": ["asset-fx-piercing", "asset-fx-ranger"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-arrow-rain-sheet",
-      "kind": "effects",
-      "file": "effect-arrow-rain-sheet.svg",
-      "textureKey": "asset-fx-arrow-rain",
-      "aliases": ["asset-fx-rain-arrow"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-frost-sheet",
-      "kind": "effects",
-      "file": "effect-frost-sheet.svg",
-      "textureKey": "asset-fx-frost",
-      "aliases": ["asset-fx-freeze", "asset-fx-ice"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-meteor-sheet",
-      "kind": "effects",
-      "file": "effect-meteor-sheet.svg",
-      "textureKey": "asset-fx-meteor",
-      "aliases": ["asset-fx-fire", "asset-fx-flame"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-lightning-sheet",
-      "kind": "effects",
-      "file": "effect-lightning-sheet.svg",
-      "textureKey": "asset-fx-lightning",
-      "aliases": ["asset-fx-electric", "asset-fx-chain"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-engineer-sheet",
-      "kind": "effects",
-      "file": "effect-engineer-sheet.svg",
-      "textureKey": "asset-fx-engineer",
-      "aliases": ["asset-fx-turret", "asset-fx-mine", "asset-fx-drone"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-puppet-sheet",
-      "kind": "effects",
-      "file": "effect-puppet-sheet.svg",
-      "textureKey": "asset-fx-puppet",
-      "aliases": ["asset-fx-thread"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-martial-sheet",
-      "kind": "effects",
-      "file": "effect-martial-sheet.svg",
-      "textureKey": "asset-fx-martial",
-      "aliases": ["asset-fx-palm", "asset-fx-fist"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-alchemy-sheet",
-      "kind": "effects",
-      "file": "effect-alchemy-sheet.svg",
-      "textureKey": "asset-fx-alchemy",
-      "aliases": ["asset-fx-acid", "asset-fx-elixir", "asset-fx-flask"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-shadow-sheet",
-      "kind": "effects",
-      "file": "effect-shadow-sheet.svg",
-      "textureKey": "asset-fx-shadow",
-      "aliases": ["asset-fx-assassin", "asset-fx-smoke"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
-    },
-    {
-      "id": "effect-impact-sheet",
-      "kind": "effects",
-      "file": "effect-impact-sheet.svg",
-      "textureKey": "asset-fx-impact",
-      "aliases": ["asset-fx-explosion", "asset-fx-burst"],
-      "frameWidth": 64,
-      "frameHeight": 64,
-      "frames": 6,
-      "animation": "spritesheet"
+      "id": "neon-skill-effect",
+      "kind": "procedural",
+      "file": "",
+      "textureKey": "neon:effect:slash",
+      "aliases": ["neon:effect:spin", "neon:effect:meteor", "neon:effect:warning"],
+      "owner": "renderer",
+      "description": "Primary skill effects are drawn by geometry, particles, and trails."
     }
   ]
 }

@@ -1,25 +1,83 @@
 (function () {
   function drawLightning(ctx) {
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 7;
+    const main = [
+      { x: 4, y: 21 },
+      { x: 22, y: 8 },
+      { x: 38, y: 16 },
+      { x: 52, y: 5 },
+      { x: 65, y: 17 },
+      { x: 82, y: 9 },
+      { x: 108, y: 15 }
+    ];
+    const ribbon = (points, spread) => {
+      const left = [];
+      const right = [];
+      for (let i = 0; i < points.length; i += 1) {
+        const prev = points[Math.max(0, i - 1)];
+        const next = points[Math.min(points.length - 1, i + 1)];
+        const dx = next.x - prev.x;
+        const dy = next.y - prev.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const px = -dy / len;
+        const py = dx / len;
+        const taper = i === 0 || i === points.length - 1 ? 0.5 : 1;
+        const jag = 1 + (i % 2 ? 0.22 : -0.14);
+        const width = spread * taper * jag;
+        left.push({ x: points[i].x + px * width, y: points[i].y + py * width });
+        right.unshift({ x: points[i].x - px * width * 0.82, y: points[i].y - py * width * 0.82 });
+      }
+      return [...left, ...right];
+    };
+    const fillPath = (points, fill, stroke, strokeWidth) => {
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i].x, points[i].y);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      if (stroke && strokeWidth > 0) {
+        ctx.strokeStyle = stroke;
+        ctx.lineWidth = strokeWidth;
+        ctx.stroke();
+      }
+    };
+    const branch = (start, end, spread, alpha) => {
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const px = -uy;
+      const py = ux;
+      const mid = { x: start.x + dx * 0.58 + px * spread * 0.7, y: start.y + dy * 0.58 + py * spread * 0.7 };
+      fillPath(
+        [
+          { x: start.x + px * spread, y: start.y + py * spread },
+          { x: mid.x + px * spread * 0.42, y: mid.y + py * spread * 0.42 },
+          { x: end.x + ux * spread * 0.7, y: end.y + uy * spread * 0.7 },
+          { x: mid.x - px * spread * 0.32, y: mid.y - py * spread * 0.32 },
+          { x: start.x - px * spread * 0.62, y: start.y - py * spread * 0.62 }
+        ],
+        `rgba(103,232,249,${alpha})`,
+        `rgba(255,255,255,${alpha * 0.45})`,
+        1
+      );
+    };
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
     ctx.lineJoin = "miter";
+    ctx.lineCap = "butt";
+    fillPath(ribbon(main, 9.4), "rgba(5,12,28,0.3)", "rgba(103,232,249,0.16)", 2);
+    fillPath(ribbon(main, 5.2), "rgba(103,232,249,0.74)", "rgba(255,255,255,0.32)", 1.4);
+    fillPath(ribbon(main, 1.65), "rgba(255,255,255,0.92)", "rgba(255,255,255,0.5)", 0.8);
+    branch(main[2], { x: 45, y: 1 }, 2.6, 0.44);
+    branch(main[3], { x: 59, y: 27 }, 2.8, 0.48);
+    branch(main[5], { x: 96, y: 4 }, 2.4, 0.4);
+    ctx.fillStyle = "rgba(255,255,255,0.74)";
     ctx.beginPath();
-    ctx.moveTo(4, 17);
-    ctx.lineTo(27, 9);
-    ctx.lineTo(45, 22);
-    ctx.lineTo(66, 7);
-    ctx.lineTo(83, 19);
-    ctx.lineTo(108, 12);
-    ctx.stroke();
-    ctx.strokeStyle = "rgba(255,255,255,0.42)";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(5, 24);
-    ctx.lineTo(33, 18);
-    ctx.lineTo(53, 27);
-    ctx.lineTo(73, 15);
-    ctx.lineTo(101, 22);
-    ctx.stroke();
+    ctx.arc(108, 15, 4.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawFrostShards(ctx) {
@@ -141,16 +199,44 @@
     ctx.save();
     ctx.translate(64, 64);
     ctx.rotate(-0.72);
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    ctx.fillRect(-66, -12, 82, 24);
-    ctx.fillStyle = "rgba(255,255,255,0.52)";
-    ctx.fillRect(-46, -7, 60, 14);
-    ctx.fillStyle = "rgba(255,255,255,0.94)";
-    ctx.fillRect(9, -16, 30, 30);
-    ctx.fillRect(4, -10, 42, 20);
-    ctx.fillStyle = "rgba(255,255,255,0.36)";
-    ctx.fillRect(-60, -23, 42, 7);
-    ctx.fillRect(-70, 15, 56, 7);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.beginPath();
+    ctx.moveTo(22, -20);
+    ctx.lineTo(-62, -12);
+    ctx.lineTo(-78, 0);
+    ctx.lineTo(-56, 14);
+    ctx.lineTo(20, 20);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.48)";
+    ctx.beginPath();
+    ctx.moveTo(18, -10);
+    ctx.lineTo(-44, -5);
+    ctx.lineTo(-56, 3);
+    ctx.lineTo(-38, 9);
+    ctx.lineTo(18, 11);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.95)";
+    ctx.beginPath();
+    ctx.moveTo(44, -2);
+    ctx.lineTo(24, -20);
+    ctx.lineTo(4, -14);
+    ctx.lineTo(-10, -22);
+    ctx.lineTo(-28, -5);
+    ctx.lineTo(-19, 13);
+    ctx.lineTo(5, 22);
+    ctx.lineTo(31, 14);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.36)";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(-14, -6);
+    ctx.lineTo(16, 5);
+    ctx.moveTo(2, 13);
+    ctx.lineTo(24, 4);
+    ctx.stroke();
     ctx.restore();
   }
 

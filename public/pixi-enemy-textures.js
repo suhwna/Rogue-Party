@@ -1,24 +1,15 @@
 (function () {
   const palettes = window.RoguePixiPalettes || {};
-  const pixels = window.RoguePixiPixelDrawing || {};
   const enemyPalettes = palettes.enemyPalettes || {
     slime: ["#c85d56", "#5b1f24", "#fca5a5"],
   };
 
   function px(ctx, x, y, w, h, color) {
-    if (pixels.px) {
-      pixels.px(ctx, x, y, w, h, color);
-      return;
-    }
     ctx.fillStyle = color;
     ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
   }
 
   function outline(ctx, x, y, w, h) {
-    if (pixels.outline) {
-      pixels.outline(ctx, x, y, w, h);
-      return;
-    }
     ctx.fillStyle = "rgba(10,10,9,0.42)";
     ctx.fillRect(Math.round(x + 5), Math.round(y + h - 2), Math.round(w - 10), 2);
   }

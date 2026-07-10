@@ -37,7 +37,7 @@ export interface PixiSceneRendererHost {
   renderHazards(hazards: unknown[], now: number): void;
   renderPickups(state: PixiSceneState, now: number): void;
   renderProjectiles(projectiles: unknown[], now: number): void;
-  renderEnemies(enemies: unknown[], now: number): void;
+  renderEnemies(enemies: unknown[], now: number, world?: unknown): void;
   renderPlayers(players: PixiScenePlayer[], now: number): void;
   renderFloatingEffects(effects: unknown[], now: number): void;
   renderAim(state: PixiSceneState, now: number): void;

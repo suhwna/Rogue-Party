@@ -4,8 +4,11 @@ import { defineConfig, type Plugin } from "vite";
 
 const backendTarget = process.env.VITE_BACKEND_TARGET ?? "http://localhost:5173";
 const pixiBundlePath = resolve(__dirname, "node_modules", "pixi.js", "dist", "pixi.js");
+// Runtime source of truth: public/*.js is served directly; src mirrors keep TS checks aligned.
 const legacyRuntimeAssets = [
   "client-runtime.js",
+  "client-save.js",
+  "client-progression.js",
   "client-input.js",
   "client-network.js",
   "client-hud.js",
@@ -14,19 +17,18 @@ const legacyRuntimeAssets = [
   "client-map.js",
   "client-result.js",
   "pixi-runtime.js",
-  "pixi-texture-factory.js",
   "pixi-pools.js",
   "pixi-camera.js",
   "pixi-scene.js",
   "pixi-world.js",
   "pixi-pickups.js",
+  "effect-style-classifier.js",
   "pixi-projectiles.js",
   "pixi-hazards.js",
   "pixi-enemies.js",
   "pixi-players.js",
   "pixi-effects.js",
   "pixi-primitives.js",
-  "pixi-pixel-drawing.js",
   "pixi-palettes.js",
   "pixi-actor-textures.js",
   "pixi-enemy-textures.js",

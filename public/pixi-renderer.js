@@ -1,7 +1,5 @@
 (() => {
   const pixiRuntime = window.RoguePixiRuntime || {};
-  const pixiTextureFactory = window.RoguePixiTextureFactory || {};
-  const pixiVisualAssets = window.RogueVisualAssets || {};
   const pixiPools = window.RoguePixiPools || {};
   const pixiScene = window.RoguePixiScene || {};
   const pixiWorld = window.RoguePixiWorld || {};
@@ -13,11 +11,12 @@
   const pixiEffects = window.RoguePixiEffects || {};
   const pixiSkillEffects = window.RoguePixiSkillEffects || {};
   const pixiParticles = window.RoguePixiParticles || {};
+  const styleClassifier = window.RogueEffectStyle || {};
+
   const pixiActorTextures = window.RoguePixiActorTextures || {};
   const pixiEnemyTextures = window.RoguePixiEnemyTextures || {};
   const pixiBossTextures = window.RoguePixiBossTextures || {};
   const pixiPrimitives = window.RoguePixiPrimitives || {};
-  const pixiPixelDrawing = window.RoguePixiPixelDrawing || {};
   const pixiPalettes = window.RoguePixiPalettes || {};
   const pixiTextureKeys = window.RoguePixiTextureKeys || {};
   const pixiWorldTextures = window.RoguePixiWorldTextures || {};
@@ -55,6 +54,47 @@
     }
   };
 
+  function shouldPrioritizeMageSkillRenderer(style, effect) {
+    const s = String(style || effect?.style || effect?.kind || "").toLowerCase();
+    const kind = String(effect?.kind || "").toLowerCase();
+    if (!s) return false;
+    if (kind === "explosion" && s.includes("meteor_impact")) return false;
+    const styleInfo = styleClassifier.classifyEffectStyle
+      ? styleClassifier.classifyEffectStyle(s, kind)
+      : null;
+    const nonMageLightning =
+      s.includes("engineer") ||
+      s.includes("turret") ||
+      s.includes("drone") ||
+      s.includes("overclock") ||
+      s.includes("coil") ||
+      s.includes("rail_") ||
+      s.includes("single_laser") ||
+      s.includes("drone_laser") ||
+      s.includes("turret_bolt") ||
+      s.includes("assassin") ||
+      s.includes("puppet") ||
+      s.includes("elite") ||
+      s.includes("mark_chain");
+    const mageChain = (s.includes("chain_lightning") || kind === "chain") && !nonMageLightning;
+    if (mageChain) return true;
+    if (styleInfo?.chainLightning || s.includes("lightning") || s.includes("electric")) {
+      return false;
+    }
+    return (
+      s.includes("mage") ||
+      s.includes("frost") ||
+      s.includes("freeze") ||
+      s.includes("ice") ||
+      s.includes("meteor") ||
+      s.includes("star_orb") ||
+      s.includes("star_burst") ||
+      s.includes("star_split") ||
+      s.includes("arcane_splash") ||
+      s.includes("blink")
+    );
+  }
+
   function chooseRendererPreference() {
     if (pixiRuntime.chooseRendererPreference) return pixiRuntime.chooseRendererPreference();
     return typeof navigator !== "undefined" && navigator.gpu ? "webgpu" : "webgl";
@@ -66,6 +106,164 @@
   const enemyPalettes = pixiPalettes.enemyPalettes || {
     slime: ["#c85d56", "#5b1f24", "#fca5a5"]
   };
+  const enemyStatusMarkers = Object.freeze([
+    { id: "freeze", label: "F", color: "#bfdbfe" },
+    { id: "slow", label: "S", color: "#8aa8bd" },
+    { id: "poison", label: "P", color: "#bef264" },
+    { id: "venom", label: "v", color: "#c084fc" },
+    { id: "burn", label: "B", color: "#fb923c" },
+    { id: "vulnerable", label: "V", color: "#facc15" },
+    { id: "marked", label: "M", color: "#c4b5fd" },
+    { id: "threaded", label: "L", color: "#d8b4fe" },
+    { id: "taunt", label: "T", color: "#e8794f" },
+    { id: "barrier", label: "G", color: "#93c5fd" }
+  ]);
+
+  function enemyStatusEffects(enemy) {
+    return new Set(Array.isArray(enemy?.statusEffects) ? enemy.statusEffects : []);
+  }
+
+  function enemyStatusActive(enemy, effects, id) {
+    if (id === "freeze") return effects.has("freeze") || effects.has("frozen");
+    if (id === "barrier") return effects.has("barrier") || Number(enemy?.barrier || 0) > 0;
+    return effects.has(id);
+  }
+
+  function poisonStackCount(enemy) {
+    return Math.max(0, Math.min(3, Math.floor(Number(enemy?.poisonStacks || 0))));
+  }
+
+  function enemyStatusMarkerLabel(enemy, marker) {
+    if (marker.id !== "poison") return marker.label;
+    const stacks = poisonStackCount(enemy);
+    return stacks > 0 ? `P${stacks}` : marker.label;
+  }
+
+  function activeEnemyStatusMarkers(enemy) {
+    const effects = enemyStatusEffects(enemy);
+    const markers = [];
+    for (const marker of enemyStatusMarkers) {
+      if (enemyStatusActive(enemy, effects, marker.id)) markers.push(marker);
+    }
+    return markers;
+  }
+
+  function drawEnemyStatusGraphics(renderer, enemy, pos, now, z) {
+    if (!renderer.drawGfxCircle) return;
+    const effects = enemyStatusEffects(enemy);
+    if (!effects.size && !(Number(enemy?.barrier || 0) > 0)) return;
+
+    const radius = Math.max(10, Number(enemy.radius || 18));
+    const phase = now / 360 + (renderer.hash?.(enemy.id) || 0) * 0.2;
+    const pulse = 0.5 + Math.sin(phase * 2.2) * 0.5;
+    const baseZ = z + 38;
+
+    if (enemyStatusActive(enemy, effects, "slow")) {
+      renderer.drawGfxArc?.(pos.x, pos.y + radius * 0.42, radius * (0.98 + pulse * 0.08), Math.PI * 0.1, Math.PI * 0.92, 4, "#8aa8bd", 0.34, baseZ, "add", 12);
+      renderer.drawGfxArc?.(pos.x, pos.y + radius * 0.42, radius * (0.72 + pulse * 0.06), Math.PI * 1.08, Math.PI * 1.9, 3, "#dbeafe", 0.2, baseZ + 1, "add", 12);
+    }
+
+    if (enemyStatusActive(enemy, effects, "freeze")) {
+      renderer.drawGfxCircle(pos.x, pos.y, radius * 1.05, "#dbeafe", 0.06, "#93c5fd", 0.52, 3, baseZ + 5, "add", 24);
+      for (let i = 0; i < 5; i += 1) {
+        const a = phase + (Math.PI * 2 * i) / 5;
+        const inner = radius * (0.16 + (i % 2) * 0.08);
+        const outer = radius * (0.72 + (i % 3) * 0.1);
+        renderer.drawGfxLine?.(pos.x + Math.cos(a) * inner, pos.y + Math.sin(a) * inner, pos.x + Math.cos(a) * outer, pos.y + Math.sin(a) * outer, 2.5, i % 2 ? "#bfdbfe" : "#f8fafc", 0.46, baseZ + 7 + i, "add");
+      }
+    }
+
+    if (enemyStatusActive(enemy, effects, "poison")) {
+      const stacks = Math.max(1, poisonStackCount(enemy));
+      renderer.drawGfxCircle(pos.x, pos.y + radius * 0.18, radius * 1.08, "#365314", 0.08, "#bef264", 0.18, 2, baseZ + 3, "add", 18);
+      for (let i = 0; i < 4; i += 1) {
+        const a = phase * 1.3 + (Math.PI * 2 * i) / 4;
+        const d = radius * (0.44 + (i % 2) * 0.28);
+        const bubble = radius * (0.12 + (i % 3) * 0.035);
+        renderer.drawGfxCircle(pos.x + Math.cos(a) * d, pos.y + Math.sin(a) * d * 0.7, bubble, "#bef264", 0.18, "#ecfccb", 0.24, 1, baseZ + 12 + i, "add", 10);
+      }
+      for (let i = 0; i < stacks; i += 1) {
+        const offset = (i - (stacks - 1) / 2) * radius * 0.3;
+        renderer.drawGfxCircle(pos.x + offset, pos.y - radius * 1.12, radius * 0.12, "#bef264", 0.72, "#ecfccb", 0.58, 1, baseZ + 18 + i, "add", 10);
+      }
+    }
+
+    if (enemyStatusActive(enemy, effects, "burn")) {
+      for (let i = 0; i < 4; i += 1) {
+        const side = i % 2 ? 1 : -1;
+        const x = pos.x + side * radius * (0.32 + i * 0.04);
+        const y = pos.y - radius * (0.45 - i * 0.08);
+        const height = radius * (0.44 + pulse * 0.12);
+        renderer.drawGfxLine?.(x, y + height * 0.34, x + side * radius * 0.08, y - height * 0.54, 5 - i * 0.45, i % 2 ? "#fdba74" : "#f97316", 0.48, baseZ + 14 + i, "add");
+        renderer.drawGfxCircle(x, y - height * 0.28, radius * 0.13, "#f97316", 0.22, "#fed7aa", 0.28, 1, baseZ + 18 + i, "add", 8);
+      }
+    }
+
+    if (enemyStatusActive(enemy, effects, "vulnerable")) {
+      renderer.drawGfxCircle(pos.x, pos.y, radius * 1.26, "#000000", 0, "#facc15", 0.38, 2, baseZ + 20, "add", 26);
+      for (let i = 0; i < 4; i += 1) {
+        const a = phase * 0.25 + (Math.PI * 2 * i) / 4;
+        renderer.drawGfxLine?.(pos.x + Math.cos(a) * radius * 0.98, pos.y + Math.sin(a) * radius * 0.98, pos.x + Math.cos(a) * radius * 1.32, pos.y + Math.sin(a) * radius * 1.32, 3, "#fde68a", 0.5, baseZ + 22 + i, "add");
+      }
+    }
+
+    if (enemyStatusActive(enemy, effects, "marked")) {
+      renderer.drawGfxLine?.(pos.x - radius * 0.48, pos.y - radius * 0.48, pos.x + radius * 0.48, pos.y + radius * 0.48, 4, "#c4b5fd", 0.62, baseZ + 28, "add");
+      renderer.drawGfxLine?.(pos.x + radius * 0.48, pos.y - radius * 0.48, pos.x - radius * 0.48, pos.y + radius * 0.48, 4, "#f5d0fe", 0.46, baseZ + 29, "add");
+      renderer.drawGfxDiamond?.(pos.x, pos.y, radius * 0.2, "#c4b5fd", 0.34, baseZ + 30, phase, "#f5d0fe");
+    }
+
+    if (enemyStatusActive(enemy, effects, "threaded")) {
+      for (let i = 0; i < 3; i += 1) {
+        const offset = (i - 1) * radius * 0.42;
+        renderer.drawGfxLine?.(pos.x + offset, pos.y - radius * 1.05, pos.x - offset * 0.36, pos.y + radius * 1.04, 2, "#d8b4fe", 0.44, baseZ + 31 + i, "add");
+        renderer.drawGfxCircle(pos.x - offset * 0.36, pos.y + radius * (0.5 - i * 0.08), radius * 0.08, "#d8b4fe", 0.34, "#f5d0fe", 0.22, 1, baseZ + 35 + i, "add", 8);
+      }
+    }
+
+    if (enemyStatusActive(enemy, effects, "taunt")) {
+      renderer.drawGfxCircle(pos.x, pos.y, radius * (1.42 + pulse * 0.12), "#7f1d1d", 0.03, "#ef4444", 0.46, 3, baseZ + 40, "add", 26);
+      renderer.drawGfxLine?.(pos.x, pos.y - radius * 0.95, pos.x, pos.y - radius * 0.28, 5, "#fecaca", 0.68, baseZ + 43, "add");
+      renderer.drawGfxCircle(pos.x, pos.y - radius * 0.08, radius * 0.1, "#fecaca", 0.62, "#ef4444", 0.3, 1, baseZ + 44, "add", 8);
+    }
+  }
+
+  function drawEnemyStatusPips(renderer, enemy, pos, z) {
+    const markers = activeEnemyStatusMarkers(enemy);
+    if (!markers.length || !renderer.drawGfxCircle) return;
+
+    const size = 14;
+    const gap = 3;
+    const perRow = 6;
+    const rowGap = 15;
+    const pipY = pos.y + Math.max(14, Number(enemy.radius || 18) + 11);
+    const textParent = renderer.layers?.effect || renderer.layers?.actor;
+    const textStyleBase = {
+      fontFamily: "Inter, sans-serif",
+      fontWeight: "900",
+      fontSize: 8,
+      stroke: { color: "#020617", width: 2 }
+    };
+
+    for (let i = 0; i < markers.length; i += 1) {
+      const marker = markers[i];
+      const row = Math.floor(i / perRow);
+      const col = i % perRow;
+      const count = Math.min(perRow, markers.length - row * perRow);
+      const startX = pos.x - ((count - 1) * (size + gap)) / 2;
+      const x = startX + col * (size + gap);
+      const y = pipY + row * rowGap;
+      renderer.drawGfxCircle(x, y, size / 2, "#05070c", 0.86, marker.color, 0.88, 1.4, z + 58 + row, "normal", 12);
+      if (!renderer.textPool?.next || !textParent) continue;
+      const label = enemyStatusMarkerLabel(enemy, marker);
+      const text = renderer.textPool.next(textParent, { ...textStyleBase, fontSize: label.length > 1 ? 7 : 8, fill: marker.color });
+      text.text = label;
+      text.position.set(x, y + 0.2);
+      text.alpha = 0.98;
+      text.scale.set(1);
+      text.zIndex = z + 59 + row;
+    }
+  }
 
   class SpritePool {
     constructor(PIXI) {
@@ -236,15 +434,9 @@
       this.getCamera = options.getCamera;
       this.ready = false;
       this.failed = false;
-      this.textures = pixiTextureFactory.createTextureRegistry
-        ? pixiTextureFactory.createTextureRegistry()
-        : pixiRuntime.createTextureRegistry
-          ? pixiRuntime.createTextureRegistry()
-          : new Map();
-      this.visualAssets = pixiVisualAssets;
-      this.assetManifest = pixiVisualAssets.getAssetManifest ? pixiVisualAssets.getAssetManifest() : null;
-      this.assetTextureStats = { external: 0, fallback: 0 };
-      this.assetEffectFrameCache = new Map();
+      this.textures = pixiRuntime.createTextureRegistry
+        ? pixiRuntime.createTextureRegistry()
+        : new Map();
       this.lastEnemyPositions = new Map();
       this.lastPlayerPositions = new Map();
       this.rendererPreference = chooseRendererPreference();
@@ -254,6 +446,8 @@
       this.lastPerfSampleAt = performance.now();
       this.lastPoolTrimAt = performance.now();
       this.perfFrameCount = 0;
+      this.effectRenderTrace = [];
+      this.lastStyledSkillRenderer = "";
       this.diagnostics = pixiRuntime.createDiagnostics
         ? pixiRuntime.createDiagnostics({
             rendererPreference: this.rendererPreference,
@@ -270,13 +464,15 @@
             texts: { used: 0, retained: 0 },
             graphics: { used: 0, retained: 0 },
             textures: 0,
-            assetTextures: { external: 0, fallback: 0 },
             effects: 0,
             particles: { used: 0, retained: 0, skipped: 0, budget: this.qualityPreset.particleBudget || 0, pressure: 0 },
             effectBudget: this.qualityPreset.effectBudget,
-            particleBudget: this.qualityPreset.particleBudget || 0
+            particleBudget: this.qualityPreset.particleBudget || 0,
+            lastEffectRenderer: null,
+            effectRenderTrace: []
           };
-      this.diagnostics.assetTextures = this.assetTextureStats;
+      this.diagnostics.lastEffectRenderer = null;
+      this.diagnostics.effectRenderTrace = [];
       window.__rogueRendererStats = this.diagnostics;
       this.particleEngine = pixiParticles.createParticleEngine
         ? pixiParticles.createParticleEngine({
@@ -295,15 +491,6 @@
       }
       this.PIXI = PIXI;
       try {
-        try {
-          this.assetManifest = pixiVisualAssets.loadAssetManifest
-            ? await pixiVisualAssets.loadAssetManifest()
-            : pixiVisualAssets.getAssetManifest
-              ? pixiVisualAssets.getAssetManifest()
-              : null;
-        } catch (error) {
-          this.assetManifest = pixiVisualAssets.getAssetManifest ? pixiVisualAssets.getAssetManifest() : null;
-        }
         this.app = new PIXI.Application();
         await this.app.init({
           width: Math.max(320, this.canvas.clientWidth || 1280),
@@ -361,7 +548,8 @@
 
         const screenLayerEntries = [
           ["vignette", 0],
-          ["flash", 10]
+          ["flash", 10],
+          ["debug", 100]
         ];
         this.screenLayers = pixiRuntime.createLayerSet
           ? pixiRuntime.createLayerSet(PIXI, this.screen, screenLayerEntries)
@@ -824,25 +1012,6 @@
         ctx.fillRect(142, 70, 66, 16);
         ctx.fillRect(198, 62, 22, 32);
       });
-      this.texture("fx-warrior-blade", 176, 58, (ctx) => {
-        if (pixiMeleeTextures.drawWarriorBlade) {
-          pixiMeleeTextures.drawWarriorBlade(ctx);
-          return;
-        }
-        ctx.fillStyle = "rgba(255,255,255,0.96)";
-        ctx.beginPath();
-        ctx.moveTo(10, 32);
-        ctx.lineTo(130, 12);
-        ctx.lineTo(168, 28);
-        ctx.lineTo(130, 44);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = "rgba(249,115,22,0.62)";
-        ctx.fillRect(18, 30, 102, 5);
-        ctx.fillStyle = "rgba(73,47,22,0.85)";
-        ctx.fillRect(4, 24, 26, 12);
-        ctx.fillRect(22, 18, 9, 25);
-      });
       this.texture("fx-warrior-spin-blade", 148, 148, (ctx) => {
         if (pixiMeleeTextures.drawWarriorSpinBlade) {
           pixiMeleeTextures.drawWarriorSpinBlade(ctx);
@@ -933,26 +1102,19 @@
           pixiElementalTextures.drawLightning(ctx);
           return;
         }
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 7;
-        ctx.lineJoin = "miter";
-        ctx.beginPath();
-        ctx.moveTo(4, 17);
-        ctx.lineTo(27, 9);
-        ctx.lineTo(45, 22);
-        ctx.lineTo(66, 7);
-        ctx.lineTo(83, 19);
-        ctx.lineTo(108, 12);
-        ctx.stroke();
-        ctx.strokeStyle = "rgba(255,255,255,0.42)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(5, 24);
-        ctx.lineTo(33, 18);
-        ctx.lineTo(53, 27);
-        ctx.lineTo(73, 15);
-        ctx.lineTo(101, 22);
-        ctx.stroke();
+        const draw = (points, color) => {
+          ctx.beginPath();
+          ctx.moveTo(points[0][0], points[0][1]);
+          for (let i = 1; i < points.length; i += 1) ctx.lineTo(points[i][0], points[i][1]);
+          ctx.closePath();
+          ctx.fillStyle = color;
+          ctx.fill();
+        };
+        draw([[2, 22], [21, 2], [40, 11], [55, 0], [69, 12], [83, 4], [110, 10], [109, 21], [84, 15], [64, 25], [51, 13], [38, 25], [23, 16], [5, 27]], "rgba(255,255,255,0.34)");
+        draw([[4, 21], [22, 7], [39, 14], [52, 4], [65, 16], [82, 8], [108, 14], [107, 18], [83, 13], [64, 22], [52, 11], [39, 21], [23, 12], [6, 24]], "rgba(255,255,255,0.82)");
+        draw([[5, 21], [22, 10], [38, 17], [52, 7], [64, 18], [82, 11], [107, 15], [82, 13], [64, 20], [52, 10], [38, 19], [22, 13]], "#ffffff");
+        draw([[38, 16], [45, 1], [50, 4], [43, 14]], "rgba(255,255,255,0.72)");
+        draw([[52, 5], [60, 27], [55, 28], [50, 9]], "rgba(255,255,255,0.72)");
       });
       this.texture("fx-frost-shards", 96, 96, (ctx) => {
         if (pixiElementalTextures.drawFrostShards) {
@@ -1484,33 +1646,8 @@
     }
 
     texture(key, width, height, draw) {
-      const assetDescriptor = this.assetDescriptorForTexture(key);
-      if (pixiTextureFactory.getOrCreateTextureWithAsset) {
-        const texture = pixiTextureFactory.getOrCreateTextureWithAsset(
-          this.textures,
-          this.PIXI,
-          key,
-          width,
-          height,
-          draw,
-          assetDescriptor,
-          this.visualAssets
-        );
-        const meta = this.textures.getMeta ? this.textures.getMeta(key) : null;
-        if (meta?.source === "asset") {
-          this.assetTextureStats.external += 1;
-        } else {
-          this.assetTextureStats.fallback += 1;
-        }
-        return texture;
-      }
-      if (pixiTextureFactory.getOrCreateCanvasTexture) {
-        return pixiTextureFactory.getOrCreateCanvasTexture(this.textures, this.PIXI, key, width, height, draw);
-      }
       const create = () =>
-        pixiTextureFactory.createCanvasTexture
-          ? pixiTextureFactory.createCanvasTexture(this.PIXI, width, height, draw)
-          : pixiRuntime.createCanvasTexture
+        pixiRuntime.createCanvasTexture
           ? pixiRuntime.createCanvasTexture(this.PIXI, width, height, draw)
           : (() => {
               const canvas = document.createElement("canvas");
@@ -1526,89 +1663,6 @@
       const texture = create();
       this.textures.set(key, texture);
       return texture;
-    }
-
-    assetDescriptorForTexture(key) {
-      if (!key || !this.visualAssets) return null;
-      if (this.visualAssets.assetDescriptorForTexture) {
-        return this.visualAssets.assetDescriptorForTexture(key);
-      }
-      const asset = this.visualAssets.findTextureAsset ? this.visualAssets.findTextureAsset(key) : null;
-      if (!asset) return null;
-      const source = asset.path || (this.visualAssets.assetPath ? this.visualAssets.assetPath(asset.kind, asset.file) : "");
-      return source ? { ...asset, key, source } : null;
-    }
-
-    assetEffectDescriptor(key) {
-      const descriptor = this.assetDescriptorForTexture(key);
-      if (!descriptor) return null;
-      return {
-        ...descriptor,
-        frameWidth: Math.max(1, Math.round(Number(descriptor.frameWidth || 64))),
-        frameHeight: Math.max(1, Math.round(Number(descriptor.frameHeight || 64))),
-        frames: Math.max(1, Math.round(Number(descriptor.frames || 1)))
-      };
-    }
-
-    assetEffectFrameTexture(key, frameIndex = 0) {
-      const descriptor = this.assetEffectDescriptor(key);
-      if (!descriptor) return null;
-      const frame = Math.max(0, Math.min(descriptor.frames - 1, Math.round(Number(frameIndex) || 0)));
-      const cacheKey = `${descriptor.key || key}:frame:${frame}`;
-      if (this.assetEffectFrameCache.has(cacheKey)) return this.assetEffectFrameCache.get(cacheKey);
-      if (!this.PIXI?.Texture || !this.PIXI?.Rectangle) return null;
-
-      const sheetTexture = pixiTextureFactory.getOrCreateExternalTexture
-        ? pixiTextureFactory.getOrCreateExternalTexture(this.textures, this.PIXI, descriptor.key || key, descriptor, this.visualAssets)
-        : this.PIXI.Texture.from(descriptor.source);
-      if (!sheetTexture) return null;
-
-      const frameRect = new this.PIXI.Rectangle(frame * descriptor.frameWidth, 0, descriptor.frameWidth, descriptor.frameHeight);
-      let texture = null;
-      try {
-        if (sheetTexture.source) {
-          texture = new this.PIXI.Texture({
-            source: sheetTexture.source,
-            frame: frameRect
-          });
-        }
-      } catch (error) {
-        texture = null;
-      }
-      if (!texture) {
-        try {
-          texture = new this.PIXI.Texture(sheetTexture.baseTexture, frameRect);
-        } catch (error) {
-          texture = sheetTexture;
-        }
-      }
-      this.assetEffectFrameCache.set(cacheKey, texture);
-      return texture;
-    }
-
-    assetEffectFx(key, x, y, options = {}) {
-      const descriptor = this.assetEffectDescriptor(key);
-      if (!descriptor) return null;
-      const progress = Math.max(0, Math.min(1, Number(options.progress) || 0));
-      const frame = Number.isFinite(options.frame)
-        ? Math.round(Number(options.frame))
-        : Math.min(descriptor.frames - 1, Math.floor(progress * descriptor.frames));
-      const texture = this.assetEffectFrameTexture(descriptor.key || key, frame);
-      if (!texture) return null;
-      const sprite = this.sprite(
-        texture,
-        options.parent || this.layers.effect,
-        x,
-        y,
-        Number.isFinite(options.scaleX) ? Number(options.scaleX) : Number(options.scale || 1),
-        Number.isFinite(options.scaleY) ? Number(options.scaleY) : Number(options.scale || 1),
-        options.tint || "#ffffff",
-        Number.isFinite(options.alpha) ? Number(options.alpha) : 1
-      );
-      sprite.rotation = Number(options.rotation || 0);
-      sprite.zIndex = Number.isFinite(options.zIndex) ? Number(options.zIndex) : y + 100;
-      sprite.blendMode = options.blendMode || "add";
-      return sprite;
     }
 
     render(now, dt, viewW, viewH) {
@@ -1639,7 +1693,6 @@
       this.diagnostics.graphics = this.graphicsPool.stats();
       this.diagnostics.particles = this.particleEngine?.stats?.() || { used: 0, retained: 0, skipped: 0, budget: this.getParticleBudget(), pressure: 0 };
       this.diagnostics.textures = this.textures.size;
-      this.diagnostics.assetTextures = this.assetTextureStats;
       this.diagnostics.quality = this.quality;
       this.diagnostics.effectBudget = this.qualityPreset.effectBudget;
       this.diagnostics.particleBudget = this.getParticleBudget();
@@ -1688,7 +1741,7 @@
       this.renderHazards(state.hazards || [], now);
       this.renderPickups(state, now);
       this.renderProjectiles(state.projectiles || [], now);
-      this.renderEnemies(state.enemies || [], now);
+      this.renderEnemies(state.enemies || [], now, state.room.world);
       this.renderPlayers(state.players || [], now);
       this.renderFloatingEffects(this.getFloatingEffects() || [], now);
       this.renderAim(state, now);
@@ -1830,7 +1883,7 @@
           const turret = this.sprite("fx-turret", this.layers.hazard, hazard.x, hazard.y + Math.sin(now / 170 + hazard.id) * 1.2, size, size, "#d6b76d", 0.96);
           turret.zIndex = hazard.y + 8;
           this.sprite("shadow", this.layers.hazard, hazard.x, hazard.y + 25, 0.72, 0.56, "#000000", 0.55).zIndex = hazard.y - 2;
-          this.sprite("fx-lightning", this.layers.hazard, hazard.x + 18, hazard.y - 10, 0.35, 0.24, "#9ee6ff", armed ? 0.38 + Math.sin(now / 90) * 0.1 : 0.16).zIndex = hazard.y + 9;
+          this.drawGfxLightning(hazard.x + 5, hazard.y - 10, hazard.x + 31, hazard.y - 15, "#67e8f9", armed ? 0.36 + Math.sin(now / 90) * 0.08 : 0.14, hazard.y + 9, 3.2, 4, 7, now / 140 + hazard.id);
           if (!armed) this.ring(hazard.x, hazard.y, radius * 0.72, "#9ee6ff", 0.16 + Math.sin(now / 80) * 0.05, 2);
           continue;
         }
@@ -1839,7 +1892,7 @@
           drone.zIndex = hazard.y + 22;
           drone.blendMode = "normal";
           this.sprite("shadow", this.layers.hazard, hazard.x, hazard.y + 18, 0.54, 0.38, "#000000", 0.38).zIndex = hazard.y - 2;
-          this.sprite("fx-lightning", this.layers.hazard, hazard.x, hazard.y - 4, 0.48, 0.2, "#9ee6ff", 0.28 + Math.sin(now / 110) * 0.08).zIndex = hazard.y + 23;
+          this.drawGfxLightning(hazard.x - 20, hazard.y - 9, hazard.x + 20, hazard.y - 7, "#67e8f9", 0.28 + Math.sin(now / 110) * 0.06, hazard.y + 23, 3.4, 5, 8, now / 120 + hazard.id);
           continue;
         }
         if (hazard.type === "engineer_mine") {
@@ -1860,18 +1913,21 @@
           continue;
         }
         if (hazard.type === "arrow_rain") {
-          const warning = this.sprite("fx-warning-target", this.layers.hazard, hazard.x, hazard.y, radius / 49, radius / 49, "#f1d08b", armed ? 0.18 : 0.34);
-          warning.rotation = now / 900;
-          warning.blendMode = "add";
-          warning.zIndex = hazard.y - 12;
-          const dropCount = armed ? 8 : 4;
+          const pulse = 1 + Math.sin(now / 210 + hazard.id) * 0.012;
+          this.drawGfxCircle(hazard.x, hazard.y, radius * pulse, "#4a3415", armed ? 0.035 : 0.025, "#f1d08b", armed ? 0.36 : 0.24, armed ? 2.4 : 1.8, hazard.y + 4, "add", 56);
+          this.drawGfxCircle(hazard.x, hazard.y, radius * 0.72, "#000000", 0, "#fde68a", armed ? 0.12 : 0.08, 1.2, hazard.y + 5, "add", 42);
+          if (!armed) continue;
+          const dropCount = 9;
+          const skyY = hazard.y - radius * 2.1;
           for (let i = 0; i < dropCount; i += 1) {
-            const t = (now / 240 + i * 0.37 + hazard.id * 0.11) % 1;
-            const a = this.noise(hazard.id + i * 17, 4) * Math.PI * 2;
-            const r = Math.sqrt(this.noise(hazard.id + i * 31, 9)) * radius * 0.78;
-            const x = hazard.x + Math.cos(a) * r;
-            const y = hazard.y + Math.sin(a) * r - 80 + t * 112;
-            const arrow = this.sprite("fx-arrow-rain", this.layers.hazard, x, y, 0.38, 0.48, "#f1d08b", armed ? 0.76 : 0.44);
+            const seed = this.noise(hazard.id + i * 17, 4);
+            const t = (now / 360 + i * 0.19 + hazard.id * 0.07) % 1;
+            const lane = (i - (dropCount - 1) / 2) * radius * 0.12 + (seed - 0.5) * radius * 0.12;
+            const x = hazard.x + lane;
+            const slant = (i % 2 ? -1 : 1) * 3;
+            const topY = skyY + t * radius * 2.45;
+            this.lineFx("beam", x - slant, topY - 42, x + slant, topY + 30, i % 3 === 0 ? 4 : 3, i % 3 === 0 ? "#fff7ed" : "#f1d08b", 0.58 + t * 0.18, hazard.y + 20 + i, "add");
+            const arrow = this.sprite("fx-arrow-rain", this.layers.hazard, x, topY + 8, 0.2, 0.28, i % 3 === 0 ? "#fff7ed" : "#f1d08b", 0.18);
             arrow.zIndex = hazard.y + 28 + i;
             arrow.blendMode = "add";
           }
@@ -1887,7 +1943,7 @@
           this.ring(hazard.x, hazard.y, radius, "#bef264", armed ? 0.18 : 0.12 + Math.sin(now / 90) * 0.06, 2);
           continue;
         }
-        if (hazard.type === "alchemy_pool" || hazard.type === "acid_pool") {
+        if (hazard.type === "alchemy_pool" || hazard.type === "acid_pool" || hazard.type === "poison_pool") {
           const fireMode = hazard.mode === "fire" || flavor.includes("fire");
           const key = fireMode ? "fx-fire-pool" : "fx-acid-splash";
           const tint = fireMode ? "#f97316" : "#bef264";
@@ -1909,7 +1965,14 @@
           marker.rotation = now / 720;
           marker.blendMode = "add";
           marker.zIndex = hazard.y - 14;
-          this.sprite("fx-meteor-fall", this.layers.hazard, hazard.x - 48, hazard.y - 112, 0.72, 0.72, "#f97316", Math.max(0.16, 0.42 - (hazard.armTime || 0) * 0.1)).zIndex = hazard.y + 26;
+          const fallAlpha = Math.max(0.16, 0.42 - (hazard.armTime || 0) * 0.1);
+          const angle = Math.atan2(118, 60);
+          const ux = Math.cos(angle);
+          const uy = Math.sin(angle);
+          const rockX = hazard.x - 92;
+          const rockY = hazard.y - 190;
+          this.drawGfxLine(rockX - ux * 116, rockY - uy * 116, rockX + ux * 8, rockY + uy * 8, 20, "#f97316", fallAlpha * 0.16, hazard.y + 24, "add");
+          this.drawGfxLine(rockX - ux * 92, rockY - uy * 92, rockX + ux * 20, rockY + uy * 20, 8, "#fde68a", fallAlpha * 0.18, hazard.y + 25, "add");
           continue;
         }
         const poison = flavor.includes("poison") || flavor.includes("acid") || flavor.includes("venom");
@@ -1967,13 +2030,17 @@
       }
       for (const projectile of projectiles) {
         const style = projectile.style || projectile.classId || "";
-        const poison = projectile.poison || style.includes("poison") || style.includes("venom") || style.includes("acid");
-        const fire = style.includes("fire") || style.includes("meteor") || style.includes("mortar") || style.includes("bomb");
-        const lightning = style.includes("electric") || style.includes("chain") || style.includes("rail") || style.includes("shock");
-        const arrow = style.includes("arrow") || style.includes("ranger") || style.includes("sniper") || style.includes("shuriken");
-        const thread = style.includes("thread");
-        const flask = style.includes("alchemy") || style.includes("bottle");
-        const shadow = style.includes("shuriken") || style.includes("shadow") || style.includes("assassin");
+        const styleInfo = styleClassifier.classifyProjectileStyle
+          ? styleClassifier.classifyProjectileStyle(style, projectile.classId)
+          : null;
+        const poison = projectile.poison || (styleInfo ? styleInfo.poison : style.includes("poison") || style.includes("venom") || style.includes("acid"));
+        const fire = styleInfo ? styleInfo.fire : style.includes("fire") || style.includes("meteor") || style.includes("mortar") || style.includes("bomb");
+        const lightning = styleInfo ? styleInfo.lightning : style.includes("electric") || style.includes("chain") || style.includes("rail") || style.includes("shock");
+        const laser = styleInfo ? styleInfo.laser : style.includes("mecha_laser_shot") || style.includes("laser_shot");
+        const arrow = styleInfo ? styleInfo.arrow : style.includes("arrow") || style.includes("ranger") || style.includes("sniper") || style.includes("shuriken");
+        const thread = styleInfo ? styleInfo.thread : style.includes("thread");
+        const flask = styleInfo ? styleInfo.flask : style.includes("alchemy") || style.includes("bottle");
+        const shadow = styleInfo ? styleInfo.shadow : style.includes("shuriken") || style.includes("shadow") || style.includes("assassin");
         const key =
           thread ? "fx-thread-knot" :
           flask ? "fx-flask" :
@@ -2008,18 +2075,50 @@
           shadow ? "#c4b5fd" :
           poison ? "#bef264" :
           fire ? "#f97316" :
+          laser ? "#67e8f9" :
           lightning ? "#9ee6ff" :
           projectile.hostile ? "#f87171" :
           projectile.color || "#f8f3e9";
+        if (laser && this.drawGfxLine) {
+          const angle = projectile.angle || 0;
+          const radius = Math.max(3.5, projectile.radius || 4.5);
+          const ux = Math.cos(angle);
+          const uy = Math.sin(angle);
+          const fromX = projectile.x - ux * radius * 3.3;
+          const fromY = projectile.y - uy * radius * 3.3;
+          const toX = projectile.x + ux * radius * 3.15;
+          const toY = projectile.y + uy * radius * 3.15;
+          this.drawGfxLine(fromX, fromY, toX, toY, Math.max(6, radius * 1.18), "#06131f", 0.28, projectile.y + 2, "add");
+          this.drawGfxLine(fromX, fromY, toX, toY, Math.max(3.6, radius * 0.72), "#67e8f9", 0.72, projectile.y + 4, "add");
+          this.drawGfxLine(fromX + ux * radius * 0.6, fromY + uy * radius * 0.6, toX, toY, Math.max(1.8, radius * 0.26), "#f8fafc", 0.78, projectile.y + 7, "add");
+          this.drawGfxCircle(toX, toY, Math.max(4, radius * 0.58), "#67e8f9", 0.18, "#f8fafc", 0.36, 1.6, projectile.y + 9, "add", 10);
+          continue;
+        }
+        if (lightning && this.drawGfxLightning) {
+          const angle = projectile.angle || 0;
+          const mechaShot = style.includes("mecha_laser_shot");
+          const radius = mechaShot ? Math.max(3.5, projectile.radius || 4.5) : Math.max(7, projectile.radius || 6);
+          const ux = Math.cos(angle);
+          const uy = Math.sin(angle);
+          const fromX = projectile.x - ux * radius * (mechaShot ? 3.1 : 2.35);
+          const fromY = projectile.y - uy * radius * (mechaShot ? 3.1 : 2.35);
+          const toX = projectile.x + ux * radius * (mechaShot ? 3.5 : 2.25);
+          const toY = projectile.y + uy * radius * (mechaShot ? 3.5 : 2.25);
+          const width = mechaShot ? Math.max(3.2, radius * 0.46) : Math.max(5, radius * 0.62);
+          const phase = now / 96 + Number(projectile.id || 0) * 0.37;
+          this.drawGfxLightning(fromX, fromY, toX, toY, "#67e8f9", 0.88, projectile.y + 4, width, 7, radius * 1.15, phase);
+          this.drawGfxLightning(projectile.x - ux * radius * 0.85, projectile.y - uy * radius * 0.85, toX + ux * radius * 0.35, toY + uy * radius * 0.35, "#f8fafc", 0.46, projectile.y + 11, Math.max(2, width * 0.32), 4, radius * 0.54, phase + 0.41);
+          this.drawGfxCircle(toX, toY, Math.max(5, radius * 0.62), "#67e8f9", 0.24, "#f8fafc", 0.36, 1.8, projectile.y + 14, "add", 10);
+          if (projectile.splash) this.ring(projectile.x, projectile.y, projectile.splash, projectile.hostile ? "#f87171" : "#7e9fb2", 0.08, 2);
+          continue;
+        }
         const sprite = this.sprite(key, this.layers.projectile, projectile.x, projectile.y, scaleX, scaleY, tint, 1);
         sprite.rotation = projectile.angle || 0;
         sprite.blendMode = fire || lightning || poison || thread || shadow ? "add" : "normal";
         sprite.zIndex = projectile.y + 4;
         if (thread) {
-          const trail = this.sprite("fx-lightning", this.layers.projectile, projectile.x - Math.cos(projectile.angle || 0) * 18, projectile.y - Math.sin(projectile.angle || 0) * 18, 0.32, 0.18, "#b985c8", 0.36);
-          trail.rotation = projectile.angle || 0;
-          trail.blendMode = "add";
-          trail.zIndex = projectile.y + 3;
+          const angle = projectile.angle || 0;
+          this.drawGfxLightning(projectile.x - Math.cos(angle) * 28, projectile.y - Math.sin(angle) * 16, projectile.x + Math.cos(angle) * 10, projectile.y + Math.sin(angle) * 6, "#b985c8", 0.32, projectile.y + 3, 2.6, 4, 7, now / 180 + Number(projectile.id || 0));
         }
         if (flask) {
           const drop = this.sprite(style.includes("fire") ? "fx-fire-pool" : "fx-acid-splash", this.layers.projectile, projectile.x - Math.cos(projectile.angle || 0) * 14, projectile.y - Math.sin(projectile.angle || 0) * 14, 0.22, 0.18, style.includes("fire") ? "#f97316" : "#bef264", 0.22);
@@ -2031,9 +2130,9 @@
       }
     }
 
-    renderEnemies(enemies, now) {
+    renderEnemies(enemies, now, world) {
       if (pixiEnemies.renderEnemies) {
-        pixiEnemies.renderEnemies(this, enemies, now);
+        pixiEnemies.renderEnemies(this, enemies, now, world);
         return;
       }
       const visuals = this.getVisuals();
@@ -2069,7 +2168,9 @@
         }
         if (enemy.statusEffects?.includes("freeze")) this.ring(pos.x, pos.y, enemy.radius * 1.35, "#93c5fd", 0.52, 3);
         if (enemy.statusEffects?.includes("barrier") || enemy.barrier > 0) this.ring(pos.x, pos.y, enemy.radius * 1.58, "#bfdbfe", 0.42, 3);
-        if (enemy.elite) this.drawEliteCrown(pos.x, pos.y - enemy.radius * 1.1, enemy.affix || "", enemy.color || "#facc15", pos.y + 1);
+        if (enemy.elite) this.drawEliteBodyMutation(pos.x, pos.y, enemy.radius, enemy.affix || "", pos.y + 1);
+        drawEnemyStatusGraphics(this, enemy, pos, now, pos.y + (enemy.type === "boss" ? 80 : 20));
+        drawEnemyStatusPips(this, enemy, pos, pos.y + (enemy.type === "boss" ? 80 : 20));
         this.bar(pos.x, pos.y - enemy.radius * 1.45 - 20, enemy.radius * 2.05, 5, enemy.hp / enemy.maxHp, "#ef4444");
       }
     }
@@ -2096,8 +2197,18 @@
         const bob = Math.sin(now / (moving ? 105 : 240) + this.hash(player.id) * 4) * (moving ? 2 : 0.6);
 
         this.sprite("shadow", this.layers.actor, pos.x, pos.y + 27 * scaleBase, scale * 1.1, scale * 0.9, "#000000", 0.72).zIndex = pos.y - 2;
-        if (moving || player.dashMove?.active) {
-          const trail = this.sprite(key, this.layers.actor, pos.x - face * 18, pos.y + bob, scale * face, scale, "#ffffff", player.dashMove?.active ? 0.34 : 0.16);
+        const dashActive = Boolean(player.dashMove?.active);
+        const warriorDash = (player.classId || "warrior") === "warrior";
+        if (dashActive && warriorDash && this.drawGfxDashDust) {
+          const dx = pos.x - last.x;
+          const dy = pos.y - last.y;
+          const travel = Math.hypot(dx, dy);
+          const dashAngle = travel > 3 ? Math.atan2(dy, dx) : Number(player.facing || 0);
+          const fromX = travel > 3 ? last.x : pos.x - Math.cos(dashAngle) * scaleBase * 52;
+          const fromY = travel > 3 ? last.y : pos.y - Math.sin(dashAngle) * scaleBase * 52;
+          this.drawGfxDashDust(fromX, fromY, pos.x, pos.y, scaleBase * 28, dashAngle, "#caa35a", 0.58, pos.y - 1, now / 180, {});
+        } else if (moving && !dashActive) {
+          const trail = this.sprite(key, this.layers.actor, pos.x - face * 18, pos.y + bob, scale * face, scale, "#ffffff", 0.16);
           trail.zIndex = pos.y - 1;
         }
         const sprite = this.sprite(key, this.layers.actor, pos.x, pos.y + bob, scale * face, scale, "#ffffff", player.downed ? 0.55 : 1);
@@ -2112,10 +2223,10 @@
           } else if (classId === "mage") {
             this.fx("fx-star-burst", fxX, fxY, 0.36, 0.36, "#dbeafe", 0.72, pos.y + 24, angle + 0.2, "add");
           } else if (classId === "engineer") {
-            this.fx("fx-lightning", fxX, fxY, 0.54, 0.54, "#9ee6ff", 0.72, pos.y + 24, angle, "add");
+            this.drawGfxLightning(pos.x + Math.cos(angle) * 12, pos.y + Math.sin(angle) * 8, fxX + Math.cos(angle) * 24, fxY + Math.sin(angle) * 10, "#67e8f9", 0.72, pos.y + 24, 5, 5, 11, now / 95 + this.hash(player.id));
           } else if (classId === "puppeteer") {
             this.fx("fx-thread-knot", fxX, fxY, 0.44, 0.36, "#f5d0fe", 0.72, pos.y + 24, angle, "add");
-            this.fx("fx-lightning", fxX - Math.cos(angle) * 16, fxY - Math.sin(angle) * 8, 0.36, 0.18, "#b985c8", 0.38, pos.y + 23, angle, "add");
+            this.drawGfxLightning(pos.x + Math.cos(angle) * 8, pos.y + Math.sin(angle) * 5, fxX + Math.cos(angle) * 4, fxY + Math.sin(angle) * 4, "#b985c8", 0.32, pos.y + 23, 2.4, 4, 7, now / 140 + this.hash(player.id));
           } else if (classId === "martialist") {
             this.fx("fx-fist", fxX, fxY, 0.42, 0.42, "#fde68a", 0.76, pos.y + 24, angle, "add");
           } else if (classId === "alchemist") {
@@ -2125,13 +2236,44 @@
             this.fx("fx-shadow-cut", fxX, fxY, face * 0.58, 0.42, "#c4b5fd", 0.78, pos.y + 24, angle, "add");
             this.fx("fx-smoke", pos.x - face * 12, pos.y + 3, 0.42, 0.34, "#21142f", 0.28, pos.y + 18, 0, "add");
           } else if (classId === "warrior") {
-            this.drawGfxSword(pos.x - Math.cos(angle) * 10, pos.y + bob + Math.sin(angle) * 4, angle + 0.08 * face, 72, 0, player.color || "#f97316", 0.7, pos.y + 30, false);
+            // Warrior attack visuals come from authoritative server effect events.
           } else {
             this.fx("fx-sword-cut", fxX, fxY, face * 0.72, 0.72, player.color || "#ffffff", 0.82, pos.y + 24, angle, "add");
           }
         }
         if (player.shield > 0) this.ring(pos.x, pos.y, 33 * scaleBase, "#bfdbfe", 0.5, 3);
         if (player.statusEffects?.includes("taunt_guard")) this.ring(pos.x, pos.y, 42 * scaleBase, "#f97316", 0.34, 4);
+        if (player.statusEffects?.includes("mecha")) {
+          const mechaRadius = (player.id === selfId ? 25 : 22) * scaleBase;
+          const angle = Number(player.facing || 0);
+          const ux = Math.cos(angle);
+          const uy = Math.sin(angle);
+          const px = -uy;
+          const py = ux;
+          const pulse = 0.5 + Math.sin(now / 118 + this.hash(player.id)) * 0.5;
+          const cx = pos.x;
+          const cy = pos.y + bob + 2;
+          this.drawGfxCircle(cx, cy + mechaRadius * 0.22, mechaRadius * 1.46, "#0f172a", 0.15, "#d6b76d", 0.28, 2, pos.y + 40, "add", 28);
+          this.drawGfxGear?.(cx, cy, mechaRadius * (0.98 + pulse * 0.06), "#d6b76d", 0.34, pos.y + 43, now / 520, 10);
+          this.drawGfxRuneRing?.(cx, cy, mechaRadius * 1.18, "#67e8f9", 0.26, pos.y + 44, -now / 720, 6);
+          for (const side of [-1, 1]) {
+            const sx = cx + px * side * mechaRadius * 1.04 - ux * mechaRadius * 0.05;
+            const sy = cy + py * side * mechaRadius * 1.04 - uy * mechaRadius * 0.05;
+            this.drawGfxPath?.([
+              { x: sx + ux * mechaRadius * 0.72, y: sy + uy * mechaRadius * 0.72 },
+              { x: sx - ux * mechaRadius * 0.18 + px * side * mechaRadius * 0.48, y: sy - uy * mechaRadius * 0.18 + py * side * mechaRadius * 0.48 },
+              { x: sx - ux * mechaRadius * 0.86 + px * side * mechaRadius * 0.2, y: sy - uy * mechaRadius * 0.86 + py * side * mechaRadius * 0.2 },
+              { x: sx - ux * mechaRadius * 0.46 - px * side * mechaRadius * 0.34, y: sy - uy * mechaRadius * 0.46 - py * side * mechaRadius * 0.34 },
+            ], "#241a07", 0.72, "#d6b76d", 0.82, 3, pos.y + 48 + side, "normal");
+            this.drawGfxLine?.(sx - ux * mechaRadius * 0.42, sy - uy * mechaRadius * 0.42, sx + ux * mechaRadius * 0.5, sy + uy * mechaRadius * 0.5, 4, "#67e8f9", 0.42, pos.y + 51 + side, "add");
+            const bx = cx - ux * mechaRadius * 1.02 + px * side * mechaRadius * 0.62;
+            const by = cy - uy * mechaRadius * 1.02 + py * side * mechaRadius * 0.62;
+            this.drawGfxLine?.(bx, by, bx - ux * mechaRadius * (0.82 + pulse * 0.22), by - uy * mechaRadius * (0.82 + pulse * 0.22), 7, "#f97316", 0.22 + pulse * 0.08, pos.y + 39 + side, "add");
+            this.drawGfxCircle?.(bx, by, mechaRadius * 0.14, "#67e8f9", 0.42, "#f8f3e9", 0.36, 1.4, pos.y + 52 + side, "add", 10);
+          }
+          this.drawGfxCircle?.(cx + ux * mechaRadius * 0.64, cy + uy * mechaRadius * 0.64, mechaRadius * 0.19, "#67e8f9", 0.48, "#f8f3e9", 0.62, 2, pos.y + 54, "add", 12);
+          this.renderEngineerLaserChargeHud(player, cx, cy, mechaRadius, now, pos.y + 64);
+        }
         if (player.id === selfId) {
           this.bar(pos.x, pos.y - 56 * scaleBase, 86, 8, player.hp / player.maxHp, "#ef4444");
           if (player.shield > 0) this.bar(pos.x, pos.y - 46 * scaleBase, 86, 4, player.shield / Math.max(1, player.maxHp * 0.45), "#93c5fd");
@@ -2139,13 +2281,66 @@
       }
     }
 
+    renderEngineerLaserChargeHud(player, x, y, mechaRadius, now, zIndex) {
+      const max = Math.max(0, Math.floor(Number(player.engineerLaserChargeMax || 0)));
+      const charge = Math.max(0, Math.min(max, Math.floor(Number(player.engineerLaserCharge || 0))));
+      if (max <= 0 || charge <= 0) return;
+
+      const ratio = charge / max;
+      const pulse = 0.5 + Math.sin(now / 88 + this.hash(player.id) * 0.17) * 0.5;
+      const coreRadius = mechaRadius * (0.22 + ratio * 0.24 + pulse * 0.04);
+      const orbitRadius = mechaRadius * (1.05 + ratio * 0.36);
+      const tint = "#c084fc";
+      const hot = charge >= max - 1 ? "#f5d0fe" : "#67e8f9";
+      const alpha = 0.32 + ratio * 0.36 + pulse * 0.12;
+      const spin = now / (220 - ratio * 70);
+
+      this.drawGfxCircle?.(x, y, orbitRadius, "#170728", 0.1 + ratio * 0.04, tint, 0.2 + ratio * 0.24, 2 + ratio * 2, zIndex, "add", 34);
+      this.drawGfxRuneRing?.(x, y, orbitRadius * 0.82, tint, 0.22 + ratio * 0.18, zIndex + 1, -spin, max);
+      this.drawGfxCircle?.(x, y, coreRadius * 1.42, tint, 0.18 + ratio * 0.18, hot, alpha, 2, zIndex + 5, "add", 18);
+      this.drawGfxCircle?.(x, y, coreRadius * 0.58, hot, 0.34 + ratio * 0.28, "#ffffff", 0.24 + ratio * 0.36, 1.6, zIndex + 7, "add", 12);
+
+      for (let i = 0; i < max; i += 1) {
+        const lit = i < charge;
+        const a = -Math.PI * 0.5 + (i - (max - 1) / 2) * 0.38;
+        const px = x + Math.cos(a) * orbitRadius * 0.62;
+        const py = y + Math.sin(a) * orbitRadius * 0.48 - mechaRadius * 0.08;
+        this.drawGfxCircle?.(
+          px,
+          py,
+          lit ? mechaRadius * (0.12 + pulse * 0.02) : mechaRadius * 0.08,
+          lit ? hot : "#26132f",
+          lit ? 0.52 : 0.12,
+          lit ? "#ffffff" : tint,
+          lit ? 0.56 : 0.16,
+          1,
+          zIndex + 12 + i,
+          "add",
+          8
+        );
+      }
+
+      for (let i = 0; i < 4 + charge * 2; i += 1) {
+        const a = spin * 0.55 + (Math.PI * 2 * i) / (4 + charge * 2);
+        const outer = orbitRadius * (0.96 + (i % 2) * 0.18);
+        const inner = coreRadius * (1.1 + (i % 3) * 0.18);
+        const tx = x + Math.cos(a) * inner;
+        const ty = y + Math.sin(a) * inner * 0.78;
+        const sx = x + Math.cos(a) * outer;
+        const sy = y + Math.sin(a) * outer * 0.78;
+        this.drawGfxLine?.(sx, sy, tx, ty, 2.2 + ratio * 1.4, i % 2 ? hot : tint, 0.12 + ratio * 0.18, zIndex + 20 + i, "add");
+      }
+    }
+
     renderFloatingEffects(effects, now) {
       this.diagnostics.effects = effects.length;
+      this.effectRenderTrace = [];
       const startIndex = pixiRuntime.effectStartIndex
         ? pixiRuntime.effectStartIndex(effects.length, this.qualityPreset.effectBudget)
         : Math.max(0, effects.length - this.qualityPreset.effectBudget);
       for (let effectIndex = startIndex; effectIndex < effects.length; effectIndex += 1) {
         const effect = effects[effectIndex];
+        if (!effect || effect.age < 0) continue;
         const progress = pixiEffects.effectProgress
           ? pixiEffects.effectProgress(effect)
           : Math.max(0, Math.min(1, effect.age / Math.max(0.1, effect.ttl || 0.7)));
@@ -2161,6 +2356,7 @@
             effect.kind === "freeze" || effect.kind === "slow" ? Math.min(rawRadius, 120) :
             Math.min(rawRadius, 110);
         if (pixiEffects.renderFloatingTextEffect && pixiEffects.renderFloatingTextEffect(this, effect, progress, alpha, color)) {
+          this.noteEffectRenderer("pixi-effects:floating-text", effect, style);
           continue;
         }
         if (effect.kind === "damage" || effect.kind === "heal" || effect.kind === "xp" || (effect.kind === "poison" && effect.value)) {
@@ -2177,12 +2373,50 @@
           text.alpha = alpha;
           text.scale.set(1 + (effect.critical ? 0.24 : 0.1) * Math.max(0, 1 - progress * 3));
           text.zIndex = effect.y + 100;
+          this.noteEffectRenderer("pixi-renderer:floating-text-fallback", effect, style);
           continue;
         }
-        if (this.renderStyledSkillEffect(effect, progress, alpha, radius, color, style)) continue;
-        if (pixiEffects.renderCoreSkillEffect && pixiEffects.renderCoreSkillEffect(this, effect, progress, alpha, radius, color, style)) continue;
-        if (pixiEffects.renderSecondaryEffect && pixiEffects.renderSecondaryEffect(this, effect, progress, alpha, radius, color, style)) continue;
-        if (pixiEffects.renderDefaultBurstEffect && pixiEffects.renderDefaultBurstEffect(this, effect, progress, alpha, radius, color)) continue;
+        const styledEffectKey = style || effect.kind || "";
+        if (this.renderEngineerLaserModuleEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+          this.noteEffectRenderer("pixi-renderer:laser-module-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (this.renderUnifiedWarriorSkillEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+          this.noteEffectRenderer("pixi-renderer:warrior-unified-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (styledEffectKey === "warrior_spin" && this.renderWarriorBladeWhirlwindOverride(effect, progress, alpha, radius, color)) {
+          this.noteEffectRenderer("pixi-renderer:warrior-spin-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (styledEffectKey === "taunt" && this.renderWarriorTauntPulseOverride(effect, progress, alpha, radius, color)) {
+          this.noteEffectRenderer("pixi-renderer:taunt-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (shouldPrioritizeMageSkillRenderer(styledEffectKey, effect) && this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+          this.noteEffectRenderer(this.lastStyledSkillRenderer || "pixi-skill-effects:mage-priority", effect, styledEffectKey);
+          continue;
+        }
+        if (pixiEffects.renderNeonEffect && pixiEffects.renderNeonEffect(this, effect, progress, alpha, radius, color, styledEffectKey)) {
+          this.noteEffectRenderer("pixi-effects:neon-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+          this.noteEffectRenderer(this.lastStyledSkillRenderer || "pixi-skill-effects", effect, styledEffectKey);
+          continue;
+        }
+        if (pixiEffects.renderCoreSkillEffect && pixiEffects.renderCoreSkillEffect(this, effect, progress, alpha, radius, color, style)) {
+          this.noteEffectRenderer("pixi-effects:core-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (pixiEffects.renderSecondaryEffect && pixiEffects.renderSecondaryEffect(this, effect, progress, alpha, radius, color, style)) {
+          this.noteEffectRenderer("pixi-effects:secondary-fallback", effect, styledEffectKey);
+          continue;
+        }
+        if (pixiEffects.renderDefaultBurstEffect && pixiEffects.renderDefaultBurstEffect(this, effect, progress, alpha, radius, color)) {
+          this.noteEffectRenderer("pixi-effects:default-fallback", effect, styledEffectKey);
+          continue;
+        }
         if (effect.kind === "slash") {
           const cleave = style.includes("cleave") || style.includes("brute") || style.includes("mini_cleave") || style.includes("warrior");
           const puppet = style.includes("puppet") || style.includes("thread");
@@ -2191,8 +2425,13 @@
           const slashScale = (cleave ? 0.72 : 0.82) + progress * (cleave ? 0.32 : 0.24);
           const slash = this.fx(key, effect.x, effect.y, slashScale, slashScale, assassin ? "#8a6f9e" : puppet ? "#f5d0fe" : color, alpha * 0.92, effect.y + 96, Number(effect.angle || 0) + progress * 0.42, "add");
           if (assassin || puppet) {
-            const smoke = this.fx(assassin ? "fx-smoke" : "fx-lightning", effect.x - Math.cos(effect.angle || 0) * 18, effect.y - Math.sin(effect.angle || 0) * 18, 0.55, 0.42, assassin ? "#21142f" : "#b985c8", alpha * 0.32, effect.y + 88, Number(effect.angle || 0), "add");
-            smoke.alpha *= 0.8;
+            if (puppet && this.drawGfxLightning) {
+              const a = Number(effect.angle || 0);
+              this.drawGfxLightning(effect.x - Math.cos(a) * 28, effect.y - Math.sin(a) * 16, effect.x + Math.cos(a) * 12, effect.y + Math.sin(a) * 7, "#b985c8", alpha * 0.28, effect.y + 88, 2.6, 4, 8, progress + effect.x * 0.01);
+            } else {
+              const smoke = this.fx("fx-smoke", effect.x - Math.cos(effect.angle || 0) * 18, effect.y - Math.sin(effect.angle || 0) * 18, 0.55, 0.42, "#21142f", alpha * 0.32, effect.y + 88, Number(effect.angle || 0), "add");
+              smoke.alpha *= 0.8;
+            }
           }
           if (style.includes("shield") || style.includes("slam")) {
             this.fx("fx-impact-star", effect.x, effect.y, radius / 62, radius / 62, "#facc15", alpha * 0.58, effect.y + 100, progress * 0.8, "add");
@@ -2203,10 +2442,20 @@
         } else if (effect.kind === "dash" || effect.kind === "shot" || effect.kind === "chain") {
           const angle = Number(effect.angle || 0);
           if (effect.kind === "chain" || style.includes("chain") || style.includes("lightning") || style.includes("electric")) {
-            const bolt = this.fx("fx-lightning", effect.x, effect.y, Math.max(0.75, radius / 68), 0.9, "#9ee6ff", alpha * 0.92, effect.y + 92, angle, "add");
-            this.fx("fx-impact-star", effect.x - Math.cos(angle) * radius * 0.45, effect.y - Math.sin(angle) * radius * 0.45, 0.34, 0.34, "#dbeafe", alpha * 0.62, effect.y + 93, progress, "add");
-            this.fx("fx-impact-star", effect.x + Math.cos(angle) * radius * 0.45, effect.y + Math.sin(angle) * radius * 0.45, 0.34, 0.34, "#dbeafe", alpha * 0.62, effect.y + 93, -progress, "add");
-            bolt.alpha *= 0.95;
+            const line = this.effectEndpoints?.(effect, radius, angle) || {
+              fromX: effect.x - Math.cos(angle) * radius * 0.56,
+              fromY: effect.y - Math.sin(angle) * radius * 0.56,
+              toX: effect.x + Math.cos(angle) * radius * 0.56,
+              toY: effect.y + Math.sin(angle) * radius * 0.56
+            };
+            if (this.drawGfxLightning) {
+              this.drawGfxLightning(line.fromX, line.fromY, line.toX, line.toY, "#67e8f9", alpha * 0.88, effect.y + 92, 8, 8, 18, progress * 1.7);
+            } else {
+              const bolt = this.fx("fx-lightning", effect.x, effect.y, Math.max(0.75, radius / 68), 0.9, "#9ee6ff", alpha * 0.92, effect.y + 92, angle, "add");
+              bolt.alpha *= 0.95;
+            }
+            this.fx("fx-impact-star", line.fromX, line.fromY, 0.34, 0.34, "#dbeafe", alpha * 0.62, effect.y + 93, progress, "add");
+            this.fx("fx-impact-star", line.toX, line.toY, 0.34, 0.34, "#dbeafe", alpha * 0.62, effect.y + 93, -progress, "add");
           } else if (effect.kind === "shot") {
             const poison = style.includes("poison") || style.includes("venom") || style.includes("acid") || color === "#9aa15f";
             const sniper = style.includes("sniper") || style.includes("snipe");
@@ -2221,27 +2470,61 @@
             const blink = style.includes("mage_blink");
             const shadow = style.includes("shadow");
             const martial = style.includes("martial");
-            const key = blink ? "fx-frost-shards" : shadow ? "fx-smoke" : charge ? "fx-shield-hex" : martial ? "fx-impact-star" : "beam";
-            const sx = charge ? Math.max(0.7, radius / 80) : blink ? 0.5 : shadow ? Math.max(0.55, radius / 95) : Math.max(1.7, radius / 14);
-            const sy = charge ? 0.56 : blink ? 0.5 : shadow ? 0.46 : Math.max(0.52, radius / 76);
-            this.fx(key, effect.x, effect.y, sx, sy, blink ? "#93c5fd" : shadow ? "#8a6f9e" : martial ? "#fde68a" : color, alpha * 0.68, effect.y + 88, angle, "add");
+            const line = this.effectEndpoints?.(effect, radius, angle) || {
+              fromX: effect.x - Math.cos(angle) * radius,
+              fromY: effect.y - Math.sin(angle) * radius,
+              toX: effect.x + Math.cos(angle) * radius,
+              toY: effect.y + Math.sin(angle) * radius
+            };
+            if (charge) {
+              const ux = Math.cos(angle);
+              const uy = Math.sin(angle);
+              const shieldX = line.toX + ux * radius * 0.16;
+              const shieldY = line.toY + uy * radius * 0.16;
+              this.drawGfxShieldWake?.(line.fromX, line.fromY, line.toX, line.toY, Math.max(56, radius * 0.64), angle, "#f97316", alpha * 0.72, effect.y + 86, progress);
+              if (this.drawGfxFrontShield) {
+                this.drawGfxFrontShield(shieldX, shieldY, angle, Math.max(58, radius * 0.66), "#f97316", alpha * 0.88, effect.y + 106, progress);
+              } else {
+                this.drawGfxShieldWall?.(shieldX, shieldY, angle, Math.max(54, radius * 0.58), "#ffd166", alpha * 0.78, effect.y + 104, progress > 0.62);
+              }
+            } else if (blink) {
+              this.fx("fx-frost-shards", effect.x, effect.y, 0.5, 0.5, "#93c5fd", alpha * 0.68, effect.y + 88, angle, "add");
+            } else if (style.includes("warrior_dash") && this.drawGfxDashDust) {
+              this.drawGfxDashDust(line.fromX, line.fromY, line.toX, line.toY, Math.max(30, Math.min(74, radius * 0.34)), angle, "#caa35a", alpha * 0.68, effect.y + 86, progress, {});
+            } else if (shadow) {
+              this.fx("fx-smoke", effect.x, effect.y, Math.max(0.54, radius / 95), 0.46, "#21142f", alpha * 0.46, effect.y + 82, angle, "add");
+              this.fx("fx-shadow-cut", line.toX, line.toY, 0.82, 0.56, "#c4b5fd", alpha * 0.68, effect.y + 92, angle, "add");
+            } else if (martial) {
+              this.fx("fx-impact-star", line.toX, line.toY, 0.68, 0.68, "#fde68a", alpha * 0.52, effect.y + 92, progress, "add");
+            } else {
+              this.drawGfxSparkSpray?.(line.toX, line.toY, radius * 0.34, color, alpha * 0.22, effect.y + 92, 7, progress * 4, angle, Math.PI * 0.8);
+            }
             if (charge) this.fx("fx-impact-star", effect.x + Math.cos(angle) * radius * 0.45, effect.y + Math.sin(angle) * radius * 0.45, 0.72, 0.72, "#facc15", alpha * 0.52, effect.y + 98, progress, "add");
           }
         } else if (effect.kind === "meteor") {
-          const fall = Math.min(1, progress * 1.35);
-          const meteor = this.fx("fx-fire-bloom", effect.x - radius * 0.75 * (1 - fall), effect.y - radius * 1.85 * (1 - fall), 0.48 + fall * 0.42, 0.48 + fall * 0.42, "#f97316", alpha * 0.9, effect.y + 104, 0.78, "add");
-          this.fx("beam", effect.x - radius * 0.38 * (1 - fall), effect.y - radius * 0.94 * (1 - fall), radius / 18, 1.2, "#f97316", alpha * 0.22, effect.y + 98, 0.78, "add");
-          if (progress > 0.42) {
-            this.fx("fx-fire-bloom", effect.x, effect.y, radius / 82 + progress * 0.34, radius / 82 + progress * 0.34, "#f97316", alpha * 0.62, effect.y + 100, progress * 1.4, "add");
-            this.ring(effect.x, effect.y, radius * (0.35 + progress * 0.7), "#f97316", alpha * 0.2, 5);
+          const fallEnd = 0.72;
+          const fallT = Math.max(0, Math.min(1, progress / fallEnd));
+          const fall = fallT * fallT * (3 - fallT * 2);
+          const impact = Math.max(0, Math.min(1, (progress - fallEnd) / (1 - fallEnd)));
+          const startX = effect.x - radius * 0.84;
+          const startY = effect.y - radius * 3.2;
+          const x = startX + (effect.x - startX) * fall;
+          const y = startY + (effect.y - startY) * fall;
+          this.drawGfxLine(startX, startY, x, y, 18, "#f97316", alpha * 0.16, effect.y + 98, "add");
+          this.drawGfxLine(startX + 16, startY - 8, x + 8, y - 4, 6, "#fde68a", alpha * 0.16, effect.y + 99, "add");
+          if (impact > 0) {
+            this.fx("fx-fire-bloom", effect.x, effect.y, radius / 82 + impact * 0.34, radius / 82 + impact * 0.34, "#f97316", alpha * 0.62, effect.y + 100, progress * 1.4, "add");
+            this.ring(effect.x, effect.y, radius * (0.35 + impact * 0.7), "#f97316", alpha * 0.2, 5);
           }
-          meteor.alpha *= 0.94;
         } else if (effect.kind === "freeze" || effect.kind === "slow") {
           const snap = progress < 0.32 ? 1 + progress * 0.4 : 1.12 - (progress - 0.32) * 0.3;
           this.fx("fx-frost-shards", effect.x, effect.y, radius / 88 * snap, radius / 88 * snap, "#dbeafe", alpha * 0.8, effect.y + 92, progress * 0.4, "add");
           this.ring(effect.x, effect.y, radius * (0.82 + progress * 0.12), "#93c5fd", alpha * 0.28, 3);
         } else if (effect.kind === "warning") {
           const danger = style.includes("sniper") || style.includes("lock") ? "#ef4444" : color || "#ef4444";
+          if (style.includes("arrow_rain") || style.includes("sniper_lock") || style.includes("charge_predict") || style.includes("spit_cast")) {
+            continue;
+          }
           this.fx("fx-warning-target", effect.x, effect.y, radius / 48, radius / 48, danger, 0.2 + alpha * 0.34, effect.y + 50, progress * 0.18, "add");
           if (style.includes("boss") || style.includes("bomber") || radius > 90) {
             this.ring(effect.x, effect.y, radius * (0.98 - progress * 0.05), danger, 0.16 + alpha * 0.18, 4);
@@ -2251,7 +2534,7 @@
           this.fx(heal ? "fx-heal-cross" : "fx-shield-hex", effect.x, effect.y, radius / 76 + progress * 0.16, radius / 76 + progress * 0.16, heal ? "#bbf7d0" : color, alpha * (heal ? 0.5 : 0.56), effect.y + 82, heal ? progress * 0.65 : progress * 0.18, "add");
           this.ring(effect.x, effect.y, radius * (0.62 + progress * 0.28), heal ? "#86efac" : color, alpha * 0.22, heal ? 2 : 4);
         } else if (effect.kind === "poison") {
-          this.fx("fx-poison-cloud", effect.x, effect.y, radius / 76, radius / 90, "#bef264", alpha * 0.46, effect.y + 80, progress * 0.22, "add");
+          this.fx("fx-poison-cloud", effect.x, effect.y, radius / 76, radius / 90, color, alpha * 0.46, effect.y + 80, progress * 0.22, "add");
         } else if (effect.kind === "trap") {
           this.fx("fx-warning-target", effect.x, effect.y, radius / 62, radius / 62, color, alpha * 0.42, effect.y + 76, progress * 0.8, "add");
         } else if (effect.kind === "arcane" || effect.kind === "star" || effect.kind === "level" || effect.kind === "chest") {
@@ -2297,7 +2580,112 @@
       }
     }
 
-    renderStyledSkillEffect(effect, progress, alpha, radius, color, style) {
+    renderEngineerLaserModuleEffect(effect, progress, alpha, radius, color, style) {
+      const s = String(style || "").toLowerCase();
+      const beam = s === "engineer_laser_module_beam" || s === "engineer_mecha_giant_laser";
+      const core = s === "engineer_laser_module_core" || s === "engineer_mecha_laser_core";
+      const charge = s === "engineer_laser_module_charge" || s === "engineer_mecha_laser_charge";
+      if (!beam && !core && !charge) return false;
+
+      const tint = effect.color || color || "#c084fc";
+      const t = Math.max(0, Math.min(1, progress));
+      const peak = Math.sin(t * Math.PI);
+
+      if (charge) {
+        const step = Math.max(1, Math.floor(Number(effect.chargeStep || 1)));
+        const max = Math.max(1, Math.floor(Number(effect.chargeMax || 4)));
+        const chargeRatio = Math.max(0.12, Math.min(1, step / max));
+        const release = Boolean(effect.release);
+        const gather = 1 - Math.pow(1 - t, 2.65);
+        const baseRadius = Math.max(46, Number(effect.radius || radius || 64));
+        const coreRadius = baseRadius * (0.22 + chargeRatio * 0.14 + peak * 0.04);
+        const orbitRadius = baseRadius * (0.76 + chargeRatio * 0.42);
+        const z = effect.y + 128;
+        const hot = release ? "#f5d0fe" : "#67e8f9";
+        const activeAlpha = alpha * (0.78 + chargeRatio * 0.24);
+        const spin = t * Math.PI * (release ? 2.9 : 1.65) + step * 0.72;
+
+        this.drawGfxCircle(effect.x, effect.y, orbitRadius * (0.56 + peak * 0.12), "#170728", activeAlpha * 0.1, tint, activeAlpha * (0.16 + chargeRatio * 0.18), 2.2 + chargeRatio * 2, z - 10, "add", 40);
+        this.drawGfxRuneRing?.(effect.x, effect.y, orbitRadius * (0.52 + chargeRatio * 0.14), tint, activeAlpha * (0.18 + chargeRatio * 0.16), z - 4, -spin, max);
+        this.drawGfxCircle(effect.x, effect.y, coreRadius * 1.6, tint, activeAlpha * (0.12 + chargeRatio * 0.1), hot, activeAlpha * (0.24 + chargeRatio * 0.3), 2.4, z + 5, "add", 22);
+        this.drawGfxCircle(effect.x, effect.y, coreRadius * (0.72 + peak * 0.18), hot, activeAlpha * (0.28 + chargeRatio * 0.22), "#ffffff", activeAlpha * (0.3 + chargeRatio * 0.34), 1.8, z + 10, "add", 16);
+
+        const moteCount = release ? 12 : 8;
+        for (let i = 0; i < moteCount; i += 1) {
+          const seed = this.noise?.(effect.id || 1, i * 31 + step * 7) || Math.sin(i * 12.989 + step);
+          const a = spin + (Math.PI * 2 * i) / moteCount + seed * 0.34;
+          const startR = orbitRadius * (0.92 + (i % 3) * 0.12);
+          const endR = coreRadius * (0.45 + (i % 2) * 0.16);
+          const r = startR + (endR - startR) * gather;
+          const tailR = Math.min(startR, r + 22 * (1 - gather + chargeRatio * 0.22));
+          const sx = effect.x + Math.cos(a) * tailR;
+          const sy = effect.y + Math.sin(a) * tailR * 0.82;
+          const tx = effect.x + Math.cos(a) * r;
+          const ty = effect.y + Math.sin(a) * r * 0.82;
+          const moteAlpha = activeAlpha * (0.2 + chargeRatio * 0.18) * (release ? 1.12 : 1);
+          this.drawGfxLine(sx, sy, tx, ty, release ? 4.2 : 3.2, i % 2 ? hot : tint, moteAlpha, z + 14 + i, "add");
+          this.drawGfxDiamond?.(tx, ty, 3.5 + chargeRatio * 2.2, i % 2 ? hot : tint, moteAlpha * 0.9, z + 26 + i, -a, "#ffffff");
+        }
+
+        for (let i = 0; i < max; i += 1) {
+          const lit = i < step;
+          const a = -Math.PI * 0.5 + (i - (max - 1) / 2) * 0.34;
+          const px = effect.x + Math.cos(a) * orbitRadius * 0.38;
+          const py = effect.y + Math.sin(a) * orbitRadius * 0.32 - 4;
+          this.drawGfxCircle(px, py, lit ? 4.8 + peak * 1.2 : 3.4, lit ? hot : "#26132f", lit ? activeAlpha * 0.46 : activeAlpha * 0.08, lit ? "#ffffff" : tint, lit ? activeAlpha * 0.58 : activeAlpha * 0.18, 1.2, z + 38 + i, "add", 8);
+        }
+
+        if (release) {
+          this.drawGfxImpactBurst?.(effect.x, effect.y, orbitRadius * (0.58 + peak * 0.2), tint, activeAlpha * 0.5, z + 45, progress * 3.2, 14);
+          this.drawGfxCircle(effect.x, effect.y, orbitRadius * (0.84 + t * 0.28), "#ffffff", activeAlpha * 0.04, hot, activeAlpha * Math.max(0, 0.42 - t * 0.18), 5, z + 44, "add", 54);
+        }
+        return true;
+      }
+
+      if (core) {
+        const coreRadius = Math.max(54, Number(effect.radius || radius || 88) * 0.58);
+        const z = effect.y + 126;
+        this.drawGfxCircle(effect.x, effect.y, coreRadius * (0.72 + peak * 0.18), "#170728", alpha * 0.22, tint, alpha * 0.58, 4, z - 6, "add", 32);
+        this.drawGfxCircle(effect.x, effect.y, coreRadius * (0.28 + peak * 0.1), tint, alpha * 0.36, "#f5d0fe", alpha * 0.72, 3, z + 5, "add", 18);
+        this.drawGfxImpactBurst?.(effect.x, effect.y, coreRadius * (0.84 + peak * 0.2), tint, alpha * 0.36, z + 12, progress * 2.8, 10);
+        return true;
+      }
+
+      const angle = Number(effect.angle || 0);
+      const end = this.effectEndpoints(effect, radius, angle);
+      if (!end) return false;
+      const dx = end.toX - end.fromX;
+      const dy = end.toY - end.fromY;
+      const length = Math.hypot(dx, dy);
+      if (length < 8) return false;
+      const ux = dx / length;
+      const uy = dy / length;
+      const px = -uy;
+      const py = ux;
+      const width = Math.max(78, Number(effect.width || radius * 0.18 || 88));
+      const activeAlpha = alpha * (0.92 + peak * 0.08);
+      const z = Math.max(end.fromY, end.toY) + 132;
+
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, width * 1.52, "#170728", activeAlpha * 0.3, z - 18, "add");
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, width * 1.08, tint, activeAlpha * 0.82, z - 10, "add");
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(18, width * 0.32), "#f5d0fe", activeAlpha * 0.95, z, "add");
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(5, width * 0.08), "#ffffff", activeAlpha * 0.88, z + 4, "add");
+
+      for (let i = 1; i <= 5; i += 1) {
+        const along = length * (i / 6);
+        const cx = end.fromX + ux * along;
+        const cy = end.fromY + uy * along;
+        const nick = width * (0.2 + (i % 2) * 0.08 + peak * 0.03);
+        this.drawGfxLine(cx - px * nick, cy - py * nick, cx + px * nick, cy + py * nick, i % 2 ? 5 : 7, i % 2 ? "#f5d0fe" : tint, activeAlpha * 0.34, z + 8 + i, "add");
+      }
+
+      this.drawGfxCircle?.(end.fromX, end.fromY, width * (0.34 + peak * 0.08), tint, activeAlpha * 0.3, "#f5d0fe", activeAlpha * 0.48, 2, z + 10, "add", 16);
+      this.drawGfxImpactBurst?.(end.toX, end.toY, width * (0.82 + peak * 0.12), tint, activeAlpha * 0.3, z + 18, progress * 2.6, 9);
+      return true;
+    }
+
+    renderStyledSkillEffect(effect, progress, alpha, radius, color, style, options = {}) {
+      this.lastStyledSkillRenderer = "";
       const skillContext = pixiSkillEffects.createStyledSkillContext
         ? pixiSkillEffects.createStyledSkillContext(this, effect, progress, alpha, radius, color, style)
         : null;
@@ -2311,20 +2699,32 @@
       const end = skillContext ? skillContext.end : this.effectEndpoints(effect, radius, angle);
       const z = skillContext ? skillContext.z : effect.y + 108;
 
-      if (pixiSkillEffects.renderAssetStyledSkillEffect && pixiSkillEffects.renderAssetStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderSkillEffectPolishLayer) {
-        pixiSkillEffects.renderSkillEffectPolishLayer(this, skillContext);
+      const drewPolish = Boolean(pixiSkillEffects.renderSkillEffectPolishLayer && pixiSkillEffects.renderSkillEffectPolishLayer(this, skillContext));
+      if (this.renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z)) {
+        this.lastStyledSkillRenderer = "pixi-renderer:crisp-skill-fallback";
+        return true;
       }
-      if (this.renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z)) return true;
-      if (pixiSkillEffects.renderWarriorStyledSkillEffect && pixiSkillEffects.renderWarriorStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderRangerStyledSkillEffect && pixiSkillEffects.renderRangerStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderMageStyledSkillEffect && pixiSkillEffects.renderMageStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderEngineerStyledSkillEffect && pixiSkillEffects.renderEngineerStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderPuppetStyledSkillEffect && pixiSkillEffects.renderPuppetStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderMartialStyledSkillEffect && pixiSkillEffects.renderMartialStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderAlchemistStyledSkillEffect && pixiSkillEffects.renderAlchemistStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderAssassinStyledSkillEffect && pixiSkillEffects.renderAssassinStyledSkillEffect(this, skillContext)) return true;
-      if (pixiSkillEffects.renderCommonStyledEffect && pixiSkillEffects.renderCommonStyledEffect(this, skillContext)) return true;
+      const skillRoutes = [
+        ["pixi-skill-effects:warrior", pixiSkillEffects.renderWarriorStyledSkillEffect],
+        ["pixi-skill-effects:ranger", pixiSkillEffects.renderRangerStyledSkillEffect],
+        ["pixi-skill-effects:mage", pixiSkillEffects.renderMageStyledSkillEffect],
+        ["pixi-skill-effects:engineer", pixiSkillEffects.renderEngineerStyledSkillEffect],
+        ["pixi-skill-effects:puppet", pixiSkillEffects.renderPuppetStyledSkillEffect],
+        ["pixi-skill-effects:martial", pixiSkillEffects.renderMartialStyledSkillEffect],
+        ["pixi-skill-effects:alchemist", pixiSkillEffects.renderAlchemistStyledSkillEffect],
+        ["pixi-skill-effects:assassin", pixiSkillEffects.renderAssassinStyledSkillEffect],
+        ["pixi-skill-effects:common", pixiSkillEffects.renderCommonStyledEffect],
+      ];
+      for (const [label, route] of skillRoutes) {
+        if (route && route(this, skillContext)) {
+          this.lastStyledSkillRenderer = label;
+          return true;
+        }
+      }
+      if (drewPolish) {
+        this.lastStyledSkillRenderer = "pixi-skill-effects:polish";
+        return true;
+      }
 
       return false;
 
@@ -2342,6 +2742,52 @@
       this.rect(this.screenLayers.vignette, viewW / 2, 0, viewW, 120, "#000000", 0.18);
       if (hitTime > 0) {
         this.rect(this.screenLayers.flash, viewW / 2, viewH / 2, viewW, viewH, "#ef4444", Math.min(0.22, hitTime * 0.35));
+      }
+      this.renderEffectDebugOverlay(viewW);
+    }
+
+    renderDebugEnabled() {
+      try {
+        const params = new URLSearchParams(window.location.search || "");
+        return params.get("debugRender") === "1" || window.localStorage?.getItem("debugRender") === "1" || window.__rogueRenderDebug === true;
+      } catch {
+        return window.__rogueRenderDebug === true;
+      }
+    }
+
+    noteEffectRenderer(source, effect, style) {
+      const label = String(source || "unknown");
+      const entry = {
+        source: label,
+        style: String(style || effect?.style || effect?.kind || ""),
+        kind: String(effect?.kind || ""),
+        age: Number(effect?.age || 0),
+      };
+      this.diagnostics.lastEffectRenderer = entry;
+      this.effectRenderTrace.push(entry);
+      if (this.effectRenderTrace.length > 10) this.effectRenderTrace.shift();
+      this.diagnostics.effectRenderTrace = this.effectRenderTrace.slice(-10);
+    }
+
+    renderEffectDebugOverlay(viewW) {
+      if (!this.renderDebugEnabled() || !this.effectRenderTrace.length || !this.screenLayers.debug) return;
+      const lines = this.effectRenderTrace.slice(-7).reverse();
+      const width = 390;
+      const rowHeight = 18;
+      const x = viewW - width - 14;
+      const y = 16;
+      this.rect(this.screenLayers.debug, x + width / 2, y + 14 + (lines.length * rowHeight) / 2, width, 34 + lines.length * rowHeight, "#020617", 0.72).zIndex = 10000;
+      const titleStyle = { fontFamily: "Consolas, monospace", fontSize: 12, fill: "#f8fafc" };
+      const title = this.textPool.next(this.screenLayers.debug, titleStyle);
+      title.text = "effect renderer trace";
+      title.position.set(x + 10, y + 8);
+      title.zIndex = 10001;
+      for (let i = 0; i < lines.length; i += 1) {
+        const line = lines[i];
+        const text = this.textPool.next(this.screenLayers.debug, { fontFamily: "Consolas, monospace", fontSize: 11, fill: i === 0 ? "#facc15" : "#bfdbfe" });
+        text.text = `${line.source} | ${line.style || line.kind}`;
+        text.position.set(x + 10, y + 26 + i * rowHeight);
+        text.zIndex = 10002 + i;
       }
     }
 
@@ -2631,6 +3077,17 @@
     }
 
     fx(key, x, y, scaleX = 1, scaleY = scaleX, tint = "#ffffff", alpha = 1, zIndex = y + 80, rotation = 0, blendMode = "normal") {
+      if (key === "fx-lightning" && this.drawGfxLightning && Number.isFinite(x) && Number.isFinite(y) && alpha > 0) {
+        const length = Math.max(20, Math.abs(scaleX) * 112);
+        const width = Math.max(2.4, Math.abs(scaleY) * 18);
+        const fromX = x - Math.cos(rotation) * length * 0.5;
+        const fromY = y - Math.sin(rotation) * length * 0.5;
+        const toX = x + Math.cos(rotation) * length * 0.5;
+        const toY = y + Math.sin(rotation) * length * 0.5;
+        const phase = Date.now() / 130 + x * 0.013 + y * 0.017;
+        this.drawGfxLightning(fromX, fromY, toX, toY, tint, alpha, zIndex, width, Math.max(4, Math.min(9, Math.ceil(length / 32))), Math.max(7, width * 1.7), phase);
+        return { alpha, rotation, zIndex, blendMode };
+      }
       const sprite = this.sprite(key, this.layers.effect, x, y, scaleX, scaleY, tint, alpha);
       sprite.rotation = rotation;
       sprite.zIndex = zIndex;
@@ -2792,7 +3249,8 @@
         { x: baseX + px * baseWidth, y: baseY + py * baseWidth }
       ];
       this.drawGfxPath(outline, "#2b170e", alpha * 0.66, "#2b170e", alpha * 0.82, 3, zIndex, "normal");
-      this.drawGfxPath(blade, "#f8f3e9", alpha * 0.96, tint, alpha * 0.72, heavy ? 4 : 3, zIndex + 2, "add");
+      this.drawGfxPath
+      (blade, "#f8f3e9", alpha * 0.96, tint, alpha * 0.72, heavy ? 4 : 3, zIndex + 2, "add");
       this.drawGfxLine(baseX + px * 2, baseY + py * 2, tipX + ux * 3 + px * 2, tipY + uy * 3 + py * 2, heavy ? 5 : 4, "#fff7ed", alpha * 0.54, zIndex + 3, "add");
       this.drawGfxLine(baseX - px * 5, baseY - py * 5, midX - px * 7, midY - py * 7, heavy ? 4 : 3, tint, alpha * 0.42, zIndex + 4, "add");
       this.drawGfxLine(originX - px * guard, originY - py * guard, originX + px * guard, originY + py * guard, heavy ? 9 : 7, "#6b3425", alpha * 0.96, zIndex + 5, "normal");
@@ -2829,6 +3287,134 @@
       }
     }
 
+    drawGfxFrontShield(x, y, angle, size, color, alpha, zIndex, phase = 0) {
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const px = -uy;
+      const py = ux;
+      const rim = color || "#facc15";
+      const metal = "#fff7ed";
+      const gold = "#fde047";
+      const front = size * 0.34;
+      const shoulder = size * 0.1;
+      const rear = size * 0.24;
+      const half = size * 0.54;
+      const outer = [
+        { x: x + ux * front, y: y + uy * front },
+        { x: x + ux * shoulder + px * half * 0.56, y: y + uy * shoulder + py * half * 0.56 },
+        { x: x - ux * rear * 0.42 + px * half, y: y - uy * rear * 0.42 + py * half },
+        { x: x - ux * rear * 1.1 + px * half * 0.66, y: y - uy * rear * 1.1 + py * half * 0.66 },
+        { x: x - ux * rear * 1.22, y: y - uy * rear * 1.22 },
+        { x: x - ux * rear * 1.1 - px * half * 0.66, y: y - uy * rear * 1.1 - py * half * 0.66 },
+        { x: x - ux * rear * 0.42 - px * half, y: y - uy * rear * 0.42 - py * half },
+        { x: x + ux * shoulder - px * half * 0.56, y: y + uy * shoulder - py * half * 0.56 }
+      ];
+      const glow = outer.map((point) => ({
+        x: x + (point.x - x) * 1.12,
+        y: y + (point.y - y) * 1.12
+      }));
+      const plate = outer.map((point) => ({
+        x: x + (point.x - x) * 0.76 + ux * size * 0.015,
+        y: y + (point.y - y) * 0.76 + uy * size * 0.015
+      }));
+      const core = outer.map((point) => ({
+        x: x + (point.x - x) * 0.44 + ux * size * 0.055,
+        y: y + (point.y - y) * 0.44 + uy * size * 0.055
+      }));
+      this.drawGfxPath(glow, rim, alpha * 0.14, gold, alpha * 0.18, 7, zIndex - 3, "add");
+      this.drawGfxPath(outer, "#1f140f", alpha * 0.95, "#4a280b", alpha * 0.9, 6, zIndex, "normal");
+      this.drawGfxPath(plate, "#facc15", alpha * 0.64, rim, alpha * 0.84, 4, zIndex + 2, "add");
+      this.drawGfxPath(core, metal, alpha * 0.28, metal, alpha * 0.36, 2, zIndex + 3, "add");
+      this.drawGfxLine(x - ux * rear * 0.92, y - uy * rear * 0.92, x + ux * front * 0.78, y + uy * front * 0.78, 7, metal, alpha * 0.48, zIndex + 5, "add");
+      this.drawGfxLine(x - ux * rear * 0.24 - px * half * 0.72, y - uy * rear * 0.24 - py * half * 0.72, x - ux * rear * 0.24 + px * half * 0.72, y - uy * rear * 0.24 + py * half * 0.72, 6, gold, alpha * 0.58, zIndex + 6, "add");
+      this.drawGfxLine(x - ux * rear * 0.2 - px * half * 0.62, y - uy * rear * 0.2 - py * half * 0.62, x + ux * shoulder * 0.92 - px * half * 0.22, y + uy * shoulder * 0.92 - py * half * 0.22, 4, "#fff7ed", alpha * 0.3, zIndex + 7, "add");
+      this.drawGfxLine(x - ux * rear * 0.2 + px * half * 0.62, y - uy * rear * 0.2 + py * half * 0.62, x + ux * shoulder * 0.92 + px * half * 0.22, y + uy * shoulder * 0.92 + py * half * 0.22, 4, "#fff7ed", alpha * 0.3, zIndex + 7, "add");
+      this.drawGfxDiamond(x + ux * size * 0.02, y + uy * size * 0.02, size * 0.1, gold, alpha * 0.62, zIndex + 9, angle, "#fff7ed");
+      this.drawGfxSparkSpray(
+        x + ux * front * 1.02,
+        y + uy * front * 1.02,
+        size * 0.32,
+        gold,
+        alpha * 0.2,
+        zIndex + 10,
+        7,
+        phase * 3,
+        angle,
+        Math.PI * 0.58
+      );
+    }
+
+    drawGfxDashDust(fromX, fromY, toX, toY, width, angle, color, alpha, zIndex, phase = 0, options = {}) {
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const px = -uy;
+      const py = ux;
+      const rawLength = Math.hypot(toX - fromX, toY - fromY);
+      if (rawLength < 3) return;
+      const length = Math.min(rawLength, width * (options.long ? 3.35 : 2.35));
+      const shadow = !!options.shadow;
+      const charge = !!options.charge;
+      const hot = !!options.hot;
+      const dust = shadow ? "#4f3f61" : hot ? "#7c2d12" : "#caa35a";
+      const rim = color || (shadow ? "#8a6f9e" : hot ? "#f97316" : "#d97706");
+      const light = shadow ? "#c4b5fd" : hot ? "#fed7aa" : "#fde68a";
+      const dark = shadow ? "#21142f" : hot ? "#450a0a" : "#6b3425";
+      const plumes = charge ? [-1, 1] : [-1, 0, 1];
+      for (let p = 0; p < plumes.length; p += 1) {
+        const sign = plumes[p];
+        const centerLane = sign === 0;
+        const outer = [];
+        const inner = [];
+        const steps = centerLane ? 4 : 6;
+        for (let i = 0; i <= steps; i += 1) {
+          const t = i / steps;
+          const ripple = Math.sin(phase * 9 + i * 1.73 + sign * 2.1) * width * 0.08;
+          const along = width * 0.16 + length * t;
+          const flare = centerLane
+            ? width * (0.12 + t * 0.12 + (i % 2) * 0.03)
+            : width * (0.22 + t * 0.44 + (i % 2 ? 0.12 : -0.04));
+          const cx = toX - ux * along;
+          const cy = toY - uy * along;
+          outer.push({
+            x: cx + px * sign * (flare + ripple),
+            y: cy + py * sign * (flare + ripple)
+          });
+        }
+        for (let i = steps; i >= 0; i -= 1) {
+          const t = i / steps;
+          const along = width * 0.1 + length * t;
+          const flare = centerLane ? width * (0.02 + t * 0.04) : width * (0.06 + t * 0.12);
+          const cx = toX - ux * along;
+          const cy = toY - uy * along;
+          inner.push({
+            x: cx + px * sign * flare,
+            y: cy + py * sign * flare
+          });
+        }
+        const fillAlpha = alpha * (centerLane ? 0.08 : charge ? 0.18 : 0.13);
+        const strokeAlpha = alpha * (centerLane ? 0.09 : charge ? 0.22 : 0.16);
+        this.drawGfxPath([...outer, ...inner], centerLane ? dark : dust, fillAlpha, centerLane ? rim : light, strokeAlpha, centerLane ? 1 : 2, zIndex + p, "add");
+      }
+      const particles = charge ? 18 : 12;
+      for (let i = 0; i < particles; i += 1) {
+        const seed = (i * 0.618 + phase * 0.21) % 1;
+        const t = 0.1 + seed * 0.9;
+        const sideWave = Math.sin(i * 2.37 + phase * 7) * width * (0.18 + t * 0.48);
+        const x = toX - ux * length * t + px * sideWave;
+        const y = toY - uy * length * t + py * sideWave;
+        const size = Math.max(3, width * (0.035 + (i % 4) * 0.01) * (1 - t * 0.35));
+        const a = alpha * (0.18 + (i % 3) * 0.035) * (1 - t * 0.36);
+        if (i % 3 === 0) {
+          this.drawGfxCircle(x, y, size * 1.4, dark, a * 0.52, light, a * 0.3, 1, zIndex + 14 + i, "add", 7);
+        } else {
+          this.drawGfxDiamond(x, y, size, i % 2 ? dust : light, a, zIndex + 14 + i, angle + phase + i * 0.3, dark);
+        }
+      }
+      if (charge) {
+        this.drawGfxSparkSpray(toX - ux * width * 0.3, toY - uy * width * 0.3, width * 0.48, light, alpha * 0.16, zIndex + 36, 9, phase * 3, angle + Math.PI, Math.PI * 0.72);
+      }
+    }
+
     drawGfxShieldWake(fromX, fromY, toX, toY, width, angle, color, alpha, zIndex, phase = 0) {
       const ux = Math.cos(angle);
       const uy = Math.sin(angle);
@@ -2836,34 +3422,29 @@
       const py = ux;
       const rawLength = Math.hypot(toX - fromX, toY - fromY);
       if (rawLength < 3) return;
-      const length = Math.min(rawLength, width * 2.25);
-      const baseX = toX - ux * length;
-      const baseY = toY - uy * length;
-      const lane = [
-        { x: baseX - px * width * 0.44, y: baseY - py * width * 0.44 },
-        { x: toX - ux * width * 0.2 - px * width * 0.28, y: toY - uy * width * 0.2 - py * width * 0.28 },
-        { x: toX - ux * width * 0.34 + px * width * 0.28, y: toY - uy * width * 0.34 + py * width * 0.28 },
-        { x: baseX + px * width * 0.44, y: baseY + py * width * 0.44 }
-      ];
-      this.drawGfxPath(lane, "#6b3425", alpha * 0.12, color, alpha * 0.12, 2, zIndex - 2, "add");
-      const stripes = 7;
-      for (let i = 0; i < stripes; i += 1) {
-        const side = (i - (stripes - 1) / 2) * width * 0.18;
-        const laneAlpha = alpha * (0.22 - Math.abs(i - (stripes - 1) / 2) * 0.018);
-        const start = Math.max(0, 0.34 + i * 0.018);
-        const end = 0.9 - (i % 2) * 0.05;
-        const sx = baseX + ux * length * start + px * side;
-        const sy = baseY + uy * length * start + py * side;
-        const ex = baseX + ux * length * end + px * side;
-        const ey = baseY + uy * length * end + py * side;
-        this.drawGfxLine(sx, sy, ex, ey, i === 3 ? 7 : 3.5, i % 2 ? "#fde68a" : color, laneAlpha, zIndex + i, "add");
-      }
-      for (let i = 0; i < 5; i += 1) {
-        const t = 0.42 + i * 0.1;
-        const side = Math.sin(phase * 8 + i) * width * 0.22;
-        const x = baseX + ux * length * t + px * side;
-        const y = baseY + uy * length * t + py * side;
-        this.drawGfxDiamond(x, y, 3 + (i % 2), i % 2 ? "#6b3425" : "#fde68a", alpha * 0.14, zIndex + 10 + i, angle + phase);
+      const length = Math.min(rawLength, width * 3.25);
+      this.drawGfxDashDust(fromX, fromY, toX, toY, width * 1.04, angle, color || "#f97316", alpha * 1.15, zIndex, phase, { charge: true, long: true, hot: true });
+      for (let side = -1; side <= 1; side += 2) {
+        const shard = [];
+        const steps = 5;
+        for (let i = 0; i <= steps; i += 1) {
+          const t = i / steps;
+          const jag = Math.sin(phase * 10 + i * 1.9 + side) * width * 0.1;
+          const sideWidth = width * (0.34 + t * 0.58 + (i % 2 ? 0.12 : -0.08));
+          shard.push({
+            x: toX - ux * (width * 0.28 + length * t) + px * side * (sideWidth + jag),
+            y: toY - uy * (width * 0.28 + length * t) + py * side * (sideWidth + jag)
+          });
+        }
+        shard.push({
+          x: toX - ux * length * 0.46 + px * side * width * 0.16,
+          y: toY - uy * length * 0.46 + py * side * width * 0.16
+        });
+        shard.push({
+          x: toX - ux * width * 0.18 + px * side * width * 0.12,
+          y: toY - uy * width * 0.18 + py * side * width * 0.12
+        });
+        this.drawGfxPath(shard, "#6b3425", alpha * 0.1, color || "#f97316", alpha * 0.2, 2, zIndex + 30 + side, "add");
       }
     }
 
@@ -3027,24 +3608,94 @@
       const path = pixiPrimitives.lightningPoints
         ? pixiPrimitives.lightningPoints(fromX, fromY, toX, toY, segments, jitter, phase)
         : null;
-      if (!path) return;
+      if (!path || !Number.isFinite(alpha) || alpha <= 0) return;
       const points = path.points;
-      for (let i = 0; i < points.length - 1; i += 1) {
-        this.drawGfxLine(points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, width, color, alpha, zIndex + i, "add");
-      }
-      for (let i = 1; i < points.length - 1; i += 2) {
-        this.drawGfxLine(
-          points[i].x,
-          points[i].y,
-          points[i].x + path.px * path.jitter * 0.7 + path.ux * path.jitter * 0.9,
-          points[i].y + path.py * path.jitter * 0.7 + path.uy * path.jitter * 0.9,
-          Math.max(2, width * 0.42),
-          "#dbeafe",
-          alpha * 0.48,
-          zIndex + i + 1,
+      const mainWidth = Math.max(1.5, Number(width) || 1.5);
+      const coreWidth = Math.max(1.4, mainWidth * 0.34);
+      const coreColor = "#f8fafc";
+      const ribbon = (source, spread, wobble = 0.34) => {
+        const left = [];
+        const right = [];
+        for (let i = 0; i < source.length; i += 1) {
+          const prev = source[Math.max(0, i - 1)];
+          const next = source[Math.min(source.length - 1, i + 1)];
+          const dx = next.x - prev.x;
+          const dy = next.y - prev.y;
+          const len = Math.hypot(dx, dy) || 1;
+          const px = -dy / len;
+          const py = dx / len;
+          const taper = i === 0 || i === source.length - 1 ? 0.48 : 1;
+          const jag = 1 + ((i % 2 ? 1 : -1) * wobble + Math.sin((Number(phase) || 0) * 3.1 + i * 2.17) * wobble * 0.28);
+          const w = Math.max(0.9, spread * taper * jag);
+          left.push({ x: source[i].x + px * w, y: source[i].y + py * w });
+          right.unshift({ x: source[i].x - px * w * 0.82, y: source[i].y - py * w * 0.82 });
+        }
+        return [...left, ...right];
+      };
+      const branchRibbon = (start, end, spread, z, branchAlpha) => {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const px = -uy;
+        const py = ux;
+        const mid = {
+          x: start.x + dx * 0.56 + px * Math.sin((Number(phase) || 0) * 5.7 + len) * spread * 0.8,
+          y: start.y + dy * 0.56 + py * Math.sin((Number(phase) || 0) * 5.7 + len) * spread * 0.8
+        };
+        this.drawGfxPath(
+          [
+            { x: start.x + px * spread, y: start.y + py * spread },
+            { x: mid.x + px * spread * 0.48, y: mid.y + py * spread * 0.48 },
+            { x: end.x + ux * spread * 0.8, y: end.y + uy * spread * 0.8 },
+            { x: mid.x - px * spread * 0.34, y: mid.y - py * spread * 0.34 },
+            { x: start.x - px * spread * 0.72, y: start.y - py * spread * 0.72 }
+          ],
+          color,
+          branchAlpha,
+          coreColor,
+          branchAlpha * 0.62,
+          Math.max(0.8, spread * 0.16),
+          z,
           "add"
         );
+        this.drawGfxLine(start.x, start.y, end.x, end.y, Math.max(1.2, spread * 0.24), coreColor, branchAlpha * 0.7, z + 1, "add");
+      };
+      this.drawGfxPath(ribbon(points, mainWidth * 2.65, 0.2), "#061226", alpha * 0.16, color, alpha * 0.18, 1.6, zIndex - 5, "add");
+      this.drawGfxPath(ribbon(points, mainWidth * 1.36, 0.4), color, alpha * 0.62, color, alpha * 0.34, 1.2, zIndex, "add");
+      this.drawGfxPath(ribbon(points, Math.max(1.7, coreWidth * 1.45), 0.2), coreColor, alpha * 0.78, "#ffffff", alpha * 0.32, 0.8, zIndex + 3, "add");
+      for (let i = 1; i < points.length - 1; i += 1) {
+        if (i % 3 === 0) {
+          const nick = Math.max(4, mainWidth * 0.7);
+          const side = i % 2 ? 1 : -1;
+          this.drawGfxPath(
+            [
+              { x: points[i].x + path.px * side * nick * 0.2, y: points[i].y + path.py * side * nick * 0.2 },
+              { x: points[i].x + path.px * side * nick * 1.8 - path.ux * nick * 0.35, y: points[i].y + path.py * side * nick * 1.8 - path.uy * nick * 0.35 },
+              { x: points[i].x + path.ux * nick * 0.85, y: points[i].y + path.uy * nick * 0.85 }
+            ],
+            coreColor,
+            alpha * 0.34,
+            color,
+            alpha * 0.22,
+            0.8,
+            zIndex + 6 + i,
+            "add"
+          );
+        }
+        const forkSeed = Math.sin((Number(phase) || 0) * 13.7 + i * 4.31 + path.jitter * 0.21);
+        const forkSide = (i % 4 === 1 ? 1 : -1) * (forkSeed >= 0 ? 1 : -1);
+        const forkLength = path.jitter * (0.85 + Math.abs(forkSeed) * 0.78) + mainWidth * 2.1;
+        const forkBack = path.jitter * (0.22 + Math.abs(Math.sin(i * 2.9)) * 0.22);
+        const end = {
+          x: points[i].x + path.px * forkSide * forkLength + path.ux * forkBack,
+          y: points[i].y + path.py * forkSide * forkLength + path.uy * forkBack
+        };
+        const branchWidth = Math.max(1.4, mainWidth * 0.42);
+        branchRibbon(points[i], end, branchWidth + 1.8, zIndex + 8 + i, alpha * 0.22);
       }
+      this.drawGfxCircle(toX, toY, mainWidth * 1.45, color, alpha * 0.16, coreColor, alpha * 0.38, Math.max(1.5, coreWidth), zIndex + points.length + 1, "add", 12);
     }
 
     drawGfxStar(x, y, radius, color, alpha, zIndex, points = 8) {
@@ -3178,6 +3829,403 @@
       return this.particleEngine.renderPreset(this, preset, options);
     }
 
+    warriorSkillPalette(color) {
+      return {
+        tint: color || "#f97316",
+        edge: "#fde68a",
+        blade: "#fff7ed",
+        steel: "#f8f3e9",
+        dark: "#3f2416",
+        shadow: "#160b07",
+        warn: "#ef4444"
+      };
+    }
+
+    renderUnifiedWarriorSkillEffect(effect, progress, alpha, radius, color, style) {
+      const s = String(style || effect.style || "").toLowerCase();
+      const kind = String(effect.kind || "").toLowerCase();
+      if (!s && kind !== "spin") return false;
+      if (kind === "impact" && (
+        s.includes("shield_slam") ||
+        s.includes("cleave_impact") ||
+        s.includes("cleave_followup") ||
+        s.includes("cleave_execute") ||
+        s.includes("blade_impact") ||
+        s.includes("spin_impact")
+      )) {
+        return this.renderWarriorImpactCleanEffect(effect, progress, alpha, radius, color, s);
+      }
+      if (s.includes("shield_charge")) return this.renderWarriorChargeCleanEffect(effect, progress, alpha, radius, color);
+      if (s === "taunt" || s.includes("taunt")) return this.renderWarriorTauntCleanEffect(effect, progress, alpha, radius, color);
+      if (s.includes("warrior_forward_whirlwind_launch")) {
+        return this.renderWarriorForwardWhirlwindLaunchEffect(effect, progress, alpha, radius, color);
+      }
+      if (s.includes("warrior_spin") || (kind === "spin" && s.includes("warrior"))) {
+        return this.renderWarriorSpinCleanEffect(effect, progress, alpha, radius, color);
+      }
+      if (s.includes("warrior_cleave_vertical")) {
+        this.renderWarriorVerticalCleaveEffect(effect, progress, alpha, color, radius);
+        return true;
+      }
+      if (s.includes("warrior_cleave")) {
+        this.renderWarriorConeEffect(effect, progress, alpha, color, true);
+        return true;
+      }
+      if (s.includes("warrior_basic") || (kind === "slash" && s.includes("warrior"))) {
+        return this.renderWarriorBasicSlashCleanEffect(effect, progress, alpha, radius, color);
+      }
+      return false;
+    }
+
+    renderWarriorBasicSlashCleanEffect(effect, progress, alpha, radius, color) {
+      const angle = Number(effect.angle || 0);
+      const side = Number(effect.swingSide || 1) >= 0 ? 1 : -1;
+      const reachFromRadius = Math.max(64, Number(effect.radius || radius || 84) / 1.18);
+      const reach = Math.max(74, Math.min(142, Number(effect.reach || reachFromRadius)));
+      const originX = Number.isFinite(effect.originX) ? effect.originX : effect.x - Math.cos(angle) * reach * 0.48;
+      const originY = Number.isFinite(effect.originY) ? effect.originY : effect.y - Math.sin(angle) * reach * 0.48;
+      if (!Number.isFinite(originX) || !Number.isFinite(originY)) return false;
+      const t = Math.max(0, Math.min(1, progress));
+      const active = Math.min(1, t / 0.74);
+      const ease = active * active * (3 - 2 * active);
+      const fade = Math.max(0, 1 - Math.max(0, t - 0.76) / 0.24);
+      const peak = Math.sin(t * Math.PI);
+      const palette = this.warriorSkillPalette(color);
+      const halfAngle = 0.76;
+      const startAngle = angle - halfAngle * side;
+      const endAngle = angle + halfAngle * side;
+      const bladeAngle = startAngle + (endAngle - startAngle) * ease;
+      const trailAngle = bladeAngle - halfAngle * 0.44 * side;
+      const z = originY + Math.sin(angle) * reach * 0.64 + 108;
+      const activeAlpha = alpha * fade;
+
+      this.drawGfxCleaveRibbon(originX, originY, reach * 0.42, reach * 0.86, trailAngle, bladeAngle, palette.tint, activeAlpha * 0.055, palette.edge, activeAlpha * 0.16, 2, z - 2, "add", 10);
+      this.drawGfxArc(originX, originY, reach * 0.82, trailAngle + 0.03 * side, bladeAngle - 0.03 * side, 5, palette.blade, activeAlpha * 0.34, z + 1, "add", 9);
+      this.drawGfxGreatsword(originX, originY, bladeAngle, reach * (0.78 + peak * 0.04), palette.tint, activeAlpha * 0.86, z + 8, false);
+      const tipX = originX + Math.cos(bladeAngle) * reach * 0.84;
+      const tipY = originY + Math.sin(bladeAngle) * reach * 0.84;
+      this.drawGfxSparkSpray(tipX, tipY, reach * 0.18, palette.edge, activeAlpha * 0.22, z + 12, 5, progress * 2.8, bladeAngle, Math.PI * 0.48);
+      return true;
+    }
+
+    renderWarriorSpinCleanEffect(effect, progress, alpha, radius, color) {
+      const x = Number(effect.x);
+      const y = Number(effect.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+      const t = Math.max(0, Math.min(1, progress));
+      const sweep = Math.min(1, t / 0.78);
+      const sweepEase = 1 - Math.pow(1 - sweep, 3);
+      const peak = Math.sin(t * Math.PI);
+      const fade = Math.max(0, 1 - Math.max(0, t - 0.82) / 0.18);
+      const palette = this.warriorSkillPalette(color);
+      const baseRadius = Math.max(118, Number(effect.rangeRadius || effect.radius || radius || 130));
+      const slashRadius = Math.max(92, Math.min(250, baseRadius * 0.82));
+      const startAngle = -Math.PI * 0.72 + Number(effect.angle || 0) * 0.22 + Number(effect.seed || 0) * 0.13;
+      const bladeAngle = startAngle + Math.PI * 2.1 * sweepEase;
+      const trailSpan = Math.PI * (0.72 + peak * 0.18);
+      const trailStart = bladeAngle - trailSpan;
+      const hiltBack = Math.max(10, slashRadius * 0.09);
+      const hiltX = x - Math.cos(bladeAngle) * hiltBack;
+      const hiltY = y - Math.sin(bladeAngle) * hiltBack;
+      const swordReach = slashRadius * (0.88 + peak * 0.06);
+      const z = y + 126;
+      const activeAlpha = alpha * fade * (0.76 + peak * 0.18);
+
+      this.drawGfxCircle(x, y, baseRadius, palette.shadow, activeAlpha * 0.014, palette.edge, activeAlpha * 0.13, 2.5, z - 30, "add", 96);
+      this.drawGfxCircle(x, y, slashRadius * 0.36, palette.shadow, activeAlpha * 0.035, palette.tint, activeAlpha * 0.13, 2, z - 18, "add", 42);
+      this.drawGfxCleaveRibbon(x, y, slashRadius * 0.38, slashRadius * 1.03, trailStart, bladeAngle, palette.tint, activeAlpha * 0.07, palette.edge, activeAlpha * 0.2, 3, z - 4, "add", 26);
+      this.drawGfxArc(x, y, slashRadius * 1.04, trailStart + 0.04, bladeAngle, 7, palette.blade, activeAlpha * 0.36, z + 4, "add", 30);
+      this.drawGfxArc(x, y, slashRadius * 0.69, bladeAngle - Math.PI * 0.44, bladeAngle - Math.PI * 0.08, 3, palette.tint, activeAlpha * 0.18, z + 5, "add", 14);
+      this.drawGfxGreatsword(hiltX, hiltY, bladeAngle - 0.24, swordReach * 0.84, palette.edge, activeAlpha * 0.18, z + 7, false);
+      this.drawGfxGreatsword(hiltX, hiltY, bladeAngle, swordReach, palette.tint, activeAlpha * (0.88 + peak * 0.08), z + 18, true);
+      const tipX = hiltX + Math.cos(bladeAngle) * swordReach;
+      const tipY = hiltY + Math.sin(bladeAngle) * swordReach;
+      this.drawGfxLine(tipX - Math.cos(bladeAngle) * 18, tipY - Math.sin(bladeAngle) * 18, tipX + Math.cos(bladeAngle) * 10, tipY + Math.sin(bladeAngle) * 10, 5, palette.edge, activeAlpha * 0.32, z + 31, "add");
+      this.drawGfxImpactBurst(tipX, tipY, slashRadius * 0.16, palette.tint, activeAlpha * 0.16, z + 34, t * 3.2, 6);
+      this.drawGfxSparkSpray?.(tipX, tipY, slashRadius * 0.22, palette.edge, activeAlpha * 0.2, z + 38, 7, t * 4.2, bladeAngle, Math.PI * 0.5);
+      return true;
+    }
+
+    renderWarriorForwardWhirlwindLaunchEffect(effect, progress, alpha, radius, color) {
+      const x = Number(effect.x);
+      const y = Number(effect.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+      const t = Math.max(0, Math.min(1, progress));
+      const peak = Math.sin(t * Math.PI);
+      const fade = Math.max(0, 1 - Math.max(0, t - 0.78) / 0.22);
+      const launchRadius = Math.max(72, Math.min(180, Number(effect.radius || effect.rangeRadius || radius || 110)));
+      const angle = Number(effect.angle || 0);
+      const palette = this.warriorSkillPalette(color);
+      const z = y + 104;
+      const activeAlpha = alpha * fade * (0.72 + peak * 0.16);
+      const phase = angle + t * Math.PI * 2.25 + Number(effect.seed || 0) * 0.13;
+
+      this.drawGfxCircle(x, y, launchRadius * (0.45 + t * 0.32), palette.shadow, activeAlpha * 0.035, palette.tint, activeAlpha * 0.18, 2.5, z - 12, "add", 44);
+      this.drawGfxCircle(x, y, launchRadius * (0.24 + peak * 0.08), palette.shadow, activeAlpha * 0.035, palette.edge, activeAlpha * 0.12, 2, z - 8, "add", 28);
+      for (let i = 0; i < 3; i += 1) {
+        const r = launchRadius * (0.42 + i * 0.16);
+        const start = phase + i * 1.18;
+        const end = start + 0.95 + peak * 0.22;
+        this.drawGfxArc(x, y, r, start, end, 5 - i, i === 0 ? palette.blade : palette.tint, activeAlpha * (0.24 - i * 0.04), z + i, "add", 12);
+      }
+      this.drawGfxLine(x - Math.cos(angle) * launchRadius * 0.38, y - Math.sin(angle) * launchRadius * 0.38, x + Math.cos(angle) * launchRadius * 0.58, y + Math.sin(angle) * launchRadius * 0.58, 4, palette.tint, activeAlpha * 0.14, z + 8, "add");
+      return true;
+    }
+
+    renderWarriorTauntCleanEffect(effect, progress, alpha, radius, color) {
+      const x = Number(effect.x);
+      const y = Number(effect.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+      const t = Math.max(0, Math.min(1, progress));
+      const ease = 1 - Math.pow(1 - t, 2.8);
+      const fade = Math.max(0, 1 - Math.max(0, t - 0.76) / 0.24);
+      const palette = this.warriorSkillPalette(color);
+      const tauntRadius = Math.max(92, Number(effect.rangeRadius || effect.radius || radius || 132));
+      const ringRadius = tauntRadius * (0.16 + ease * 0.84);
+      const z = y + 118;
+      const activeAlpha = alpha * fade;
+
+      this.drawGfxCircle(x, y, ringRadius, palette.warn, activeAlpha * 0.035, palette.warn, activeAlpha * 0.46, 5, z, "add", 72);
+      this.drawGfxCircle(x, y, ringRadius * 0.62, palette.shadow, activeAlpha * 0.025, palette.edge, activeAlpha * 0.24, 2, z - 1, "add", 54);
+      for (let i = 0; i < 12; i += 1) {
+        const a = (Math.PI * 2 * i) / 12;
+        const inner = ringRadius * 0.76;
+        const outer = ringRadius * (0.96 + (i % 3) * 0.025);
+        this.drawGfxLine(
+          x + Math.cos(a) * inner,
+          y + Math.sin(a) * inner,
+          x + Math.cos(a) * outer,
+          y + Math.sin(a) * outer,
+          i % 3 === 0 ? 5 : 3,
+          i % 2 ? palette.edge : palette.warn,
+          activeAlpha * 0.32,
+          z + 4 + i,
+          "add"
+        );
+      }
+      const iconAlpha = activeAlpha * Math.max(0.35, 1 - t * 0.35);
+      this.drawGfxLine(x, y - 34, x, y - 9, 8, palette.blade, iconAlpha * 0.8, z + 24, "add");
+      this.drawGfxCircle(x, y + 8, 5.5, palette.blade, iconAlpha * 0.72, palette.edge, iconAlpha * 0.32, 1, z + 25, "add", 10);
+      return true;
+    }
+
+    renderWarriorChargeCleanEffect(effect, progress, alpha, radius, color) {
+      const angle = Number(effect.angle || 0);
+      const end = this.effectEndpoints(effect, radius, angle);
+      if (!end) return false;
+      const moveDuration = Math.max(0.12, Number(effect.moveDuration || 0.42));
+      const fullDuration = Math.max(moveDuration, Number(effect.duration || effect.ttl || 0.62));
+      const rawTravel = Math.min(1, progress / Math.max(0.12, moveDuration / fullDuration));
+      const travel = rawTravel * rawTravel * (3 - 2 * rawTravel);
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const px = -uy;
+      const py = ux;
+      const width = Math.max(66, Number(effect.contactRadius || 64) * 1.02);
+      const headX = end.fromX + (end.toX - end.fromX) * travel;
+      const headY = end.fromY + (end.toY - end.fromY) * travel;
+      const shieldX = headX + ux * width * 0.34;
+      const shieldY = headY + uy * width * 0.34;
+      const palette = this.warriorSkillPalette(color);
+      const peak = Math.sin(Math.max(0, Math.min(1, progress)) * Math.PI);
+      const z = Math.max(effect.y + 92, shieldY + 112);
+      const laneAlpha = alpha * (0.32 + peak * 0.08);
+
+      this.drawGfxLine(end.fromX, end.fromY, headX, headY, width * 0.34, palette.shadow, alpha * 0.08, z - 18, "add");
+      for (let side = -1; side <= 1; side += 2) {
+        const offset = width * 0.34 * side;
+        this.drawGfxLine(end.fromX + px * offset, end.fromY + py * offset, headX + px * offset * 0.52, headY + py * offset * 0.52, 4, palette.edge, laneAlpha * 0.44, z - 8 + side, "add");
+      }
+      this.drawGfxDashDust?.(end.fromX, end.fromY, headX, headY, width * 0.46, angle, "#caa35a", alpha * 0.34, z - 14, progress, { charge: true, long: true });
+      if (this.drawGfxFrontShield) {
+        this.drawGfxFrontShield(shieldX, shieldY, angle, width * 0.86, palette.tint, alpha * (0.84 + peak * 0.08), z + 6, progress);
+      } else {
+        this.drawGfxShieldWall(shieldX, shieldY, angle, width * 0.7, palette.tint, alpha * 0.76, z + 6, false);
+      }
+      this.drawGfxLine(shieldX - ux * width * 0.56, shieldY - uy * width * 0.56, shieldX + ux * width * 0.28, shieldY + uy * width * 0.28, 5, palette.blade, alpha * 0.32, z + 14, "add");
+      if (travel >= 0.92) {
+        this.drawGfxShieldCrash(end.toX, end.toY, angle, width * 0.78, palette.tint, alpha * Math.max(0.2, 1 - (progress - moveDuration / fullDuration) * 3), z + 22, progress);
+      }
+      return true;
+    }
+
+    renderWarriorImpactCleanEffect(effect, progress, alpha, radius, color, style) {
+      const palette = this.warriorSkillPalette(color);
+      const hitRadius = Math.max(34, Number(effect.radius || radius || 42));
+      const angle = Number.isFinite(effect.angle) ? Number(effect.angle) : Number(effect.seed || 0);
+      const z = effect.y + 96;
+      if (style.includes("shield")) {
+        this.drawGfxShieldCrash(effect.x, effect.y, angle, hitRadius * 0.92, palette.tint, alpha * 0.48, z, progress);
+        return true;
+      }
+      if (style.includes("cleave_execute")) {
+        const t = Math.max(0, Math.min(1, progress));
+        const fade = Math.max(0, 1 - Math.max(0, t - 0.72) / 0.28);
+        const draw = Math.min(1, t / 0.14);
+        const pulse = Math.sin(t * Math.PI);
+        const size = hitRadius * (0.98 + pulse * 0.12) * (0.18 + draw * 0.82);
+        const baseAlpha = alpha * fade;
+        const rot = angle + Math.PI * 0.18;
+        const cos = Math.cos(rot);
+        const sin = Math.sin(rot);
+        const toWorld = (x, y, scale = 1) => ({
+          x: effect.x + (x * cos - y * sin) * size * scale,
+          y: effect.y + (x * sin + y * cos) * size * scale
+        });
+        const armShape = (localAngle, len, width, hook = 0) => {
+          const ux = Math.cos(localAngle);
+          const uy = Math.sin(localAngle);
+          const px = -uy;
+          const py = ux;
+          const point = (along, side, jut = 0) => [
+            ux * along + px * side + ux * jut,
+            uy * along + py * side + uy * jut
+          ];
+          return [
+            point(len, 0, 0.06),
+            point(len * 0.82, width * 0.05 + hook * 0.02),
+            point(len * 0.53, width * 0.42),
+            point(len * 0.24, width * 0.2),
+            point(len * 0.03, width * 0.08),
+            point(len * 0.16, -width * 0.34),
+            point(len * 0.48, -width * 0.31 - hook * 0.02),
+            point(len * 0.76, -width * 0.07)
+          ];
+        };
+        const arms = [
+          { angle: -2.28, len: 1.28, width: 0.19, hook: 0.07 },
+          { angle: -0.56, len: 1.06, width: 0.18, hook: -0.05 },
+          { angle: 0.64, len: 1.34, width: 0.2, hook: 0.04 },
+          { angle: 2.12, len: 1.1, width: 0.21, hook: -0.06 }
+        ];
+        for (let i = 0; i < arms.length; i += 1) {
+          const arm = arms[i];
+          const redPath = armShape(arm.angle, arm.len, arm.width, arm.hook).map(([x, y]) => toWorld(x, y, 1));
+          const glowPath = armShape(arm.angle, arm.len, arm.width * 1.16, arm.hook).map(([x, y]) => toWorld(x, y, 1.06 + pulse * 0.03));
+          this.drawGfxPath(glowPath, "#ef1d22", baseAlpha * 0.07, "#ef4444", baseAlpha * 0.13, 1.4, z + 4 + i, "add");
+          this.drawGfxPath(redPath, "#ef1d22", baseAlpha * 0.94, "#7f1d1d", baseAlpha * 0.44, 1.6, z + 8 + i, "add");
+        }
+        const centerShape = [
+          [-0.06, -0.42],
+          [0.1, -0.2],
+          [0.42, -0.31],
+          [0.2, -0.03],
+          [0.45, 0.48],
+          [0.06, 0.25],
+          [-0.36, 0.38],
+          [-0.18, 0.08],
+          [-0.54, -0.09],
+          [-0.18, -0.22]
+        ].map(([x, y]) => toWorld(x, y, 1));
+        this.drawGfxPath(centerShape, "#050000", baseAlpha * 0.98, "#120101", baseAlpha * 0.84, 1.8, z + 16, "normal");
+        if (pulse > 0.2) {
+          const shardAlpha = baseAlpha * 0.2 * pulse;
+          for (let i = 0; i < arms.length; i += 1) {
+            const arm = arms[i];
+            const a = toWorld(Math.cos(arm.angle) * arm.len * 0.76, Math.sin(arm.angle) * arm.len * 0.76, 1);
+            const b = toWorld(Math.cos(arm.angle) * arm.len * 1.1, Math.sin(arm.angle) * arm.len * 1.1, 1);
+            this.drawGfxLine(a.x, a.y, b.x, b.y, 1.6, "#ef4444", shardAlpha, z + 24 + i, "add");
+          }
+        }
+        return true;
+      }
+      if (style.includes("cleave")) {
+        const originX = effect.x - Math.cos(angle) * hitRadius * 0.22;
+        const originY = effect.y - Math.sin(angle) * hitRadius * 0.22;
+        this.drawGfxCleaveRibbon(originX, originY, hitRadius * 0.22, hitRadius * 0.92, angle - 0.72, angle + 0.42, palette.tint, alpha * 0.08, palette.blade, alpha * 0.24, 3, z, "add", 10);
+        this.drawGfxSparkSpray(effect.x, effect.y, hitRadius * 0.66, palette.edge, alpha * 0.2, z + 6, 6, progress * 3, angle, Math.PI * 0.68);
+        return true;
+      }
+      this.drawGfxImpactBurst(effect.x, effect.y, hitRadius * 0.68, palette.tint, alpha * 0.22, z, progress, style.includes("spin") ? 8 : 6);
+      return true;
+    }
+
+    drawGfxCrescentBlade(centerX, centerY, angle, length, width, color, alpha, zIndex, bend = 1) {
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const nx = -uy;
+      const ny = ux;
+      const steps = 9;
+      const outer = [];
+      const inner = [];
+      const tint = color || "#f97316";
+      for (let i = 0; i <= steps; i += 1) {
+        const t = i / steps;
+        const along = (t - 0.5) * length;
+        const taper = Math.sin(t * Math.PI);
+        const hooked = Math.sin((t - 0.12) * Math.PI) * width * 0.1;
+        const outerCurl = bend * width * (0.04 + taper * 1.18 + hooked / Math.max(1, width));
+        const innerCurl = bend * width * (-0.02 + taper * 0.24);
+        const x = centerX + ux * along + nx * bend * width * (0.06 + taper * 0.12);
+        const y = centerY + uy * along + ny * bend * width * (0.06 + taper * 0.12);
+        outer.push({ x: x + nx * outerCurl, y: y + ny * outerCurl });
+        inner.unshift({ x: x + nx * innerCurl, y: y + ny * innerCurl });
+      }
+      this.drawGfxPath([...outer, ...inner], "#f8fafc", alpha * 0.88, tint, alpha * 0.78, 2.5, zIndex, "add");
+      this.drawGfxPath([...outer.slice(2, -1), ...inner.slice(1, -2)], "#fff7ed", alpha * 0.32, "#ffffff", alpha * 0.46, 1.5, zIndex + 1, "add");
+      this.drawGfxLine(
+        centerX - ux * length * 0.22 + nx * bend * width * 0.78,
+        centerY - uy * length * 0.22 + ny * bend * width * 0.78,
+        centerX + ux * length * 0.32 + nx * bend * width * 0.88,
+        centerY + uy * length * 0.32 + ny * bend * width * 0.88,
+        Math.max(2, width * 0.12),
+        "#ffffff",
+        alpha * 0.38,
+        zIndex + 2,
+        "add"
+      );
+    }
+
+    renderWarriorBladeWhirlwindOverride(effect, progress, alpha, radius, color) {
+      return this.renderWarriorSpinCleanEffect(effect, progress, alpha, radius, color);
+    }
+
+    renderWarriorTauntPulseOverride(effect, progress, alpha, radius, color) {
+      const x = Number(effect.x);
+      const y = Number(effect.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+      const tauntRadius = Math.max(92, Number(effect.rangeRadius || effect.radius || radius || 140));
+      const t = Math.max(0, Math.min(1, progress));
+      const ease = 1 - Math.pow(1 - t, 3);
+      const fade = Math.max(0, 1 - Math.max(0, t - 0.76) / 0.24);
+      const activeAlpha = Math.max(0, alpha * fade);
+      const ringRadius = tauntRadius * (0.08 + ease * 0.92);
+      const z = y + 118;
+      const red = color || "#ef4444";
+      const hot = "#ff2d55";
+      const dark = "#450a0a";
+
+      this.drawGfxCircle(x, y, ringRadius * 0.92, dark, activeAlpha * 0.04, red, activeAlpha * 0.5, 7, z + 4, "add", 72);
+      this.drawGfxCircle(x, y, Math.max(18, ringRadius * 0.58), dark, activeAlpha * 0.025, hot, activeAlpha * 0.24, 3, z, "add", 54);
+      this.drawGfxArc(x, y, ringRadius * 1.02, -Math.PI * 0.08 + t * 0.5, Math.PI * 1.2 + t * 0.5, 5, "#fca5a5", activeAlpha * 0.34, z + 9, "add", 24);
+      this.drawGfxArc(x, y, ringRadius * 0.98, Math.PI * 0.92 - t * 0.7, Math.PI * 2.08 - t * 0.7, 4, hot, activeAlpha * 0.28, z + 10, "add", 24);
+
+      const tickCount = 18;
+      for (let i = 0; i < tickCount; i += 1) {
+        const a = (Math.PI * 2 * i) / tickCount + t * 0.32;
+        const len = 11 + (i % 3) * 5;
+        const inner = Math.max(18, ringRadius - len * 1.55);
+        const outer = ringRadius + len * 0.45;
+        this.drawGfxLine(
+          x + Math.cos(a) * inner,
+          y + Math.sin(a) * inner,
+          x + Math.cos(a) * outer,
+          y + Math.sin(a) * outer,
+          i % 3 === 0 ? 5 : 3,
+          i % 2 ? hot : "#fecaca",
+          activeAlpha * (0.3 + (i % 3) * 0.05),
+          z + 18 + i,
+          "add"
+        );
+      }
+      if (t < 0.42) {
+        const burst = 1 - t / 0.42;
+        this.drawGfxCircle(x, y, tauntRadius * (0.14 + t * 0.34), red, burst * alpha * 0.08, hot, burst * alpha * 0.44, 4, z + 44, "add", 36);
+        this.drawGfxSparkSpray(x, y, tauntRadius * 0.42, hot, burst * alpha * 0.22, z + 48, 10, t * 3.2);
+      }
+      return true;
+    }
+
     renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z) {
       if (s.includes("warrior") || s.includes("shield_charge") || s.includes("shield_slam") || s.includes("taunt")) return false;
       const context = {
@@ -3288,6 +4336,61 @@
       }
     }
 
+    renderWarriorVerticalCleaveEffect(effect, progress, alpha, color, radius) {
+      const angle = Number(effect.angle || 0);
+      const lineRadius = Math.max(180, Number(effect.radius || radius || 220));
+      const end = this.effectEndpoints(effect, lineRadius, angle);
+      if (!end) return;
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const px = -uy;
+      const py = ux;
+      const length = Math.max(80, Math.hypot(end.toX - end.fromX, end.toY - end.fromY));
+      const width = Math.max(58, Number(effect.lineWidth || 82));
+      const t = Math.max(0, Math.min(1, progress));
+      const windup = Math.min(1, t / 0.3);
+      const active = Math.max(0, Math.min(1, (t - 0.3) / 0.25));
+      const after = Math.max(0, Math.min(1, (t - 0.55) / 0.45));
+      const impact = Math.sin(active * Math.PI);
+      const cut = active > 0 ? 1 - Math.pow(1 - active, 3) : windup * 0.94;
+      const fade = Math.max(0, 1 - after * 0.82);
+      const palette = this.warriorSkillPalette(color);
+      const z = Math.max(end.fromY, end.toY) + 134;
+      const activeAlpha = alpha * fade;
+      const headX = end.fromX + (end.toX - end.fromX) * cut;
+      const headY = end.fromY + (end.toY - end.fromY) * cut;
+      const guideAlpha = activeAlpha * (0.1 + windup * 0.24);
+
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, width * 0.32, palette.shadow, alpha * 0.09 * windup * fade, z - 22, "add");
+      this.drawGfxLine(end.fromX + px * width * 0.62, end.fromY + py * width * 0.62, end.toX + px * width * 0.62, end.toY + py * width * 0.62, 3.5, palette.edge, guideAlpha, z - 10, "add");
+      this.drawGfxLine(end.fromX - px * width * 0.62, end.fromY - py * width * 0.62, end.toX - px * width * 0.62, end.toY - py * width * 0.62, 3.5, palette.edge, guideAlpha, z - 9, "add");
+      this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, 2.5, "#fff7ed", activeAlpha * 0.12 * windup, z - 4, "add");
+
+      if (active > 0) {
+        const coreWidth = width * (0.58 + impact * 0.72);
+        this.drawGfxLine(end.fromX, end.fromY, headX, headY, coreWidth, "#7c2d12", activeAlpha * (0.16 + impact * 0.2), z + 1, "add");
+        this.drawGfxLine(end.fromX, end.fromY, headX, headY, Math.max(14, width * (0.2 + impact * 0.18)), "#fff7ed", activeAlpha * (0.72 + impact * 0.22), z + 10, "add");
+        this.drawGfxLine(end.fromX, end.fromY, headX, headY, Math.max(5, width * 0.075), "#ffffff", activeAlpha * 0.78, z + 18, "add");
+        this.drawGfxLine(end.fromX + px * width * 0.28, end.fromY + py * width * 0.28, headX + px * width * 0.12, headY + py * width * 0.12, 5, "#fde68a", activeAlpha * 0.42, z + 14, "add");
+        this.drawGfxLine(end.fromX - px * width * 0.28, end.fromY - py * width * 0.28, headX - px * width * 0.12, headY - py * width * 0.12, 5, "#f97316", activeAlpha * 0.36, z + 15, "add");
+        for (let i = 0; i < 7; i += 1) {
+          const along = length * (0.1 + i * 0.14);
+          if (along > length * cut) continue;
+          const cx = end.fromX + ux * along;
+          const cy = end.fromY + uy * along;
+          const nick = width * (0.2 + (i % 3) * 0.05);
+          this.drawGfxLine(cx - px * nick, cy - py * nick, cx + px * nick, cy + py * nick, i % 2 ? 4 : 5, i % 2 ? palette.edge : "#fff7ed", activeAlpha * (0.28 + impact * 0.2), z + 22 + i, "add");
+        }
+        this.drawGfxSparkSpray(headX, headY, width * 1.18, palette.edge, activeAlpha * 0.44, z + 32, 14, progress * 5.4, angle, Math.PI * 0.56);
+        this.drawGfxImpactBurst(headX, headY, width * (0.7 + impact * 0.46), palette.tint, activeAlpha * 0.22, z + 38, progress * 4.1, 10);
+      }
+
+      if (after > 0) {
+        this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(8, width * 0.16), "#fde68a", activeAlpha * (0.24 * (1 - after)), z + 4, "add");
+        this.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(3, width * 0.05), "#fff7ed", activeAlpha * (0.26 * (1 - after)), z + 12, "add");
+      }
+    }
+
     renderFastMeleeConeEffect(effect, progress, alpha, color, mode = "melee") {
       const angle = Number(effect.angle || 0);
       const swingSide = Number(effect.swingSide || 1) >= 0 ? 1 : -1;
@@ -3332,6 +4435,11 @@
       const x = (fromX + toX) / 2;
       const y = (fromY + toY) / 2;
       const angle = Math.atan2(dy, dx);
+      if (key === "fx-lightning" && this.drawGfxLightning) {
+        const phase = Date.now() / 130 + (fromX + fromY + toX + toY) * 0.007;
+        this.drawGfxLightning(fromX, fromY, toX, toY, tint, alpha, zIndex || y + 80, Math.max(2.5, width * 0.58), Math.max(4, Math.min(9, Math.ceil(length / 32))), Math.max(7, width * 1.45), phase);
+        return { alpha };
+      }
       const textureWidth = key === "fx-lightning" ? 112 : key === "fx-pierce-lance" ? 144 : key === "fx-charge-lane" ? 128 : 32;
       const textureHeight = key === "fx-lightning" ? 32 : key === "fx-pierce-lance" ? 34 : key === "fx-charge-lane" ? 64 : 8;
       return this.fx(key, x, y, length / textureWidth, Math.max(0.12, width / textureHeight), tint, alpha, zIndex || y + 80, angle, blendMode);
@@ -3377,15 +4485,52 @@
       this.rect(this.layers.ui, x - width / 2 + (width * safeRatio) / 2, y, width * safeRatio, height, fill, 0.96).zIndex = y + 1000;
     }
 
-    drawEliteCrown(x, y, affix, color, zIndex) {
-      const crown = this.texture(`elite:${affix || "base"}`, 24, 18, (ctx) => {
-        this.px(ctx, 3, 11, 18, 4, "#ffffff");
-        this.px(ctx, 5, 5, 4, 8, "#ffffff");
-        this.px(ctx, 11, 2, 4, 11, "#ffffff");
-        this.px(ctx, 17, 5, 4, 8, "#ffffff");
-      });
-      const sprite = this.sprite(crown, this.layers.effect, x, y, 0.9, 0.9, color, 0.76);
-      sprite.zIndex = zIndex + 120;
+    drawEliteBodyMutation(x, y, radius, affix, zIndex) {
+      const color = this.eliteAffixColor(affix, "#facc15");
+      const dark = "#111827";
+      if (affix === "bulwark") {
+        for (const side of [-1, 1]) {
+          this.drawGfxPath([
+            { x: x + side * radius * 0.18, y: y - radius * 0.52 },
+            { x: x + side * radius * 0.72, y: y - radius * 0.46 },
+            { x: x + side * radius * 0.94, y: y - radius * 0.08 },
+            { x: x + side * radius * 0.58, y: y + radius * 0.2 },
+            { x: x + side * radius * 0.24, y: y + radius * 0.04 }
+          ], dark, 0.84, color, 0.72, 2.4, zIndex + side, "normal");
+        }
+        return;
+      }
+      if (affix === "venom") {
+        for (const [ox, oy, size] of [[-0.4, 0.22, 0.26], [0.04, 0.34, 0.32], [0.46, 0.18, 0.22]]) {
+          this.drawGfxCircle(x + ox * radius, y + oy * radius, size * radius, "#365314", 0.82, color, 0.62, 1.8, zIndex + 2, "normal", 12);
+        }
+        return;
+      }
+      if (affix === "volatile") {
+        this.drawGfxCircle(x, y, radius * 0.34, "#7f1d1d", 0.92, color, 0.78, 2.2, zIndex, "normal", 6);
+        this.drawGfxCircle(x, y, radius * 0.13, "#f8fafc", 0.72, color, 0.46, 1.2, zIndex + 1, "normal", 10);
+        for (const [x1, y1, x2, y2] of [[-0.16, -0.18, -0.54, -0.54], [0.16, -0.14, 0.58, -0.42], [-0.14, 0.18, -0.48, 0.56], [0.14, 0.2, 0.52, 0.52]]) {
+          this.drawGfxLine(x + x1 * radius, y + y1 * radius, x + x2 * radius, y + y2 * radius, 2.2, color, 0.62, zIndex + 2, "normal");
+        }
+        return;
+      }
+      for (const side of [-1, 1]) {
+        this.drawGfxPath([
+          { x: x + side * radius * 0.12, y: y - radius * 0.58 },
+          { x: x + side * radius * 0.8, y: y - radius * 1.05 },
+          { x: x + side * radius * 0.52, y: y - radius * 0.34 }
+        ], dark, 0.9, color, 0.74, 2, zIndex + side, "normal");
+      }
+      this.drawGfxLine(x - radius * 0.46, y - radius * 0.06, x + radius * 0.18, y + radius * 0.28, 2.6, color, 0.68, zIndex + 3, "normal");
+      this.drawGfxLine(x - radius * 0.24, y - radius * 0.3, x + radius * 0.42, y + radius * 0.04, 2.6, color, 0.68, zIndex + 4, "normal");
+    }
+
+    eliteAffixColor(affix, fallback = "#facc15") {
+      if (affix === "venom") return "#bef264";
+      if (affix === "volatile") return "#fb7185";
+      if (affix === "frenzy") return "#fb923c";
+      if (affix === "bulwark") return "#93c5fd";
+      return fallback;
     }
 
     visualPosition(map, entity) {
@@ -3393,19 +4538,11 @@
     }
 
     px(ctx, x, y, w, h, color) {
-      if (pixiPixelDrawing.px) {
-        pixiPixelDrawing.px(ctx, x, y, w, h, color);
-        return;
-      }
       ctx.fillStyle = color;
       ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
     }
 
     linePx(ctx, x1, y1, x2, y2, color) {
-      if (pixiPixelDrawing.linePx) {
-        pixiPixelDrawing.linePx(ctx, x1, y1, x2, y2, color);
-        return;
-      }
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -3415,19 +4552,11 @@
     }
 
     outline(ctx, x, y, w, h) {
-      if (pixiPixelDrawing.outline) {
-        pixiPixelDrawing.outline(ctx, x, y, w, h);
-        return;
-      }
       ctx.fillStyle = "rgba(10,10,9,0.42)";
       ctx.fillRect(Math.round(x + 5), Math.round(y + h - 2), Math.round(w - 10), 2);
     }
 
     pixelDiamond(ctx, x, y, r, fill, light) {
-      if (pixiPixelDrawing.pixelDiamond) {
-        pixiPixelDrawing.pixelDiamond(ctx, x, y, r, fill, light);
-        return;
-      }
       ctx.fillStyle = fill;
       ctx.beginPath();
       ctx.moveTo(x, y - r);

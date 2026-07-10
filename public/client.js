@@ -33,6 +33,7 @@ const resultKicker = document.querySelector("#resultKicker");
 const resultTitle = document.querySelector("#resultTitle");
 const resultSubtitle = document.querySelector("#resultSubtitle");
 const resultStats = document.querySelector("#resultStats");
+const resultLoot = document.querySelector("#resultLoot");
 const resultPlayers = document.querySelector("#resultPlayers");
 const resultStartButton = document.querySelector("#resultStartButton");
 const resultActionNote = document.querySelector("#resultActionNote");
@@ -48,10 +49,22 @@ const roomCodeEl = document.querySelector("#roomCode");
 const waveEl = document.querySelector("#wave");
 const startButton = document.querySelector("#startButton");
 const lobbyPanel = document.querySelector("#lobbyPanel");
+const lobbyWorkspace = document.querySelector("#lobbyWorkspace");
+const lobbyWorkspaceNav = document.querySelector("#lobbyWorkspaceNav");
+const lobbyWorkspaceKicker = document.querySelector("#lobbyWorkspaceKicker");
+const lobbyWorkspaceTitle = document.querySelector("#lobbyWorkspaceTitle");
+const lobbyWorkspaceSubtitle = document.querySelector("#lobbyWorkspaceSubtitle");
+const lobbyWorkspaceMetrics = document.querySelector("#lobbyWorkspaceMetrics");
 const lobbyClassGrid = document.querySelector("#lobbyClassGrid");
 const lobbyClassCards = [...document.querySelectorAll(".lobby-class-card")];
 const lobbyClassDetail = document.querySelector("#lobbyClassDetail");
 const lobbyReadyCount = document.querySelector("#lobbyReadyCount");
+const lobbyArenaToggle = document.querySelector("#lobbyArenaToggle");
+const lobbyArenaDock = document.querySelector("#lobbyArenaDock");
+const lobbyArenaClassName = document.querySelector("#lobbyArenaClassName");
+const lobbyArenaClassRole = document.querySelector("#lobbyArenaClassRole");
+const lobbyArenaClassGrid = document.querySelector("#lobbyArenaClassGrid");
+const lobbyArenaSkillList = document.querySelector("#lobbyArenaSkillList");
 const lobbyPartyList = document.querySelector("#lobbyPartyList");
 const readyButton = document.querySelector("#readyButton");
 const lobbyStartButton = document.querySelector("#lobbyStartButton");
@@ -70,6 +83,14 @@ const settingsResetButton = document.querySelector("#settingsResetButton");
 const settingsQualityGroup = document.querySelector("#settingsQualityGroup");
 const settingsLanguage = document.querySelector("#settingsLanguage");
 const settingsKeyList = document.querySelector("#settingsKeyList");
+const runContext = document.querySelector("#runContext");
+const runPhaseKicker = document.querySelector("#runPhaseKicker");
+const runObjectiveTitle = document.querySelector("#runObjectiveTitle");
+const runObjectiveText = document.querySelector("#runObjectiveText");
+const runTimer = document.querySelector("#runTimer");
+const runTimerMax = document.querySelector("#runTimerMax");
+const runProgressBar = document.querySelector("#runProgressBar");
+const runModifiers = document.querySelector("#runModifiers");
 
 let socket = null;
 let selectedClass = "warrior";
@@ -94,6 +115,11 @@ let activeMapChoiceKey = "";
 let pendingMapChoiceKey = "";
 let renderedMapChoicesKey = "";
 let renderedMapBoardKey = "";
+let renderedLobbyClassDetailKey = "";
+let renderedLobbyArenaKey = "";
+let selectedProgressionTab = "gear";
+let selectedLobbyView = "loadout";
+let lobbyArenaFocused = false;
 let localMapVote = "";
 let localMapVoteAt = 0;
 let screenShake = 0;
@@ -110,6 +136,12 @@ let lastJoinPayload = null;
 let lastPongAt = 0;
 let suppressNextReconnect = false;
 let keyCaptureAction = "";
+const LOBBY_TEST_PENDING_TTL = 1800;
+const lobbyTestPending = {
+  classId: "",
+  skills: new Map(),
+  relics: new Map()
+};
 
 const clientRuntime = window.RogueClientRuntime || {};
 const saveBridge = window.RogueSaveManager || {};
@@ -125,7 +157,6 @@ const hudController = hudBridge.create
 const choiceController = choiceBridge.create
   ? choiceBridge.create({
       escapeHtml,
-      getChoiceRarityLabel,
       getRelicStackLabel,
       getSkillTypeLabel
     })
@@ -157,6 +188,24 @@ const settingsActionLabels = Object.freeze({
   skillR: "R 스킬",
   skillF: "F 스킬"
 });
+const LOBBY_VIEW_META = Object.freeze({
+  loadout: { kicker: "LOADOUT", title: "전투 준비" },
+  growth: { kicker: "PERMANENT GROWTH", title: "영구 성장" },
+  gear: { kicker: "ARSENAL", title: "장비와 룬" },
+  forge: { kicker: "FORGE", title: "대장간" },
+  archive: { kicker: "RECORDS", title: "원정 기록" },
+  challenges: { kicker: "OPERATIONS", title: "도전 작전" },
+  training: { kicker: "TRAINING", title: "훈련 설정" }
+});
+const masteryNodeDefs = Object.freeze(
+  saveBridge.MASTERY_NODE_DEFS || [
+    { id: "attack", label: "공격", description: "피해량이 완만하게 증가합니다." },
+    { id: "survival", label: "생존", description: "최대 체력과 일부 방어 능력이 증가합니다." },
+    { id: "speed", label: "속도", description: "이동 속도와 스킬 회전율이 좋아집니다." },
+    { id: "special", label: "직업 특화", description: "직업 고유 강점이 조금씩 강화됩니다." }
+  ]
+);
+const MAX_ASCENSION_LEVEL = saveBridge.MAX_ASCENSION_LEVEL || 25;
 const defaultSettings = Object.freeze(clientRuntime.defaultSettings || {
   version: SETTINGS_VERSION,
   graphicsQuality: "high",
@@ -172,6 +221,7 @@ const defaultSettings = Object.freeze(clientRuntime.defaultSettings || {
 });
 let userSettings = loadUserSettings();
 let userProgress = loadUserProgress();
+let selectedAscensionLevel = Math.max(0, Math.min(MAX_ASCENSION_LEVEL, Number(userProgress.records?.highestAscension || 0) || 0));
 let lastRecordedResultKey = "";
 
 const keys = new Set();
@@ -244,7 +294,9 @@ window.__rogueProgress = {
   reset: resetUserProgress,
   export: exportUserProgress,
   import: importUserProgress,
-  recordRunResult: recordUserRunResult
+  recordRunResult: recordUserRunResult,
+  getGrowthLoadout: (classId) => getSelectedGrowthLoadout(classId || selectedClass),
+  spendMasteryPoint: spendMasteryNode
 };
 const connectionSupervisor = networkBridge.createConnectionSupervisor
   ? networkBridge.createConnectionSupervisor({
@@ -289,96 +341,88 @@ const classDescriptions = {
     label: "전사",
     role: "전열 탱커 / 근접 광역",
     summary: "가장 튼튼한 전열입니다. 도발로 적 시선을 강제로 끌고, 방패 돌진과 광역 베기로 몰려오는 적을 밀어내며 파티가 숨 쉴 공간을 만듭니다.",
-    passive: "받는 피해가 낮고, 도발 중에는 크기가 커지며 추가 피해 감소를 얻습니다.",
     skills: [
-      ["Q", "강철 회오리"],
-      ["E", "도발"],
-      ["R", "방패 돌진"],
-      ["F", "광역 베기"]
+      ["Q", "강철 회오리", "몸 주변을 회전 베기로 긁어 근접한 적을 정리합니다."],
+      ["E", "도발", "주변 적을 전사에게 고정하고 일시적으로 받는 피해를 줄입니다."],
+      ["R", "방패 돌진", "전방으로 돌진해 넓은 경로의 적에게 피해를 주고 밀쳐냅니다."],
+      ["F", "광역 베기", "전방 넓은 부채꼴을 크게 베어 다수의 적을 한 번에 정리합니다."]
     ]
   },
   ranger: {
     label: "궁수",
     role: "원거리 지속딜 / 카이팅",
     summary: "멀리서 안전하게 누적 피해를 넣는 직업입니다. 2단 대시로 거리를 벌리고, 관통 사격과 레인 에로우로 좁은 길목이나 뭉친 적을 정리합니다.",
-    passive: "거리가 멀수록 피해가 좋아지고, 명중한 적을 취약하게 만들어 파티 화력을 끌어올립니다.",
     skills: [
-      ["Q", "연발 사격"],
-      ["E", "관통 사격"],
-      ["R", "레인 에로우"],
-      ["F", "독화살"]
+      ["Q", "연발 사격", "조준 방향으로 빠른 화살을 연속 발사해 단일/소형 무리를 압박합니다."],
+      ["E", "관통 사격", "긴 직선 관통 화살로 일렬의 적을 꿰뚫습니다."],
+      ["R", "레인 에로우", "지정 지점에 화살비를 내려 뭉친 적을 지속 타격합니다."],
+      ["F", "독화살", "독화살 한 발로 적을 중독시키고 지역 피해를 남깁니다."]
     ]
   },
   mage: {
     label: "마법사",
     role: "광역 폭딜 / 상태이상",
-    summary: "초반은 조심스럽지만 성장 후 폭발력이 큽니다. 빙결 파동으로 적을 얼리고, 운석과 불바다, 연쇄 번개로 대규모 웨이브를 녹입니다.",
-    passive: "빙결, 화상 등 상태이상에 걸린 적에게 더 강한 피해를 줍니다.",
+    summary: "초반은 조심스럽지만 성장 후 폭발력이 큽니다. 냉기 파동으로 적을 느리게 하고, 운석과 불바다, 연쇄 번개로 대규모 웨이브를 녹입니다.",
     skills: [
-      ["Q", "별빛 폭발"],
-      ["E", "빙결 파동"],
-      ["R", "운석"],
-      ["F", "연쇄 번개"]
+      ["Q", "별빛 폭발", "조준 방향으로 폭발 마법을 쏴 작은 범위를 터뜨립니다."],
+      ["E", "빙결 파동", "주변으로 냉기 파동을 퍼뜨려 적에게 피해를 주고 느리게 합니다."],
+      ["R", "운석", "목표 지점에 큰 운석을 떨어뜨려 폭발 피해를 줍니다."],
+      ["F", "연쇄 번개", "가까운 적 사이를 튀는 번개로 여러 대상을 연속 타격합니다."]
     ]
   },
   engineer: {
     label: "기계공",
     role: "설치형 딜러 / 구역 장악",
-    summary: "직접 때리기보다 장비를 깔아 전장을 굳히는 직업입니다. 터렛, 감전 지뢰, 드론을 유지하고 과부하로 설치물을 폭발적으로 강화합니다.",
-    passive: "장비가 적 근처에서 계속 압박하며, 설치물이 많을수록 안정적인 화력이 나옵니다.",
+    summary: "자동 터렛을 기본기로 깔고 메카, 감전 지뢰, 드론으로 전장을 굳히는 설치형 직업입니다.",
     skills: [
-      ["Q", "과부하"],
-      ["E", "자동 터렛"],
-      ["R", "감전 지뢰"],
-      ["F", "호위 드론"]
+      ["Q", "자동 터렛", "조준 위치에 터렛을 던져 설치하고 주변 적을 자동 사격합니다."],
+      ["E", "메카 탑승", "일정 시간 메카에 탑승해 방어력을 높이고 양손 레이저 기본공격을 사용합니다."],
+      ["R", "감전 지뢰", "밟으면 폭발하는 전기 지뢰를 설치해 피해와 제어를 줍니다."],
+      ["F", "호위 드론", "플레이어를 따라다니는 드론을 호출해 주변 적을 지원 사격합니다."]
     ]
   },
   puppeteer: {
     label: "인형사",
     role: "실표식 / 인형 연계",
-    summary: "본체와 인형이 동시에 실표식을 쌓고 터뜨리는 테크니컬 직업입니다. 인형 돌진으로 표식을 새기고, 실 결계와 피날레 교대로 표식을 한 번에 절단합니다.",
-    passive: "기본 공격과 인형 공격이 실표식을 쌓습니다. 표식은 결계, 인형극, 교대 공격으로 폭발합니다.",
+    summary: "인형 스킬로 실표식을 새기고 터뜨리는 테크니컬 직업입니다. 인형 돌진으로 표식을 새기고, 실 결계와 피날레 교대로 표식을 한 번에 절단합니다.",
     skills: [
-      ["Q", "인형극"],
-      ["E", "살아있는 인형"],
-      ["R", "실 결계"],
-      ["F", "피날레 교대"]
+      ["Q", "인형극", "인형을 돌진시키거나 실을 당겨 경로상의 적에게 표식 피해를 줍니다."],
+      ["E", "살아있는 인형", "전투 인형을 소환해 별도 위치에서 적을 압박합니다."],
+      ["R", "실 결계", "실로 만든 결계를 펼쳐 범위 안 적을 묶고 표식을 절단합니다."],
+      ["F", "피날레 교대", "본체와 인형의 위치를 바꾸며 주변 표식을 폭발시킵니다."]
     ]
   },
   martialist: {
     label: "무투가",
     role: "기력 콤보 / 근접 제압",
-    summary: "빠른 연격으로 기력을 쌓고, 쌓은 기력으로 파쇄장/승룡각/기합 폭발을 강화하는 근접 직업입니다. 풀기력 스킬은 범위와 밀어내기가 확 커집니다.",
-    passive: "공격을 이어가면 기력이 쌓입니다. 캐릭터 주변의 작은 점이 현재 기력입니다.",
+    summary: "연환권으로 기력을 쌓고, 쌓은 기력으로 파쇄장/승룡각/기합 폭발을 강화하는 근접 직업입니다. 풀기력 스킬은 범위와 밀어내기가 확 커집니다.",
     skills: [
-      ["Q", "연환권"],
-      ["E", "파쇄장"],
-      ["R", "승룡각"],
-      ["F", "기합 폭발"]
+      ["Q", "연환권", "짧은 전방 연타로 근접 적을 빠르게 두드리고 기력을 얻습니다."],
+      ["E", "파쇄장", "전방 지면을 내려쳐 충격파로 피해와 밀어내기를 줍니다."],
+      ["R", "승룡각", "돌진하며 올려차고 착지 충격으로 주변을 정리합니다."],
+      ["F", "기합 폭발", "주변으로 기합 파동을 터뜨려 접근한 적을 밀어냅니다."]
     ]
   },
   alchemist: {
     label: "연금술사",
     role: "산성+화염 반응 / 보조",
     summary: "산성 장판과 화염 장판을 겹쳐 증류 폭발을 만드는 제어형 직업입니다. 촉매 폭탄으로 깔아둔 장판을 터뜨리고, 전투 영약으로 파티를 살립니다.",
-    passive: "산성 장판과 화염 장판이 만나면 폭발하고, 폭발 후 짧은 잔류 장판이 남습니다.",
     skills: [
-      ["Q", "촉매 폭탄"],
-      ["E", "산성 플라스크"],
-      ["R", "화염 플라스크"],
-      ["F", "전투 영약"]
+      ["Q", "촉매 폭탄", "폭탄을 던져 피해를 주고 깔린 산성/화염 장판 반응을 유도합니다."],
+      ["E", "산성 플라스크", "산성 장판을 만들어 적을 중독시키고 방어를 깎습니다."],
+      ["R", "화염 플라스크", "화염 장판을 만들어 적을 태우고 산성과 만나면 폭발합니다."],
+      ["F", "전투 영약", "영약을 뿌려 아군을 회복하거나 전투 보조 효과를 제공합니다."]
     ]
   },
   assassin: {
     label: "암살자",
     role: "다중 표식 / 그림자 처형",
     summary: "여러 적에게 사신 표식을 새긴 뒤 그림자 찌르기, 칼날 난무, 연막 분신으로 표식을 터뜨리는 기동 폭딜 직업입니다.",
-    passive: "표식 대상에게 그림자 추가타가 발생하고, 체력이 낮은 적에게 처형 피해가 강해집니다.",
     skills: [
-      ["Q", "칼날 난무"],
-      ["E", "사신 표식"],
-      ["R", "그림자 찌르기"],
-      ["F", "연막"]
+      ["Q", "칼날 난무", "짧은 범위에서 여러 번 베어 근접한 적과 표식 대상을 빠르게 마무리합니다."],
+      ["E", "사신 표식", "대상에게 표식을 남깁니다. 표식 후 첫 타격은 1.5배 피해로 소모됩니다."],
+      ["R", "그림자 찌르기", "그림자로 파고들어 직선상의 적을 관통 찌르기합니다."],
+      ["F", "연막 분신", "연막과 분신을 남겨 적을 교란하고 주변을 베어냅니다."]
     ]
   }
 };
@@ -418,16 +462,6 @@ const statusLabels = {
   gameover: "GAME OVER"
 };
 
-const rarityLabels = {
-  common: "COMMON",
-  uncommon: "UNCOMMON",
-  rare: "RARE",
-  epic: "UNIQUE",
-  unique: "UNIQUE",
-  legendary: "LEGENDARY",
-  mythic: "MYTHIC"
-};
-
 const stageNodeFallbacks = {
   combat: { label: "NORMAL", glyph: "N", text: "Standard fight with mixed enemies." },
   elite: { label: "ELITE", glyph: "E", text: "Elite enemies appear more often." },
@@ -436,7 +470,9 @@ const stageNodeFallbacks = {
   blockade: { label: "BLOCK", glyph: "K", text: "Stop runners before they reach the left gate." },
   random: { label: "RANDOM", glyph: "?", text: "Unknown room. Reveals when selected." },
   reward: { label: "REWARD", glyph: "R", text: "Collect three relic chests." },
-  boss: { label: "BOSS", glyph: "B", text: "Chapter boss." }
+  boss: { label: "BOSS", glyph: "B", text: "Chapter boss." },
+  escape: { label: "ESCAPE", glyph: "O", text: "Settle the run now and keep rewards." },
+  abyss: { label: "ABYSS", glyph: "A", text: "Enter endless depth for stronger enemies and better rewards." }
 };
 
 titleStartButton?.addEventListener("click", () => {
@@ -461,13 +497,13 @@ backToMenuButton?.addEventListener("click", () => {
 
 joinForm?.addEventListener("submit", (event) => {
   event.preventDefault();
-  connect();
+  connect({ intent: "join" });
 });
 
 roomSubmitButton?.addEventListener("click", () => {
   roomEntryMode = "join";
   updateRoomModeCopy();
-  connect();
+  connect({ intent: "join" });
 });
 
 refreshRoomsButton?.addEventListener("click", () => {
@@ -485,7 +521,7 @@ roomList?.addEventListener("click", (event) => {
   roomEntryMode = "browse";
   roomInput.value = button.dataset.room || "TAVERN";
   updateRoomModeCopy();
-  connect();
+  connect({ intent: "join" });
 });
 
 function canSendMessage() {
@@ -515,6 +551,16 @@ function renderTopHud(nextState) {
   }
   const stageLabel = nextState.room.objective?.label || nextState.room.stage?.label || nextState.room.waveTrait?.name || "";
   roomCodeEl.textContent = nextState.room.code;
+  if (nextState.room.survival?.active) {
+    const elapsed = formatDuration(nextState.room.survival.elapsed || 0);
+    const phase = nextState.room.survival.executionBossActive
+      ? "FATE EXECUTION"
+      : nextState.room.survival.executionPending
+        ? "SURVIVAL COMPLETE"
+        : stageLabel || "SURVIVE";
+    waveEl.textContent = `CH ${nextState.room.chapter || nextState.room.floor} · ${elapsed} / 9:00 · ${phase}`;
+    return;
+  }
   waveEl.textContent =
     nextState.room.status === "lobby"
       ? "LOBBY"
@@ -535,12 +581,148 @@ startButton.addEventListener("click", () => {
   sendClientMessage({ type: "start" });
 });
 
+lobbyWorkspaceNav?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-lobby-view]");
+  if (!button) return;
+  const nextView = String(button.dataset.lobbyView || "loadout");
+  if (!LOBBY_VIEW_META[nextView]) return;
+  selectedLobbyView = nextView;
+  if (["gear", "forge", "archive", "challenges"].includes(nextView)) selectedProgressionTab = nextView;
+  renderedLobbyClassDetailKey = "";
+  renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+});
+
+lobbyArenaToggle?.addEventListener("click", () => {
+  const self = getSelf();
+  if (!self || self.spectator) return;
+  lobbyArenaFocused = !lobbyArenaFocused;
+  renderLobbyArenaMode(self.classId || selectedClass, self);
+  lobbyArenaToggle.blur();
+});
+
 lobbyClassGrid.addEventListener("click", (event) => {
   const button = event.target.closest(".lobby-class-card");
-  if (!button || !canSendMessage()) return;
-  selectedClass = button.dataset.class || "warrior";
-  if (lastJoinPayload) lastJoinPayload.classId = selectedClass;
-  sendClientMessage({ type: "changeClass", classId: selectedClass });
+  if (!button) return;
+  requestLobbyClassChange(button.dataset.class || "warrior");
+});
+
+lobbyArenaClassGrid?.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-arena-class]");
+  if (!button) return;
+  requestLobbyClassChange(button.dataset.arenaClass || "warrior");
+});
+
+function requestLobbyClassChange(classId) {
+  if (!canSendMessage()) return;
+  selectedClass = classDescriptions[classId] ? classId : "warrior";
+  clearLobbyTestPending();
+  const growthLoadout = getSelectedGrowthLoadout(selectedClass);
+  if (lastJoinPayload) {
+    lastJoinPayload.classId = selectedClass;
+    lastJoinPayload.growthLoadout = growthLoadout;
+  }
+  sendClientMessage({ type: "changeClass", classId: selectedClass, growthLoadout });
+}
+
+lobbyClassDetail?.addEventListener("click", (event) => {
+  if (!canSendMessage()) return;
+  const progressionButton = event.target.closest("[data-progression-action]");
+  if (progressionButton) {
+    const action = progressionButton.dataset.progressionAction || "";
+    if (action === "tab") {
+      selectedProgressionTab = progressionButton.dataset.tab || "gear";
+      if (["gear", "forge", "archive", "challenges"].includes(selectedProgressionTab)) {
+        selectedLobbyView = selectedProgressionTab;
+      }
+      renderedLobbyClassDetailKey = "";
+      renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+      return;
+    }
+    if (saveBridge.performProgressionAction) {
+      const classId = getSelf()?.classId || selectedClass;
+      const result = saveBridge.performProgressionAction(userProgress, {
+        action,
+        classId,
+        itemId: progressionButton.dataset.itemId,
+        slot: progressionButton.dataset.slot,
+        affixIndex: progressionButton.dataset.affixIndex,
+        runeId: progressionButton.dataset.runeId,
+        runeSlot: progressionButton.dataset.runeSlot,
+        runeType: progressionButton.dataset.runeType,
+        tier: progressionButton.dataset.tier,
+        mode: progressionButton.dataset.mode,
+        recipeId: progressionButton.dataset.recipeId,
+        title: progressionButton.dataset.title,
+        skin: progressionButton.dataset.skin,
+        perkId: progressionButton.dataset.perkId,
+      });
+      userProgress = result.progress || userProgress;
+      saveUserProgress();
+      renderedLobbyClassDetailKey = "";
+      renderLobbyClassDetail(classId, getSelf());
+      flashLobbyTestControl(progressionButton);
+      if (result.affectsLoadout) sendGrowthLoadout(classId);
+    }
+    return;
+  }
+  const masteryButton = event.target.closest("[data-mastery-node]");
+  if (masteryButton) {
+    spendMasteryNode(masteryButton.dataset.masteryClass || selectedClass, masteryButton.dataset.masteryNode);
+    return;
+  }
+
+  const ascensionButton = event.target.closest("[data-ascension-delta]");
+  if (ascensionButton) {
+    selectedAscensionLevel = clamp(
+      selectedAscensionLevel + Number(ascensionButton.dataset.ascensionDelta || 0),
+      0,
+      MAX_ASCENSION_LEVEL,
+    );
+    renderedLobbyClassDetailKey = "";
+    renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+    sendGrowthLoadout(getSelf()?.classId || selectedClass);
+    return;
+  }
+
+  const skillButton = event.target.closest("[data-lobby-skill-id]");
+  if (skillButton) {
+    const nextEnabled = skillButton.dataset.enabled !== "true";
+    if (sendClientMessage({
+      type: "lobbySetSkillUpgrade",
+      upgradeId: skillButton.dataset.lobbySkillId,
+      enabled: nextEnabled
+    })) {
+      applyOptimisticLobbySkillToggle(skillButton, nextEnabled);
+      flashLobbyTestControl(skillButton);
+    }
+    return;
+  }
+
+  const relicButton = event.target.closest("[data-lobby-relic-id][data-delta]");
+  if (relicButton) {
+    const currentLevel = getLobbyRelicControlLevel(relicButton);
+    const maxLevel = getLobbyRelicControlMaxLevel(relicButton);
+    const delta = Number(relicButton.dataset.delta || 0);
+    const nextLevel = clamp(currentLevel + delta, 0, maxLevel);
+    if (nextLevel === currentLevel) return;
+    if (sendClientMessage({
+      type: "lobbySetRelicLevel",
+      relicId: relicButton.dataset.lobbyRelicId,
+      level: nextLevel
+    })) {
+      applyOptimisticLobbyRelicLevel(relicButton, nextLevel);
+      flashLobbyTestControl(relicButton.closest(".lobby-test-relic") || relicButton);
+    }
+    return;
+  }
+
+  if (event.target.closest("[data-lobby-reset-loadout]")) {
+    const resetButton = event.target.closest("[data-lobby-reset-loadout]");
+    if (sendClientMessage({ type: "lobbyResetTestLoadout" })) {
+      applyOptimisticLobbyReset();
+      flashLobbyTestControl(resetButton);
+    }
+  }
 });
 
 readyButton.addEventListener("click", () => {
@@ -669,16 +851,15 @@ loadRooms();
 roomListRefreshTimer = window.setInterval(() => {
   if (!joinOverlay.classList.contains("hidden")) loadRooms();
 }, 2000);
+showFrontScreen("main");
+updateRoomModeCopy();
 
 function beginFrontLoading() {
-  showFrontScreen("loading");
   clearTimeout(loadingTimer);
-  loadingTimer = setTimeout(() => {
-    showFrontScreen("main");
-    updateRoomModeCopy();
-    loadRooms();
-    roomInput?.focus();
-  }, 560);
+  showFrontScreen("main");
+  updateRoomModeCopy();
+  loadRooms();
+  roomInput?.focus();
 }
 
 function showFrontScreen(screen) {
@@ -707,15 +888,13 @@ function openRoomScreen(mode) {
 function updateRoomModeCopy() {
   const mode = roomEntryMode;
   if (!roomModeLabel || !roomScreenTitle) return;
+  roomModeLabel.textContent = "";
   if (mode === "create") {
-    roomModeLabel.textContent = "CREATE ROOM";
-    roomScreenTitle.textContent = "New Party";
+    roomScreenTitle.textContent = "방 생성";
   } else if (mode === "browse") {
-    roomModeLabel.textContent = "ROOM LIST";
-    roomScreenTitle.textContent = "Open Rooms";
+    roomScreenTitle.textContent = "열린 방";
   } else {
-    roomModeLabel.textContent = "ROOM ACCESS";
-    roomScreenTitle.textContent = "Enter Gate";
+    roomScreenTitle.textContent = "방 입장";
   }
 }
 
@@ -723,7 +902,7 @@ function createRoomAndEnter() {
   roomEntryMode = "create";
   roomInput.value = generateRoomCode();
   updateRoomModeCopy();
-  connect();
+  connect({ intent: "create" });
 }
 
 function generateRoomCode() {
@@ -743,23 +922,25 @@ async function loadRooms() {
     const data = await response.json();
     renderRoomList(data.rooms || []);
   } catch {
-    roomList.innerHTML = `<div class="empty-rooms">방 목록을 불러오지 못했습니다. Refresh를 눌러 다시 확인하세요.</div>`;
+    roomList.innerHTML = `<div class="empty-rooms">불러오기 실패</div>`;
   }
 }
 
 function renderRoomList(rooms) {
   if (!roomList) return;
   if (!rooms.length) {
-    roomList.innerHTML = `<div class="empty-rooms">열린 방이 없습니다. New Room으로 파티를 만들 수 있습니다.</div>`;
+    roomList.innerHTML = `<div class="empty-rooms">열린 방 없음</div>`;
     return;
   }
 
   roomList.innerHTML = rooms
     .map((room) => {
       const full = room.playerCount >= room.maxPlayers;
-      const status = room.status === "lobby" ? "LOBBY" : `STAGE ${room.wave} / ${statusLabels[room.status] || room.status}`;
+      const status = room.status === "lobby" ? "준비중" : `STAGE ${room.wave} / ${statusLabels[room.status] || room.status}`;
+      const accent = room.status === "lobby" ? "joinable" : "running";
       return `
-        <button class="room-card ${full ? "full" : ""}" type="button" data-room="${escapeHtml(room.code)}" ${full ? "disabled" : ""}>
+        <button class="room-card ${accent} ${full ? "full" : ""}" type="button" data-room="${escapeHtml(room.code)}" ${full ? "disabled" : ""}>
+          <span class="room-card-mark" aria-hidden="true">${full ? "■" : "△"}</span>
           <span>
             <strong>${escapeHtml(room.code)}</strong>
             <small>${escapeHtml(room.hostName || "NO HOST")} · ${escapeHtml(status)}</small>
@@ -771,10 +952,54 @@ function renderRoomList(rooms) {
     .join("");
 }
 
+function resetToRoomEntry(message = "") {
+  clearLobbyTestPending();
+  state = null;
+  selfId = null;
+  lastRoomStatus = "";
+  activeChoiceKey = "";
+  pendingChoiceKey = "";
+  activeSkillChoiceKey = "";
+  pendingSkillChoiceKey = "";
+  activeMapChoiceKey = "";
+  pendingMapChoiceKey = "";
+  renderedMapChoicesKey = "";
+  renderedMapBoardKey = "";
+  renderedLobbyClassDetailKey = "";
+  localMapVote = "";
+  localMapVoteAt = 0;
+  visuals.players.clear();
+  visuals.enemies.clear();
+  visuals.projectiles.clear();
+  visuals.hazards.clear();
+  visuals.chests.clear();
+  visuals.xpOrbs.clear();
+  floatingEffects.length = 0;
+  seenEffectIds.clear();
+  lobbyPanel?.classList.add("hidden");
+  choiceOverlay?.classList.add("hidden");
+  skillOverlay?.classList.add("hidden");
+  mapOverlay?.classList.add("hidden");
+  resultOverlay?.classList.add("hidden");
+  centerBanner?.classList.add("hidden");
+  if (partyList) partyList.innerHTML = "";
+  if (skillDock) skillDock.innerHTML = "";
+  if (relicDock) {
+    relicDock.classList.add("hidden");
+    relicDock.innerHTML = "";
+  }
+  if (roomCodeEl) roomCodeEl.textContent = "----";
+  if (waveEl) waveEl.textContent = "LOBBY";
+  joinOverlay.classList.remove("hidden");
+  showFrontScreen("main");
+  if (message) setConnectionLabel(message);
+}
+
 function connect(options = {}) {
   const payload = options.payload || null;
   const playerName = payload?.name || (nameInput?.value || "Player").trim().slice(0, 16) || "Player";
   const roomCode = normalizeRoomCode(payload?.room || roomInput?.value || "");
+  const intent = payload?.intent || options.intent || (roomEntryMode === "create" ? "create" : "join");
   if (!roomCode) {
     setConnectionLabel("ROOM CODE NEEDED");
     roomInput?.focus();
@@ -792,7 +1017,9 @@ function connect(options = {}) {
   lastJoinPayload = {
     name: playerName,
     room: roomCode,
-    classId: payload?.classId || selectedClass
+    classId: payload?.classId || selectedClass,
+    growthLoadout: payload?.growthLoadout || getSelectedGrowthLoadout(payload?.classId || selectedClass),
+    intent
   };
 
   const protocol = location.protocol === "https:" ? "wss" : "ws";
@@ -808,7 +1035,9 @@ function connect(options = {}) {
       type: "join",
       name: joinPayload.name,
       room: joinPayload.room,
-      classId: joinPayload.classId
+      classId: joinPayload.classId,
+      growthLoadout: joinPayload.growthLoadout || getSelectedGrowthLoadout(joinPayload.classId || selectedClass),
+      intent: joinPayload.intent || "join"
     });
   });
 
@@ -828,6 +1057,7 @@ function connect(options = {}) {
     }
     if (message.type === "joined") {
       selfId = message.id;
+      if (lastJoinPayload) lastJoinPayload.intent = "join";
       joinOverlay.classList.add("hidden");
       setConnectionLabel("ONLINE");
       clientDiagnostics.socket = "online";
@@ -837,15 +1067,15 @@ function connect(options = {}) {
     }
 
     if (message.type === "error") {
-      setConnectionLabel(message.message);
-      joinOverlay.classList.remove("hidden");
-      showFrontScreen("main");
+      lastJoinPayload = null;
+      resetToRoomEntry(message.message || "입장 실패");
       return;
     }
 
     if (message.type === "state") {
       state = message;
       selfId = message.selfId;
+      reconcileLobbyTestPending(getSelf(), message.room);
       syncVisuals(message);
       ingestEffects(message.effects || []);
 
@@ -997,6 +1227,7 @@ function updateUserProgress(patch = {}) {
 
 function resetUserProgress() {
   userProgress = saveBridge.resetUserProgress ? saveBridge.resetUserProgress() : loadUserProgress();
+  selectedAscensionLevel = 0;
   clientDiagnostics.progressSaveFailed = false;
   return structuredCloneSafe(userProgress);
 }
@@ -1017,6 +1248,7 @@ function importUserProgress(snapshot = {}) {
     }
   }
   saveUserProgress();
+  selectedAscensionLevel = clamp(Number(userProgress.records?.highestAscension || 0) || 0, 0, MAX_ASCENSION_LEVEL);
   return structuredCloneSafe(userProgress);
 }
 
@@ -1024,7 +1256,208 @@ function recordUserRunResult(result = {}) {
   userProgress = saveBridge.recordRunResult ? saveBridge.recordRunResult(userProgress, result) : normalizeProgress(userProgress);
   saveUserProgress();
   clientDiagnostics.progressRuns = userProgress.statistics?.runs || 0;
+  renderedLobbyClassDetailKey = "";
   return structuredCloneSafe(userProgress);
+}
+
+function getSelectedAscensionLevel() {
+  return clamp(Math.floor(Number(selectedAscensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
+}
+
+function getSelectedGrowthLoadout(classId = selectedClass) {
+  const safeClassId = classDescriptions[classId] ? classId : "warrior";
+  if (saveBridge.getGrowthLoadout) {
+    return saveBridge.getGrowthLoadout(userProgress, safeClassId, getSelectedAscensionLevel());
+  }
+  return {
+    version: saveBridge.SAVE_VERSION || 1,
+    classId: safeClassId,
+    accountLevel: userProgress.account?.level || 1,
+    ascensionLevel: getSelectedAscensionLevel(),
+    points: 0,
+    nodes: {},
+    bonuses: {}
+  };
+}
+
+function sendGrowthLoadout(classId = selectedClass) {
+  if (!canSendMessage()) return false;
+  const growthLoadout = getSelectedGrowthLoadout(classId);
+  if (lastJoinPayload) {
+    lastJoinPayload.classId = growthLoadout.classId;
+    lastJoinPayload.growthLoadout = growthLoadout;
+  }
+  return sendClientMessage({ type: "setGrowthLoadout", growthLoadout });
+}
+
+function spendMasteryNode(classId = selectedClass, nodeId = "attack") {
+  if (!saveBridge.spendMasteryPoint) return false;
+  const result = saveBridge.spendMasteryPoint(userProgress, classId, nodeId);
+  userProgress = result.progress || userProgress;
+  saveUserProgress();
+  renderedLobbyClassDetailKey = "";
+  const self = getSelf();
+  renderLobbyClassDetail(self?.classId || classId, self);
+  if (result.spent) {
+    sendGrowthLoadout(classId);
+  }
+  const button = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(nodeId)}"]`);
+  flashLobbyTestControl(button || lobbyClassDetail);
+  return Boolean(result.spent);
+}
+
+function getGrowthRenderKey(classId) {
+  const loadout = getSelectedGrowthLoadout(classId);
+  const currency = Number(userProgress.currencies?.abyssShards || 0);
+  const accountLevel = Number(userProgress.account?.level || 1);
+  const accountXp = Number(userProgress.account?.xp || 0);
+  const nodeKey = masteryNodeDefs
+    .map((node) => `${node.id}:${Number(loadout.nodes?.[node.id] || 0)}`)
+    .join(",");
+  const progressionKey = saveBridge.getProgressionRenderKey
+    ? saveBridge.getProgressionRenderKey(userProgress, classId, selectedProgressionTab)
+    : "";
+  return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|${nodeKey}|${progressionKey}`;
+}
+
+function renderGrowthMasteryPanel(self, classId) {
+  if (self?.spectator) return "";
+  const safeClassId = classDescriptions[classId] ? classId : "warrior";
+  const progress = normalizeProgress(userProgress);
+  const loadout = getSelectedGrowthLoadout(safeClassId);
+  const shards = Number(progress.currencies?.abyssShards || 0);
+  const accountLevel = Number(progress.account?.level || 1);
+  const accountXp = Number(progress.account?.xp || 0);
+  const xpToNext = saveBridge.getAccountXpToNext ? saveBridge.getAccountXpToNext(accountLevel) : 100 + accountLevel * 40;
+  const xpPct = clamp01(accountXp / Math.max(1, xpToNext));
+  const maxReachedAscension = Number(progress.records?.highestAscension || 0);
+  const nodeRows = masteryNodeDefs
+    .map((node) => {
+      const level = Number(loadout.nodes?.[node.id] || 0);
+      const cost = saveBridge.getMasteryNodeCost ? saveBridge.getMasteryNodeCost(progress, safeClassId, node.id) : 9999;
+      const nextNodes = { ...(loadout.nodes || {}), [node.id]: level + 1 };
+      const nextBonuses = saveBridge.calculateGrowthBonuses
+        ? saveBridge.calculateGrowthBonuses(safeClassId, nextNodes)
+        : loadout.bonuses || {};
+      const preview = getMasteryPreviewLabel(node.id, safeClassId, loadout.bonuses || {}, nextBonuses);
+      const affordable = shards >= cost;
+      return `
+        <article class="growth-node ${affordable ? "" : "locked"}">
+          <div class="growth-node-main">
+            <div>
+              <strong>${escapeHtml(node.label || node.id)}</strong>
+              <span>${escapeHtml(node.description || "")}</span>
+            </div>
+            <em>Lv.${level}</em>
+          </div>
+          <div class="growth-node-foot">
+            <small>${escapeHtml(preview)}</small>
+            <button
+              type="button"
+              data-mastery-class="${escapeHtml(safeClassId)}"
+              data-mastery-node="${escapeHtml(node.id)}"
+              ${affordable ? "" : "disabled"}
+            >${cost} 파편</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+  return `
+    <section class="growth-mastery-panel" aria-label="Permanent growth">
+      <div class="growth-mastery-head">
+        <div>
+          <strong>성장 / 숙련</strong>
+          <span>영구 적용 · 초기화 없음 · 점감 성장</span>
+        </div>
+        <div class="growth-shards">
+          <small>심연 파편</small>
+          <b>${shards}</b>
+        </div>
+      </div>
+      <div class="growth-account-row">
+        <span>계정 Lv.${accountLevel}</span>
+        <i><b style="width:${Math.round(xpPct * 100)}%"></b></i>
+        <em>${accountXp}/${xpToNext} XP</em>
+      </div>
+      <div class="growth-bonus-list">
+        ${renderGrowthBonusChips(safeClassId, loadout.bonuses || {})}
+      </div>
+      <div class="growth-node-list">
+        ${nodeRows}
+      </div>
+      <div class="growth-ascension">
+        <div>
+          <strong>승천 ${getSelectedAscensionLevel()}</strong>
+          <span>최고 기록 ${maxReachedAscension} · 높을수록 적이 강해지고 보상이 증가</span>
+        </div>
+        <div class="growth-ascension-controls">
+          <button type="button" data-ascension-delta="-1" ${getSelectedAscensionLevel() <= 0 ? "disabled" : ""}>-</button>
+          <button type="button" data-ascension-delta="1" ${getSelectedAscensionLevel() >= MAX_ASCENSION_LEVEL ? "disabled" : ""}>+</button>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderGrowthBonusChips(classId, bonuses) {
+  const chips = [
+    ["피해", formatSignedPercent((bonuses.damageMul || 1) - 1)],
+    ["체력", formatSignedPercent((bonuses.maxHpMul || 1) - 1)],
+    ["속도", formatSignedPercent((bonuses.speedMul || 1) - 1)],
+    ["쿨감", formatSignedPercent(1 - (bonuses.skillCooldownMul || 1))]
+  ];
+  if (classId === "warrior") {
+    chips.push(["방어", formatSignedFlat(bonuses.armorBonus || 0)]);
+    chips.push(["도발", formatSignedPercent((bonuses.tauntRangeMul || 1) - 1)]);
+  } else if (classId === "ranger") {
+    chips.push(["치명", formatSignedPercent(bonuses.critChanceBonus || 0)]);
+    chips.push(["화살", formatSignedPercent((bonuses.projectileSpeedMul || 1) - 1)]);
+  } else if (classId === "mage") {
+    chips.push(["스킬", formatSignedPercent((bonuses.skillDamageMul || 1) - 1)]);
+    chips.push(["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)]);
+  } else if (classId === "engineer") {
+    chips.push(["설치물", formatSignedPercent((bonuses.constructDamageMul || 1) - 1)]);
+    chips.push(["드론", formatSignedPercent(1 - (bonuses.droneCooldownMul || 1))]);
+  }
+  return chips
+    .map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`)
+    .join("");
+}
+
+function getMasteryPreviewLabel(nodeId, classId, before, after) {
+  const previewByNode = {
+    attack: ["피해", (after.damageMul || 1) - (before.damageMul || 1)],
+    survival: ["체력", (after.maxHpMul || 1) - (before.maxHpMul || 1)],
+    speed: ["쿨감", (before.skillCooldownMul || 1) - (after.skillCooldownMul || 1)],
+    special: getClassSpecialPreview(classId, before, after)
+  };
+  const preview = previewByNode[nodeId] || ["성장", 0];
+  if (preview[2] === "flat") return `${preview[0]} ${formatSignedFlat(preview[1])}`;
+  return `${preview[0]} ${formatSignedPercent(preview[1])}`;
+}
+
+function getClassSpecialPreview(classId, before, after) {
+  if (classId === "warrior") return ["방어", (after.armorBonus || 0) - (before.armorBonus || 0), "flat"];
+  if (classId === "ranger") return ["치명", (after.critChanceBonus || 0) - (before.critChanceBonus || 0)];
+  if (classId === "mage") return ["스킬", (after.skillDamageMul || 1) - (before.skillDamageMul || 1)];
+  if (classId === "engineer") return ["설치물", (after.constructDamageMul || 1) - (before.constructDamageMul || 1)];
+  return ["특화", (after.damageMul || 1) - (before.damageMul || 1)];
+}
+
+function formatSignedPercent(value) {
+  const pct = Math.round(Number(value || 0) * 1000) / 10;
+  return `${pct >= 0 ? "+" : ""}${pct}%`;
+}
+
+function formatSignedFlat(value) {
+  const rounded = Math.round(Number(value || 0) * 10) / 10;
+  return `${rounded >= 0 ? "+" : ""}${rounded}`;
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(String(value));
+  return String(value).replace(/["\\\]]/g, "\\$&");
 }
 
 function applyRuntimeSettings() {
@@ -1210,8 +1643,10 @@ function cleanupClientRuntime() {
 }
 
 function updateUi(nextState) {
+  recordProgressDiscoveries(nextState);
   const self = getSelf();
   renderTopHud(nextState);
+  renderRunContextHud(nextState);
   startButton.classList.add("hidden");
   startButton.textContent = "START RUN";
   partyList.classList.toggle("lobby-hidden", nextState.room.status === "lobby");
@@ -1232,7 +1667,7 @@ function updateUi(nextState) {
           <div class="avatar" style="background:${escapeHtml(player.color)}">${player.icon}</div>
           <div>
             <div class="party-name">
-              <strong>${escapeHtml(player.name)}</strong>
+              <strong>${player.title ? `<span class="player-title">[${escapeHtml(player.title)}]</span> ` : ""}${escapeHtml(player.name)}</strong>
               <span>${escapeHtml(levelLabel)}</span>
             </div>
             <div class="party-hp" aria-label="체력">
@@ -1259,13 +1694,20 @@ function renderLobbyPanel(nextState, self) {
   if (!lobbyPanel) return;
   const inLobby = nextState.room.status === "lobby";
   lobbyPanel.classList.toggle("hidden", !inLobby);
-  if (!inLobby) return;
+  if (!inLobby) {
+    lobbyArenaFocused = false;
+    renderedLobbyArenaKey = "";
+    lobbyPanel.classList.remove("arena-focus");
+    lobbyArenaDock?.classList.add("hidden");
+    renderedLobbyClassDetailKey = "";
+    return;
+  }
 
   const readyCount = Number(nextState.room.readyCount || 0);
   const playerCount = Number(nextState.room.playerCount || nextState.players.filter((player) => !player.spectator).length || 0);
   const spectatorCount = Number(nextState.room.spectatorCount || 0);
   const isHost = selfId === nextState.room.hostId;
-  lobbyReadyCount.textContent = `${readyCount}/${playerCount} READY${spectatorCount ? ` · ${spectatorCount} WATCHING` : ""}`;
+  lobbyReadyCount.textContent = `${readyCount}/${playerCount} READY${spectatorCount ? ` · 관전 ${spectatorCount}` : ""}`;
 
   if (lobbyController?.applyClassCards) {
     lobbyController.applyClassCards(lobbyClassCards, self, classDescriptions);
@@ -1287,21 +1729,24 @@ function renderLobbyPanel(nextState, self) {
     });
   }
 
-  renderLobbyClassDetail(self?.classId || selectedClass);
+  const activeClassId = self?.classId || selectedClass;
+  renderLobbyArenaMode(activeClassId, self);
+  renderLobbyWorkspaceChrome(activeClassId, self);
+  renderLobbyClassDetail(activeClassId, self);
 
   if (spectatorButton) {
     spectatorButton.classList.toggle("spectating", Boolean(self?.spectator));
     spectatorButton.disabled = !self;
-    spectatorButton.textContent = self?.spectator ? "PLAY" : "SPECTATE";
+    spectatorButton.textContent = self?.spectator ? "전투 참가" : "관전 모드";
   }
 
   readyButton.disabled = !self || Boolean(self?.spectator);
   readyButton.classList.toggle("ready", Boolean(self?.ready));
-  readyButton.textContent = self?.spectator ? "WATCHING" : self?.ready ? "CANCEL READY" : "READY";
+  readyButton.textContent = self?.spectator ? "관전 중" : self?.ready ? "준비 취소" : "준비 완료";
 
   lobbyStartButton.classList.toggle("hidden", !isHost);
   lobbyStartButton.disabled = !nextState.room.canStart;
-  lobbyStartButton.textContent = nextState.room.allReady ? "START RUN" : "WAITING READY";
+  lobbyStartButton.textContent = nextState.room.allReady ? "게임 시작" : "준비 대기";
 
   if (lobbyBotControl) {
     lobbyBotControl.classList.toggle("hidden", !isHost);
@@ -1337,7 +1782,7 @@ function renderLobbyPanel(nextState, self) {
           <div class="lobby-row-main">
             <div class="avatar" style="background:${escapeHtml(player.color)}">${escapeHtml(player.icon)}</div>
             <div>
-              <strong>${escapeHtml(player.name)}${escapeHtml(nameSuffix)}</strong>
+              <strong>${player.title ? `<span class="player-title">[${escapeHtml(player.title)}]</span> ` : ""}${escapeHtml(player.name)}${escapeHtml(nameSuffix)}</strong>
               <small>${escapeHtml(player.classLabel)} · ${escapeHtml(detail)}</small>
             </div>
           </div>
@@ -1348,11 +1793,91 @@ function renderLobbyPanel(nextState, self) {
     .join("");
 }
 
+function renderLobbyArenaMode(classId, self = null) {
+  if (!lobbyPanel) return;
+  const canTest = Boolean(self && !self.spectator);
+  if (!canTest) lobbyArenaFocused = false;
+  const safeClassId = classDescriptions[classId] ? classId : "warrior";
+  const meta = classDescriptions[safeClassId] || classDescriptions.warrior;
+
+  lobbyPanel.classList.toggle("arena-focus", lobbyArenaFocused);
+  lobbyArenaDock?.classList.toggle("hidden", !lobbyArenaFocused);
+  if (lobbyArenaToggle) {
+    lobbyArenaToggle.disabled = !canTest;
+    lobbyArenaToggle.textContent = lobbyArenaFocused ? "설정 열기" : "훈련장 보기";
+    lobbyArenaToggle.setAttribute("aria-pressed", String(lobbyArenaFocused));
+  }
+  if (lobbyArenaClassName) lobbyArenaClassName.textContent = meta.label;
+  if (lobbyArenaClassRole) lobbyArenaClassRole.textContent = meta.role;
+  lobbyArenaClassGrid?.querySelectorAll("[data-arena-class]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.arenaClass === safeClassId);
+    button.disabled = !canTest;
+  });
+
+  const renderKey = `${safeClassId}|${(meta.skills || []).map((skill) => skill.slice(0, 2).join(":")).join("|")}`;
+  if (!lobbyArenaSkillList || renderedLobbyArenaKey === renderKey) return;
+  renderedLobbyArenaKey = renderKey;
+  lobbyArenaSkillList.innerHTML = (meta.skills || [])
+    .map(
+      ([key, name, detail]) =>
+        `<span title="${escapeHtml(detail || name)}"><b>${escapeHtml(key)}</b><strong>${escapeHtml(name)}</strong></span>`
+    )
+    .join("");
+}
+
+function renderLobbyWorkspaceChrome(classId, self = null) {
+  const safeClassId = classDescriptions[classId] ? classId : "warrior";
+  const classMeta = classDescriptions[safeClassId] || classDescriptions.warrior;
+  const viewMeta = LOBBY_VIEW_META[selectedLobbyView] || LOBBY_VIEW_META.loadout;
+  const progress = normalizeProgress(userProgress);
+  const challenge = saveBridge.getActiveChallenge ? saveBridge.getActiveChallenge(progress) : { mode: "standard" };
+  const modeLabels = { standard: "일반 원정", daily: "일일 도전", weekly: "주간 도전" };
+  const inventoryCount = Number(progress.inventory?.items?.length || 0) + Number(progress.inventory?.runes?.length || 0);
+  const equipped = progress.equipment?.[safeClassId] || {};
+  const equippedCount = [equipped.weapon, equipped.armor, equipped.charm, equipped.core, ...(equipped.runes || [])].filter(Boolean).length;
+
+  if (lobbyWorkspace) lobbyWorkspace.dataset.view = selectedLobbyView;
+  lobbyWorkspaceNav?.querySelectorAll("[data-lobby-view]").forEach((button) => {
+    const active = button.dataset.lobbyView === selectedLobbyView;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+  });
+  if (lobbyWorkspaceKicker) lobbyWorkspaceKicker.textContent = viewMeta.kicker;
+  if (lobbyWorkspaceTitle) lobbyWorkspaceTitle.textContent = viewMeta.title;
+
+  const classViews = new Set(["loadout", "growth", "gear", "forge", "training"]);
+  const subtitles = {
+    archive: `계정 Lv.${Number(progress.account?.level || 1)} · 원정과 수집 기록`,
+    challenges: `${modeLabels[challenge.mode] || modeLabels.standard} · 반복 작전 관리`
+  };
+  if (lobbyWorkspaceSubtitle) {
+    lobbyWorkspaceSubtitle.textContent = self?.spectator
+      ? "관전자 모드에서는 성장과 장비를 변경할 수 없습니다."
+      : classViews.has(selectedLobbyView)
+        ? `${classMeta.label} · ${classMeta.role}`
+        : subtitles[selectedLobbyView] || classMeta.summary;
+  }
+
+  if (!lobbyWorkspaceMetrics) return;
+  const metricsByView = {
+    loadout: [["직업", classMeta.label], ["준비", self?.ready ? "완료" : "대기"]],
+    growth: [["심연 파편", Number(progress.currencies?.abyssShards || 0).toLocaleString()], ["최고 승천", Number(progress.records?.highestAscension || 0)]],
+    gear: [["장착", `${equippedCount}/7`], ["보관", inventoryCount]],
+    forge: [["강화석", Number(progress.currencies?.enhancementStones || 0).toLocaleString()], ["재련 가루", Number(progress.currencies?.reforgingDust || 0).toLocaleString()]],
+    archive: [["최고 심연", Number(progress.records?.highestAbyssDepth || 0)], ["업적", Object.keys(progress.achievements || {}).length]],
+    challenges: [["작전", modeLabels[challenge.mode] || modeLabels.standard], ["시즌", `Lv.${Number(progress.challenges?.season?.level || 1)}`]],
+    training: [["직업", classMeta.label], ["모드", "로비 테스트"]]
+  };
+  lobbyWorkspaceMetrics.innerHTML = (metricsByView[selectedLobbyView] || metricsByView.loadout)
+    .map(([label, value]) => `<span><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong></span>`)
+    .join("");
+}
+
 function getCompactClassSummary(classId) {
   const summaries = {
     warrior: "도발, 방패 돌진, 광역 베기로 파티 앞줄을 담당.",
     ranger: "긴 사거리, 2단 대시, 화살비로 안전하게 누적딜.",
-    mage: "빙결, 운석, 연쇄 번개로 큰 웨이브를 폭발 처리.",
+    mage: "냉기 파동, 운석, 연쇄 번개로 큰 웨이브를 폭발 처리.",
     engineer: "터렛, 지뢰, 드론을 깔아 구역을 장악.",
     puppeteer: "실표식을 쌓고 인형/결계/교대로 폭발.",
     martialist: "연격으로 기력을 쌓아 강화 스킬 사용.",
@@ -1362,9 +1887,37 @@ function getCompactClassSummary(classId) {
   return summaries[classId] || "대기방에서 모든 스킬을 테스트할 수 있습니다.";
 }
 
-function renderLobbyClassDetail(classId) {
+function renderLobbyClassDetail(classId, self = null) {
   if (!lobbyClassDetail) return;
+  renderLobbyWorkspaceChrome(classId, self);
+  const renderKey = getLobbyClassDetailRenderKey(classId, self);
+  if (renderedLobbyClassDetailKey === renderKey) return;
+  renderedLobbyClassDetailKey = renderKey;
   const meta = classDescriptions[classId] || classDescriptions.warrior;
+  if (self?.spectator && selectedLobbyView !== "loadout") {
+    lobbyClassDetail.innerHTML = `<div class="lobby-workspace-empty"><strong>관전자 모드</strong><p>성장, 장비, 제작 설정은 플레이어로 참가한 뒤 변경할 수 있습니다.</p></div>`;
+    return;
+  }
+
+  if (selectedLobbyView === "growth") {
+    lobbyClassDetail.innerHTML = renderGrowthMasteryPanel(self, classId);
+    return;
+  }
+  if (["gear", "forge", "archive", "challenges"].includes(selectedLobbyView)) {
+    lobbyClassDetail.innerHTML = saveBridge.renderProgressionPanel
+      ? saveBridge.renderProgressionPanel(userProgress, {
+          classId,
+          activeTab: selectedLobbyView,
+          leaderboards: state?.room?.challengeLeaderboard || [],
+          embedded: true
+        })
+      : `<div class="lobby-workspace-empty"><strong>진행도 불러오는 중</strong></div>`;
+    return;
+  }
+  if (selectedLobbyView === "training") {
+    lobbyClassDetail.innerHTML = renderLobbyTestCustomizer(self) || `<div class="lobby-workspace-empty"><strong>훈련 설정 없음</strong></div>`;
+    return;
+  }
   if (lobbyController?.renderClassDetail) {
     lobbyClassDetail.innerHTML = lobbyController.renderClassDetail(meta);
     return;
@@ -1378,13 +1931,406 @@ function renderLobbyClassDetail(classId) {
       <strong>스킬 전체 해금</strong>
     </div>
     <p>${escapeHtml(meta.summary)}</p>
-    <p class="lobby-class-passive"><b>패시브</b> ${escapeHtml(meta.passive)}</p>
     <div class="lobby-skill-tags">
       ${meta.skills
-        .map(([key, name]) => `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b>${escapeHtml(name)}</span>`)
+        .map(
+          ([key, name, detail]) =>
+            `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
+              detail ? `<small>${escapeHtml(detail)}</small>` : ""
+            }</span></span>`
+        )
         .join("")}
     </div>
   `;
+}
+
+function recordProgressDiscoveries(nextState) {
+  if (!saveBridge.recordWorldDiscoveries) return;
+  const result = saveBridge.recordWorldDiscoveries(userProgress, { ...nextState, selfId });
+  if (!result.changed) return;
+  userProgress = result.progress || userProgress;
+  saveUserProgress();
+}
+
+function getLobbyClassDetailRenderKey(classId, self) {
+  const growthKey = getGrowthRenderKey(classId);
+  if (!self || self.spectator || !self.lobbyTest) {
+    return `${selectedLobbyView}|${classId}|${self?.spectator ? "spectator" : "empty"}|${growthKey}`;
+  }
+  const lobbyTest = getLobbyTestWithPending(self);
+  const baseKey = (lobbyTest.baseSkills || [])
+    .map((skill) => `${skill.slot}:${skill.id}:${skill.name}`)
+    .join(",");
+  const skillKey = (lobbyTest.skills || [])
+    .map((skill) => `${skill.id}:${skill.baseSlot || skill.slot || ""}:${skill.enabled ? 1 : 0}`)
+    .join(",");
+  const relicKey = (lobbyTest.relics || [])
+    .map((relic) => `${relic.id}:${Math.max(0, Number(relic.level || 0))}`)
+    .join(",");
+  return `${selectedLobbyView}|${classId}|${baseKey}|${skillKey}|${relicKey}|${growthKey}`;
+}
+
+function renderLobbyTestCustomizer(self) {
+  if (!self || self.spectator || !self.lobbyTest) return "";
+  const lobbyTest = getLobbyTestWithPending(self);
+  const baseSkills = Array.isArray(lobbyTest.baseSkills) ? lobbyTest.baseSkills : [];
+  const skills = Array.isArray(lobbyTest.skills) ? lobbyTest.skills : [];
+  const relics = Array.isArray(lobbyTest.relics) ? lobbyTest.relics : [];
+  return `
+    <section class="lobby-test-customizer" aria-label="Lobby test loadout">
+      <div class="lobby-test-head">
+        <div>
+          <strong>테스트 세팅</strong>
+          <span>대기방에서만 적용 · 시작하면 1레벨 초기화</span>
+        </div>
+        <button class="lobby-test-reset" type="button" data-lobby-reset-loadout>초기화</button>
+      </div>
+      <div class="lobby-test-section">
+        <div class="lobby-test-label">
+          <span>스킬 강화</span>
+          <small>기본 스킬은 고정, 강화만 토글</small>
+        </div>
+        <div class="lobby-test-skill-groups">
+          ${renderLobbySkillGroups(baseSkills, skills)}
+        </div>
+      </div>
+      <div class="lobby-test-section">
+        <div class="lobby-test-label">렐릭 중첩</div>
+        <div class="lobby-test-relic-list">
+          ${relics.map(renderLobbyRelicTestItem).join("")}
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+function renderLobbySkillGroups(baseSkills, skills) {
+  const groups = new Map();
+  const baseById = new Map((baseSkills || []).map((baseSkill) => [String(baseSkill.id || ""), baseSkill]));
+  for (const skill of skills || []) {
+    const requiredBase = (skill.requires || []).map((id) => baseById.get(String(id))).find(Boolean);
+    const baseSlot = skill.baseSlot || requiredBase?.slot || skill.slot || "up";
+    const slot = String(baseSlot).toLowerCase();
+    if (!groups.has(slot)) groups.set(slot, []);
+    groups.get(slot).push({
+      ...skill,
+      baseSlot,
+      baseSkillName: skill.baseSkillName || requiredBase?.name || ""
+    });
+  }
+
+  const renderedBaseGroups = (baseSkills || [])
+    .map((baseSkill) => renderLobbySkillGroup(baseSkill, groups.get(String(baseSkill.slot || "").toLowerCase()) || []))
+    .join("");
+  const orphanUpgrades = groups.get("up") || [];
+  const renderedOrphans = orphanUpgrades.length
+    ? `
+      <article class="lobby-test-skill-group">
+        <div class="lobby-test-base-skill">
+          <span class="lobby-test-slot fixed">UP</span>
+          <span class="lobby-test-base-copy">
+            <strong>기타 강화</strong>
+            <em>기본 스킬 정보 없이 받은 강화</em>
+          </span>
+          <span class="lobby-test-fixed-state">강화</span>
+        </div>
+        <div class="lobby-test-upgrade-list">
+          ${orphanUpgrades.map(renderLobbySkillTestItem).join("")}
+        </div>
+      </article>
+    `
+    : "";
+  return renderedBaseGroups || renderedOrphans
+    ? `${renderedBaseGroups}${renderedOrphans}`
+    : `<div class="lobby-test-empty-upgrades">표시할 강화가 없음</div>`;
+}
+
+function renderLobbySkillGroup(baseSkill, upgrades) {
+  const slotLabel = String(baseSkill.slot || "?").toUpperCase();
+  return `
+    <article class="lobby-test-skill-group">
+      <div class="lobby-test-base-skill" title="${escapeHtml(baseSkill.text || "")}">
+        <span class="lobby-test-slot fixed">${escapeHtml(slotLabel)}</span>
+        <span class="lobby-test-base-copy">
+          <strong>${escapeHtml(baseSkill.name || `${slotLabel} Skill`)}</strong>
+          <em>기본 스킬 · 항상 ON</em>
+        </span>
+        <span class="lobby-test-fixed-state">고정 ON</span>
+      </div>
+      <div class="lobby-test-upgrade-list">
+        ${upgrades.length ? upgrades.map(renderLobbySkillTestItem).join("") : `<div class="lobby-test-empty-upgrades">강화 없음</div>`}
+      </div>
+    </article>
+  `;
+}
+
+function renderLobbySkillTestItem(skill) {
+  const enabled = Boolean(skill.enabled);
+  const slotLabel = skill.baseSlot ? String(skill.baseSlot).toUpperCase() : "UP";
+  const baseName = skill.baseSkillName || "Skill";
+  const title = `${skill.name || "Skill"}\n${skill.text || ""}`;
+  return `
+    <button
+      class="lobby-test-skill ${enabled ? "enabled" : "off"}"
+      type="button"
+      data-lobby-skill-id="${escapeHtml(skill.id)}"
+      data-enabled="${enabled ? "true" : "false"}"
+      aria-pressed="${enabled ? "true" : "false"}"
+      title="${escapeHtml(title)}"
+    >
+      <span class="lobby-test-slot">${escapeHtml(slotLabel)}</span>
+      <span class="lobby-test-skill-copy">
+        <em>${escapeHtml(`${slotLabel} · ${baseName}`)}</em>
+        <strong>${escapeHtml(skill.name || skill.id)}</strong>
+      </span>
+      <span class="lobby-test-state" data-lobby-skill-state>${enabled ? "ON" : "OFF"}</span>
+    </button>
+  `;
+}
+
+function renderLobbyRelicTestItem(relic) {
+  const maxLevel = getRelicMaxLevelValue(relic, 1);
+  const level = clamp(Math.round(Number(relic.level || 0) || 0), 0, maxLevel);
+  const tooltip = formatRelicTooltip(relic, level, maxLevel);
+  return `
+    <div
+      class="lobby-test-relic ${level > 0 ? "enabled" : ""}"
+      data-lobby-relic-row="${escapeHtml(relic.id)}"
+      data-level="${level}"
+      data-max-level="${maxLevel}"
+      title="${escapeHtml(tooltip)}"
+    >
+      <div class="lobby-test-relic-main">
+        <span class="lobby-test-relic-icon">${escapeHtml(relic.icon || "유")}</span>
+        <span>
+          <strong>${escapeHtml(relic.name || relic.id)}</strong>
+          <em>${escapeHtml(relic.target || "공용")}</em>
+        </span>
+      </div>
+      <div class="lobby-test-stepper">
+        <button
+          type="button"
+          data-lobby-relic-id="${escapeHtml(relic.id)}"
+          data-level="${level}"
+          data-delta="-1"
+          ${level <= 0 ? "disabled" : ""}
+        >-</button>
+        <b data-lobby-relic-level>${escapeHtml(formatRelicLevel(level, maxLevel))}</b>
+        <button
+          type="button"
+          data-lobby-relic-id="${escapeHtml(relic.id)}"
+          data-level="${level}"
+          data-delta="1"
+          ${level >= maxLevel ? "disabled" : ""}
+        >+</button>
+      </div>
+    </div>
+  `;
+}
+
+function getRelicMaxLevelValue(relic, fallback = 1) {
+  const maxLevel = Math.round(Number(relic?.maxLevel));
+  return Math.max(1, Number.isFinite(maxLevel) ? maxLevel : fallback);
+}
+
+function getRelicLevelValue(relic, fallback = 1) {
+  const maxLevel = getRelicMaxLevelValue(relic, fallback);
+  return clamp(Math.round(Number(relic?.level || fallback) || fallback), 0, maxLevel);
+}
+
+function getLobbyTestWithPending(self) {
+  const source = self?.lobbyTest || {};
+  reconcileLobbyTestPending(self, state?.room);
+  const sourceSkills = Array.isArray(source.skills) ? source.skills : [];
+  const baseSkills = getLobbyBaseSkillsWithFallback(self, source, sourceSkills);
+  const baseById = new Map(baseSkills.map((skill) => [String(skill.id || ""), skill]));
+  const sourceToggleSkills = sourceSkills.filter((skill) => !skill.slot);
+  const skills = sourceToggleSkills
+    .map((skill) => {
+        const pending = lobbyTestPending.skills.get(String(skill.id));
+        const requiredBase = (skill.requires || []).map((id) => baseById.get(String(id))).find(Boolean);
+        const normalized = {
+          ...skill,
+          baseSlot: skill.baseSlot || requiredBase?.slot || "",
+          baseSkillName: skill.baseSkillName || requiredBase?.name || ""
+        };
+        return pending ? { ...normalized, enabled: pending.enabled } : normalized;
+      })
+    .filter((skill) => skill.id);
+  const relics = Array.isArray(source.relics)
+    ? source.relics.map((relic) => {
+        const pending = lobbyTestPending.relics.get(String(relic.id));
+        const maxLevel = getRelicMaxLevelValue(relic, 1);
+        return pending ? { ...relic, level: clamp(pending.level, 0, maxLevel) } : relic;
+      })
+    : [];
+  return { baseSkills, skills, relics };
+}
+
+function getLobbyBaseSkillsWithFallback(self, source, sourceSkills) {
+  if (Array.isArray(source.baseSkills) && source.baseSkills.length > 0) return source.baseSkills;
+  const classId = self?.classId || selectedClass || "warrior";
+  const meta = classDescriptions[classId] || classDescriptions.warrior;
+  const qSkill = (meta.skills || []).find((skill) => String(skill[0]).toLowerCase() === "q");
+  const bySlot = new Map();
+  bySlot.set("q", {
+    id: `${classId}_primary`,
+    slot: "q",
+    name: qSkill?.[1] || "기본 공격",
+    text: qSkill?.[2] || "",
+    fixed: true
+  });
+
+  for (const skill of sourceSkills || []) {
+    if (!skill?.slot) continue;
+    bySlot.set(String(skill.slot).toLowerCase(), {
+      ...skill,
+      fixed: true
+    });
+  }
+
+  return ["q", "e", "r", "f"].map((slot) => {
+    const skill = bySlot.get(slot);
+    if (skill) return skill;
+    return {
+      id: `${classId}_${slot}_skill`,
+      slot,
+      name: `${slot.toUpperCase()} Skill`,
+      text: "",
+      fixed: true
+    };
+  });
+}
+
+function ensureLobbyTestPendingClass(classId) {
+  const nextClassId = String(classId || "");
+  if (!nextClassId) return;
+  if (!lobbyTestPending.classId) {
+    lobbyTestPending.classId = nextClassId;
+    return;
+  }
+  if (lobbyTestPending.classId === nextClassId) return;
+  lobbyTestPending.classId = nextClassId;
+  lobbyTestPending.skills.clear();
+  lobbyTestPending.relics.clear();
+}
+
+function markLobbySkillPending(upgradeId, enabled) {
+  const self = getSelf();
+  ensureLobbyTestPendingClass(self?.classId || selectedClass);
+  lobbyTestPending.skills.set(String(upgradeId), {
+    enabled: Boolean(enabled),
+    at: performance.now()
+  });
+}
+
+function markLobbyRelicPending(relicId, level) {
+  const self = getSelf();
+  ensureLobbyTestPendingClass(self?.classId || selectedClass);
+  const relic = (self?.lobbyTest?.relics || []).find((item) => String(item.id) === String(relicId));
+  const maxLevel = getRelicMaxLevelValue(relic, 1);
+  lobbyTestPending.relics.set(String(relicId), {
+    level: clamp(Math.round(Number(level) || 0), 0, maxLevel),
+    at: performance.now()
+  });
+}
+
+function reconcileLobbyTestPending(self, room) {
+  if (!self || self.spectator || room?.status !== "lobby" || !self.lobbyTest) {
+    clearLobbyTestPending();
+    return;
+  }
+  ensureLobbyTestPendingClass(self.classId || selectedClass);
+  const now = performance.now();
+  const skillsById = new Map((self.lobbyTest.skills || []).map((skill) => [String(skill.id), skill]));
+  const relicsById = new Map((self.lobbyTest.relics || []).map((relic) => [String(relic.id), relic]));
+
+  for (const [id, pending] of lobbyTestPending.skills) {
+    const skill = skillsById.get(id);
+    const expired = now - pending.at > LOBBY_TEST_PENDING_TTL;
+    if (!skill || expired || Boolean(skill.enabled) === pending.enabled) {
+      lobbyTestPending.skills.delete(id);
+    }
+  }
+
+  for (const [id, pending] of lobbyTestPending.relics) {
+    const relic = relicsById.get(id);
+    const serverLevel = Math.max(0, Math.round(Number(relic?.level || 0) || 0));
+    const expired = now - pending.at > LOBBY_TEST_PENDING_TTL;
+    if (!relic || expired || serverLevel === pending.level) {
+      lobbyTestPending.relics.delete(id);
+    }
+  }
+}
+
+function clearLobbyTestPending() {
+  lobbyTestPending.classId = "";
+  lobbyTestPending.skills.clear();
+  lobbyTestPending.relics.clear();
+}
+
+function applyOptimisticLobbySkillToggle(button, enabled) {
+  if (!button) return;
+  if (button.dataset.lobbySkillId) markLobbySkillPending(button.dataset.lobbySkillId, enabled);
+  button.dataset.enabled = enabled ? "true" : "false";
+  button.setAttribute("aria-pressed", enabled ? "true" : "false");
+  button.classList.toggle("enabled", enabled);
+  button.classList.toggle("off", !enabled);
+  const stateLabel = button.querySelector("[data-lobby-skill-state]");
+  if (stateLabel) stateLabel.textContent = enabled ? "ON" : "OFF";
+}
+
+function getLobbyRelicControlLevel(button) {
+  const row = button?.closest(".lobby-test-relic");
+  return Math.max(0, Math.round(Number(row?.dataset.level || button?.dataset.level || 0) || 0));
+}
+
+function getLobbyRelicControlMaxLevel(button) {
+  const row = button?.closest(".lobby-test-relic");
+  const fallback = Math.max(1, Math.round(Number(button?.dataset.level || 1) || 1));
+  return Math.max(1, Math.round(Number(row?.dataset.maxLevel || fallback) || fallback));
+}
+
+function applyOptimisticLobbyRelicLevel(button, level) {
+  const row = button?.closest(".lobby-test-relic");
+  if (!row) return;
+  const maxLevel = getLobbyRelicControlMaxLevel(button);
+  const nextLevel = clamp(Math.round(Number(level) || 0), 0, maxLevel);
+  if (button.dataset.lobbyRelicId) markLobbyRelicPending(button.dataset.lobbyRelicId, nextLevel);
+  row.dataset.level = String(nextLevel);
+  row.classList.toggle("enabled", nextLevel > 0);
+
+  const levelLabel = row.querySelector("[data-lobby-relic-level]");
+  if (levelLabel) levelLabel.textContent = formatRelicLevel(nextLevel, maxLevel);
+
+  row.querySelectorAll("[data-lobby-relic-id][data-delta]").forEach((control) => {
+    const delta = Number(control.dataset.delta || 0);
+    control.dataset.level = String(nextLevel);
+    control.disabled = delta < 0 ? nextLevel <= 0 : nextLevel >= maxLevel;
+  });
+}
+
+function applyOptimisticLobbyReset() {
+  lobbyClassDetail?.querySelectorAll("[data-lobby-skill-id]").forEach((button) => {
+    applyOptimisticLobbySkillToggle(button, true);
+  });
+  lobbyClassDetail?.querySelectorAll(".lobby-test-relic [data-lobby-relic-id][data-delta='1']").forEach((button) => {
+    applyOptimisticLobbyRelicLevel(button, 0);
+  });
+  if (relicDock) {
+    relicDock.classList.add("hidden");
+    relicDock.innerHTML = "";
+  }
+}
+
+function flashLobbyTestControl(element) {
+  if (!element) return;
+  element.classList.remove("pending");
+  void element.offsetWidth;
+  element.classList.add("pending");
+  window.setTimeout(() => {
+    element.classList.remove("pending");
+  }, 320);
 }
 
 function renderSkillDock(self) {
@@ -1431,13 +2377,11 @@ function renderRelicDock(self) {
   relicDock.classList.remove("hidden");
   relicDock.innerHTML = relics
     .map((relic) => {
-      const level = Math.max(1, Number(relic.level || 1));
-      const maxLevel = Math.max(level, Number(relic.maxLevel || level));
+      const maxLevel = getRelicMaxLevelValue(relic, 1);
+      const level = Math.max(1, getRelicLevelValue(relic, 1));
       const maxed = maxLevel > 1 && level >= maxLevel;
       return `
-        <div class="relic-chip ${maxed ? "maxed" : ""}" data-rarity="${escapeHtml(
-          relic.rarity || "common"
-        )}" title="${escapeHtml(formatRelicTooltip(relic, level, maxLevel))}">
+        <div class="relic-chip ${maxed ? "maxed" : ""}" title="${escapeHtml(formatRelicTooltip(relic, level, maxLevel))}">
           <span class="relic-icon" aria-hidden="true">${escapeHtml(relic.icon || "유")}</span>
           <span class="relic-level">${escapeHtml(formatRelicLevel(level, maxLevel))}</span>
         </div>
@@ -1485,17 +2429,13 @@ function renderChoices(choices) {
     ? choiceController.renderRelicChoices(choices)
     : choices
     .map((choice) => {
-      const rarity = choice.rarity || "common";
-      const rarityLabel = getChoiceRarityLabel(choice);
       const target = choice.target || "공용";
       const stackLabel = getRelicStackLabel(choice);
       return `
-        <button class="choice-button has-icon" type="button" data-relic="${choice.id}" data-rarity="${escapeHtml(rarity)}" data-rarity-label="${escapeHtml(rarityLabel)}">
-          <span class="choice-rarity-strip" aria-hidden="true"></span>
+        <button class="choice-button has-icon" type="button" data-relic="${choice.id}">
           <span class="choice-icon" aria-hidden="true">${escapeHtml(choice.icon || "유")}</span>
           <span class="choice-copy">
             <span class="choice-meta-row">
-              <span class="rarity-badge">${escapeHtml(rarityLabel)}</span>
               <span class="choice-type-pill">${escapeHtml(target)}</span>
               ${stackLabel ? `<span class="choice-type-pill">${escapeHtml(stackLabel)}</span>` : ""}
             </span>
@@ -1526,31 +2466,25 @@ function formatRelicChoiceSubtitle() {
 }
 
 function formatRelicMeta(choice) {
-  const rarity = choice.rarityLabel || rarityLabels[choice.rarity] || "COMMON";
   const target = choice.target || "공용";
-  if (choice.consumable || !choice.maxLevel) return `${rarity} · ${target}`;
-  const level = Math.max(1, Number(choice.level || 1));
-  const maxLevel = Math.max(level, Number(choice.maxLevel || level));
+  if (choice.consumable || !choice.maxLevel) return target;
+  const maxLevel = getRelicMaxLevelValue(choice, 1);
+  const level = Math.max(1, getRelicLevelValue(choice, 1));
   const stateLabel = choice.upgrading ? "강화" : "신규";
-  return `${rarity} · ${target} · ${stateLabel} 레벨 ${level}/${maxLevel}`;
-}
-
-function getChoiceRarityLabel(choice) {
-  return choice.rarityLabel || rarityLabels[choice.rarity] || "COMMON";
+  return `${target} · ${stateLabel} 레벨 ${level}/${maxLevel}`;
 }
 
 function getRelicStackLabel(choice) {
   if (choice.consumable || !choice.maxLevel) return choice.consumable ? "즉시 사용" : "";
-  const level = Math.max(1, Number(choice.level || 1));
-  const maxLevel = Math.max(level, Number(choice.maxLevel || level));
+  const maxLevel = getRelicMaxLevelValue(choice, 1);
+  const level = Math.max(1, getRelicLevelValue(choice, 1));
   const stateLabel = choice.upgrading ? "강화" : "신규";
   return `${stateLabel} 레벨 ${level}/${maxLevel}`;
 }
 
 function formatSkillMeta(choice) {
-  const rarity = choice.rarityLabel || rarityLabels[choice.rarity] || "COMMON";
   const type = choice.slot ? `${choice.slot.toUpperCase()} 슬롯` : "스킬 강화";
-  return `${rarity} · ${type}`;
+  return type;
 }
 
 function getSkillTypeLabel(choice) {
@@ -1640,16 +2574,12 @@ function renderSkillChoices(choices) {
     ? choiceController.renderSkillChoices(choices)
     : choices
     .map((choice) => {
-      const rarity = choice.rarity || "common";
-      const rarityLabel = getChoiceRarityLabel(choice);
       const typeLabel = getSkillTypeLabel(choice);
       return `
-        <button class="choice-button has-icon" type="button" data-skill="${choice.id}" data-rarity="${escapeHtml(rarity)}" data-rarity-label="${escapeHtml(rarityLabel)}">
-          <span class="choice-rarity-strip" aria-hidden="true"></span>
+        <button class="choice-button has-icon" type="button" data-skill="${choice.id}">
           <span class="choice-icon" aria-hidden="true">${escapeHtml(choice.icon || "기")}</span>
           <span class="choice-copy">
             <span class="choice-meta-row">
-              <span class="rarity-badge">${escapeHtml(rarityLabel)}</span>
               <span class="choice-type-pill">${escapeHtml(typeLabel)}</span>
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
@@ -1775,13 +2705,18 @@ function renderMapChoicesV2(room) {
 
   const visibleVote = serverVote || (localVoteFresh ? localMapVote : "");
   const voteLocked = Boolean(serverVote);
+  const isAbyssDecision = Boolean(room.abyssDecision);
   activeMapChoiceKey = choiceKey;
   pendingMapChoiceKey = serverVote;
   mapOverlay.classList.remove("hidden");
-  renderRewardSummary(mapRewardSummary, room.clearSummary, "Stage clear");
-  mapSubtitle.textContent = voteLocked
-    ? `${formatMapVoteProgress(room)} · voted · waiting for party`
-    : `${formatMapVoteProgress(room)} · click once to vote · ${room.mapTimeLeft || 0}s`;
+  renderRewardSummary(mapRewardSummary, room.clearSummary, isAbyssDecision ? "심연 입구" : "Stage clear");
+  mapSubtitle.textContent = isAbyssDecision
+    ? voteLocked
+      ? `${formatMapVoteProgress(room)} · 선택 완료 · 파티 대기 중`
+      : `${formatMapVoteProgress(room)} · 탈출 또는 심연 진입 선택 · ${room.mapTimeLeft || 0}초`
+    : voteLocked
+      ? `${formatMapVoteProgress(room)} · voted · waiting for party`
+      : `${formatMapVoteProgress(room)} · click once to vote · ${room.mapTimeLeft || 0}s`;
 
   const boardKey = getMapBoardRenderKey(room.stageMap, visibleVote, voteLocked);
   if (boardKey !== renderedMapBoardKey) {
@@ -1996,7 +2931,6 @@ function getStageNodeDescription(node) {
   if (stage.reward) {
     const rewardParts = [`XP +${stage.reward.clearXp || 0}`];
     if (stage.reward.clearChest) rewardParts.push(`Chest +${stage.reward.clearChest}`);
-    if (Number(stage.reward.rarityBoost || 0) > 0) rewardParts.push(`Rare +${Math.round(Number(stage.reward.rarityBoost || 0) * 100)}%`);
     parts.push(rewardParts.join(", "));
   }
   return parts.filter(Boolean).join(" / ");
@@ -2086,18 +3020,26 @@ function renderResult(nextState) {
   const result = nextState.room.result || createFallbackResult(nextState);
   recordDisplayedResult(result, nextState);
   const victory = result.outcome === "victory";
+  const survivalResult = Boolean(result.survivalCompleted || result.survivalTimeSec);
+  const secretVictory = Boolean(result.secretVictory);
   resultOverlay.classList.remove("hidden");
   resultModal.classList.toggle("victory", victory);
   resultModal.classList.toggle("defeat", !victory);
-  resultMark.textContent = victory ? "WIN" : "END";
-  resultKicker.textContent = victory ? "런 클리어" : "런 실패";
-  resultTitle.textContent = victory ? "모든 스테이지 클리어" : "런 실패";
-  resultSubtitle.textContent = victory
+  resultMark.textContent = secretVictory ? "FATE" : victory ? "WIN" : "END";
+  resultKicker.textContent = secretVictory ? "히든 클리어" : victory ? "생존 성공" : "런 실패";
+  resultTitle.textContent = secretVictory ? "운명 극복" : survivalResult ? result.title || "9분 생존 성공" : victory ? "모든 스테이지 클리어" : "런 실패";
+  resultSubtitle.textContent = result.message || (victory
     ? "파티가 모든 챕터를 돌파했습니다."
-    : `파티가 CH ${result.chapter || nextState.room.chapter || 1} · STAGE ${result.wave || nextState.room.wave || 0}에서 쓰러졌습니다.`;
+    : `파티가 CH ${result.chapter || nextState.room.chapter || 1} · STAGE ${result.wave || nextState.room.wave || 0}에서 쓰러졌습니다.`);
+  const rewards = getDisplayedRunRewards(result);
 
   const rows = [
-    ["진행도", `${result.stagesCleared || 0}/${result.totalStages || 0}`],
+    [survivalResult ? "보스" : "진행도", `${result.stagesCleared || 0}/${result.totalStages || 0}`],
+    ...(survivalResult ? [["생존 시간", formatDuration(result.survivalTimeSec || 0)], ["운명", secretVictory ? "극복" : "집행"]] : []),
+    ["획득 파편", `+${rewards.earnedShards || 0}`],
+    ["계정 XP", `+${rewards.earnedAccountXp || 0}`],
+    ["심연", `${rewards.abyssDepth || 0}층`],
+    ["승천", `${rewards.ascensionLevel || 0}`],
     ["최고 레벨", `${result.highestLevel || 1}`],
     ["점수", `${result.totalScore || 0}`],
     ["유물", formatRelicCount({ relicCount: result.totalRelics, relicMaxCount: result.totalRelicMax })],
@@ -2125,21 +3067,39 @@ function renderResult(nextState) {
     )
     .join("");
 
+  if (resultLoot) {
+    const resultKey = getResultSaveKey(result, nextState);
+    resultLoot.innerHTML = saveBridge.renderRunLootSummary
+      ? saveBridge.renderRunLootSummary(userProgress, resultKey)
+      : "";
+    resultLoot.classList.toggle("hidden", !resultLoot.innerHTML);
+  }
+
   resultPlayers.innerHTML = resultController?.renderPlayers
     ? resultController.renderPlayers(result.players || [])
     : (result.players || [])
     .map(
-      (player) => `
-        <div class="result-player ${player.downed ? "downed" : ""}">
-          <div>
-            <strong>${escapeHtml(player.name)}</strong>
-            <span>${escapeHtml(player.classLabel || "모험가")} · Lv.${player.level || 1} · 유물 ${escapeHtml(
-              formatRelicCount(player)
-            )}</span>
+      (player) => {
+        const stats = player.combatStats || {};
+        const statusDamage = Number(stats.poisonDamage || 0) + Number(stats.burnDamage || 0);
+        return `
+        <article class="result-player ${player.downed ? "downed" : ""}">
+          <div class="result-player-main">
+            <div>
+              <strong>${player.title ? `<span class="player-title">[${escapeHtml(player.title)}]</span> ` : ""}${escapeHtml(player.name)}</strong>
+              <span>${escapeHtml(player.classLabel || "모험가")} · Lv.${player.level || 1} · 유물 ${escapeHtml(formatRelicCount(player))}</span>
+            </div>
+            <em>${player.downed ? "전투불능" : `${Number(player.score || 0).toLocaleString()}점`}</em>
           </div>
-          <em>${player.downed ? "전투불능" : `${player.score || 0}점`}</em>
-        </div>
-      `
+          <div class="result-player-metrics">
+            <span><small>피해</small><b>${formatCompactNumber(stats.damage)}</b></span>
+            <span><small>처치</small><b>${Number(stats.kills || 0).toLocaleString()}</b></span>
+            <span><small>상태 피해</small><b>${formatCompactNumber(statusDamage)}</b></span>
+            <span><small>보스</small><b>${Number(stats.bossKills || 0).toLocaleString()}</b></span>
+          </div>
+        </article>
+      `;
+      }
     )
     .join("");
 
@@ -2168,6 +3128,11 @@ function createFallbackResult(nextState) {
     totalRelics,
     totalRelicMax,
     highestLevel,
+    earnedShards: 0,
+    earnedAccountXp: 0,
+    abyssDepth: nextState.room.abyssDepth || 0,
+    ascensionLevel: nextState.room.ascensionLevel || 0,
+    rewardBreakdown: [],
     players: nextState.players.map((player) => ({
       name: player.name,
       classLabel: player.classLabel,
@@ -2185,8 +3150,10 @@ function recordDisplayedResult(result, nextState) {
   if (!resultKey || resultKey === lastRecordedResultKey) return;
   lastRecordedResultKey = resultKey;
   try {
+    const selfResult = (result.players || []).find((player) => player.id === selfId) || null;
     recordUserRunResult({
       ...result,
+      resultKey,
       chapter: result.chapter || result.floor || nextState.room.chapter || nextState.room.floor || 0,
       wave: result.wave || result.stage || nextState.room.wave || 0,
       highestLevel:
@@ -2197,11 +3164,78 @@ function recordDisplayedResult(result, nextState) {
         nextState.players.reduce((sum, player) => sum + Number(player.score || 0), 0),
       totalRelics:
         result.totalRelics ||
-        nextState.players.reduce((sum, player) => sum + Number(player.relicCount || 0), 0)
+        nextState.players.reduce((sum, player) => sum + Number(player.relicCount || 0), 0),
+      classId: selfResult?.classId || getSelf()?.classId || selectedClass,
+      combatStats: selfResult?.combatStats || {},
+      bossDefeats: selfResult?.bossDefeats || [],
+      noDown: Boolean(selfResult?.noDown),
+      weeklyBossId: result.weeklyBossId || nextState.room.weeklyBossId || "",
+      challengeRuleId: result.challengeRuleId || nextState.room.challengeRuleId || ""
     });
   } catch {
     clientDiagnostics.progressSaveFailed = true;
   }
+}
+
+function renderRunContextHud(nextState) {
+  if (!runContext) return;
+  const room = nextState?.room || {};
+  const visible = !["lobby", "gameover"].includes(room.status);
+  runContext.classList.toggle("hidden", !visible);
+  if (!visible) return;
+
+  const survival = room.survival || null;
+  const duration = Math.max(1, Number(survival?.duration || 540));
+  const elapsed = Math.max(0, Math.min(duration, Number(survival?.elapsed || 0)));
+  const objective = room.objective || {};
+  const phase = survival?.executionBossActive
+    ? { kicker: "FATE EXECUTION", title: "운명의 집행자" }
+    : survival?.executionPending
+      ? { kicker: "FINAL PHASE", title: "운명의 관문" }
+      : survival?.bossActive
+        ? { kicker: "BOSS CHECKPOINT", title: objective.label || "체크포인트 보스" }
+        : room.abyssDecision
+          ? { kicker: "ABYSS DECISION", title: "탈출 또는 심연 진입" }
+          : room.status === "map"
+            ? { kicker: "ROUTE VOTE", title: objective.label || "다음 경로 선택" }
+            : room.status === "advancement"
+              ? { kicker: "LEVEL UP", title: "스킬 강화 선택" }
+              : { kicker: "SURVIVAL", title: objective.label || room.waveTrait?.name || "생존" };
+
+  if (runPhaseKicker) runPhaseKicker.textContent = phase.kicker;
+  if (runObjectiveTitle) runObjectiveTitle.textContent = phase.title;
+  if (runObjectiveText) runObjectiveText.textContent = objective.text || room.stage?.text || "";
+  if (runTimer) runTimer.textContent = survival ? formatDuration(elapsed) : `STAGE ${Math.max(1, Number(room.wave || 1))}`;
+  if (runTimerMax) runTimerMax.textContent = survival ? ` / ${formatDuration(duration)}` : "";
+  if (runProgressBar) {
+    const routeDepth = Math.max(0, Number(room.stageMap?.currentDepth || room.stage?.depth || 0));
+    const routeMax = Math.max(1, Number(room.stageMap?.depth || 8));
+    const progress = survival ? elapsed / duration : routeDepth / routeMax;
+    runProgressBar.style.width = `${Math.round(clamp01(progress) * 100)}%`;
+  }
+  if (runModifiers) {
+    const challengeLabels = { daily: "일일", weekly: "주간" };
+    const ruleLabels = { venom_week: "맹독 주간", ember_week: "화염 주간", construct_week: "자동화 주간" };
+    const chips = [
+      Number(room.ascensionLevel || 0) > 0 ? `승천 ${room.ascensionLevel}` : "",
+      Number(room.abyssDepth || 0) > 0 ? `심연 ${room.abyssDepth}층` : "",
+      challengeLabels[room.challengeMode] ? `${challengeLabels[room.challengeMode]} 도전` : "",
+      ruleLabels[room.challengeRuleId] || ""
+    ].filter(Boolean);
+    runModifiers.innerHTML = chips.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
+  }
+}
+
+function getDisplayedRunRewards(result) {
+  const calculated = saveBridge.calculateRunRewards ? saveBridge.calculateRunRewards(result || {}) : {};
+  return {
+    ...calculated,
+    earnedShards: Number(result?.earnedShards ?? calculated.earnedShards ?? 0),
+    earnedAccountXp: Number(result?.earnedAccountXp ?? calculated.earnedAccountXp ?? 0),
+    abyssDepth: Number(result?.abyssDepth ?? calculated.abyssDepth ?? 0),
+    ascensionLevel: Number(result?.ascensionLevel ?? calculated.ascensionLevel ?? 0),
+    rewardBreakdown: Array.isArray(result?.rewardBreakdown) ? result.rewardBreakdown : calculated.rewardBreakdown || []
+  };
 }
 
 function getResultSaveKey(result, nextState) {
@@ -2223,10 +3257,19 @@ function getResultSaveKey(result, nextState) {
     result.chapter || result.floor || room.chapter || room.floor || 0,
     result.wave || result.stage || room.wave || 0,
     result.stagesCleared || 0,
+    result.abyssDepth || room.abyssDepth || 0,
+    result.ascensionLevel || room.ascensionLevel || 0,
     result.totalScore || 0,
     result.durationSec || 0,
     players
   ].join("::");
+}
+
+function formatCompactNumber(value) {
+  const number = Math.max(0, Number(value || 0));
+  if (number >= 1000000) return `${Math.round(number / 100000) / 10}M`;
+  if (number >= 1000) return `${Math.round(number / 100) / 10}K`;
+  return Math.round(number).toLocaleString();
 }
 
 function formatRelicCount(source) {
@@ -2279,6 +3322,24 @@ function renderBanner(nextState) {
 
   if (nextState.room.status === "gameover") {
     centerBanner.classList.add("hidden");
+    return;
+  }
+
+  if (nextState.room.survival?.executionPending) {
+    centerBanner.textContent = "9분 생존 성공 · 운명이 전장으로 다가옵니다";
+    centerBanner.classList.remove("hidden");
+    return;
+  }
+
+  if (nextState.room.survival?.executionBossActive) {
+    centerBanner.textContent = "운명의 집행자 · 생존은 확정, 처치하면 히든 클리어";
+    centerBanner.classList.remove("hidden");
+    return;
+  }
+
+  if (nextState.room.survival?.bossActive) {
+    centerBanner.textContent = `${nextState.room.objective?.label || "BOSS"} · 처치할 때까지 생존 시간 정지`;
+    centerBanner.classList.remove("hidden");
     return;
   }
 
@@ -2351,6 +3412,7 @@ function updatePlayerVisuals(dt) {
   const move = readMoveInput();
   const moveLength = Math.hypot(move.mx, move.my);
   const world = state.room.world;
+  const mapWalls = Array.isArray(state.room.mapWalls) ? state.room.mapWalls : [];
 
   for (const player of state.players) {
     const visual = visuals.players.get(String(player.id));
@@ -2363,13 +3425,92 @@ function updatePlayerVisuals(dt) {
       const shieldCharge = player.dashMove.style === "shield_charge";
       settleVisual(visual, shieldCharge ? 82 : 64, dt, shieldCharge ? 640 : 520);
     } else if (player.id === selfId && !player.downed && moveLength > 0) {
-      visual.x = clamp(visual.x + (move.mx / moveLength) * player.speed * dt, 32, world.w - 32);
-      visual.y = clamp(visual.y + (move.my / moveLength) * player.speed * dt, 32, world.h - 32);
+      moveVisualWithMapWalls(
+        visual,
+        (move.mx / moveLength) * player.speed * dt,
+        (move.my / moveLength) * player.speed * dt,
+        world,
+        mapWalls,
+        getVisualPlayerCollisionRadius(player),
+        32
+      );
       settleVisual(visual, 16, dt, 52);
     } else {
       settleVisual(visual, player.id === selfId ? 26 : 20, dt, 58);
     }
   }
+}
+
+function moveVisualWithMapWalls(visual, dx, dy, world, walls, radius, margin) {
+  if (!visual || !world) return;
+  const stepDistance = Math.max(18, radius * 0.75);
+  const steps = Math.max(1, Math.ceil(Math.hypot(dx || 0, dy || 0) / stepDistance));
+  const stepX = (dx || 0) / steps;
+  const stepY = (dy || 0) / steps;
+  for (let i = 0; i < steps; i += 1) {
+    visual.x = clamp(visual.x + stepX, margin, world.w - margin);
+    resolveVisualMapWalls(visual, walls, radius + 1.5, world, margin);
+    visual.y = clamp(visual.y + stepY, margin, world.h - margin);
+    resolveVisualMapWalls(visual, walls, radius + 1.5, world, margin);
+  }
+}
+
+function resolveVisualMapWalls(visual, walls, radius, world, margin) {
+  if (!Array.isArray(walls) || walls.length === 0) return;
+  for (let pass = 0; pass < 3; pass += 1) {
+    let moved = false;
+    for (const wall of walls) {
+      const push = getCircleRectPush(visual.x, visual.y, radius, wall);
+      if (!push) continue;
+      visual.x += push.x;
+      visual.y += push.y;
+      moved = true;
+    }
+    visual.x = clamp(visual.x, margin, world.w - margin);
+    visual.y = clamp(visual.y, margin, world.h - margin);
+    if (!moved) break;
+  }
+}
+
+function getCircleRectPush(x, y, radius, wall) {
+  const halfW = Math.max(1, Number(wall?.w) || 1) / 2;
+  const halfH = Math.max(1, Number(wall?.h) || 1) / 2;
+  const left = Number(wall?.x || 0) - halfW;
+  const right = Number(wall?.x || 0) + halfW;
+  const top = Number(wall?.y || 0) - halfH;
+  const bottom = Number(wall?.y || 0) + halfH;
+  const nearestX = clamp(x, left, right);
+  const nearestY = clamp(y, top, bottom);
+  const dx = x - nearestX;
+  const dy = y - nearestY;
+  const distSq = dx * dx + dy * dy;
+  if (distSq > radius * radius) return null;
+  if (distSq > 0.0001) {
+    const dist = Math.sqrt(distSq);
+    const overlap = radius - dist + 0.25;
+    return { x: (dx / dist) * overlap, y: (dy / dist) * overlap };
+  }
+  const leftGap = Math.max(0, x - left);
+  const rightGap = Math.max(0, right - x);
+  const topGap = Math.max(0, y - top);
+  const bottomGap = Math.max(0, bottom - y);
+  const minGap = Math.min(leftGap, rightGap, topGap, bottomGap);
+  if (minGap === leftGap) return { x: -(leftGap + radius + 0.25), y: 0 };
+  if (minGap === rightGap) return { x: rightGap + radius + 0.25, y: 0 };
+  if (minGap === topGap) return { x: 0, y: -(topGap + radius + 0.25) };
+  return { x: 0, y: bottomGap + radius + 0.25 };
+}
+
+function getVisualPlayerCollisionRadius(player) {
+  const scale = player?.tauntGuardTimer > 0 ? 1.18 : 1;
+  if (player?.classId === "warrior") return 22 * scale;
+  if (player?.classId === "martialist") return 21 * scale;
+  if (player?.classId === "engineer") return 20 * scale;
+  if (player?.classId === "puppeteer") return 19 * scale;
+  if (player?.classId === "assassin") return 18 * scale;
+  if (player?.classId === "alchemist") return 19 * scale;
+  if (player?.classId === "ranger" || player?.classId === "mage") return 19 * scale;
+  return 20 * scale;
 }
 
 function updateEntityVisuals(map, entities, stiffness, dt, snapDistance = 260) {
@@ -2420,6 +3561,7 @@ function getMapChoiceKey(room) {
   const votes = room.mapVotes || {};
   return [
     room.status,
+    room.abyssDecision ? "abyssDecision" : "",
     room.mapTimeLeft || 0,
     room.selfMapVote || "",
     formatClearSummary(room.clearSummary),
@@ -2440,7 +3582,7 @@ function ingestEffects(effects) {
       poison: effect.value ? 0.78 : 0.62,
       heal: 0.78,
       xp: 0.72,
-      slash: effect.style === "warrior_cleave" ? 0.74 : 0.62,
+      slash: String(effect.style || "").startsWith("warrior_cleave") ? 0.82 : 0.62,
       spin: 0.7,
       dash:
         effect.style === "shield_charge"
@@ -2472,13 +3614,34 @@ function ingestEffects(effects) {
       star: 0.56,
       chest: 0.64
     };
+    const delay = Math.max(0, Number(effect.delay || 0));
+    const shake = getEffectShake(effect);
+    const ttl = Number.isFinite(effect.duration) ? Math.max(0.12, effect.duration) : ttlByKind[effect.kind] || 0.62;
+    if (isAttachedFrostBreathEffect(effect) && delay <= 0) {
+      const existing = floatingEffects.find(
+        (item) => isAttachedFrostBreathEffect(item) && String(item.ownerId) === String(effect.ownerId)
+      );
+      if (existing) {
+        const stableAge = Math.min(Math.max(0, existing.age || 0), 0.08);
+        const stableSeed = existing.seed;
+        Object.assign(existing, effect, {
+          age: stableAge,
+          seed: stableSeed,
+          ttl,
+          pendingShake: 0
+        });
+        syncAttachedFloatingEffect(existing);
+        continue;
+      }
+    }
     floatingEffects.push({
       ...effect,
-      age: 0,
+      age: delay > 0 ? -delay : 0,
       seed: (Number(effect.id) || 0) * 0.731,
-      ttl: Number.isFinite(effect.duration) ? Math.max(0.12, effect.duration) : ttlByKind[effect.kind] || 0.62
+      ttl,
+      pendingShake: delay > 0 ? shake : 0
     });
-    screenShake = Math.max(screenShake, getEffectShake(effect));
+    if (delay <= 0) screenShake = Math.max(screenShake, shake);
   }
   if (seenEffectIds.size > 500) {
     const keep = new Set(floatingEffects.map((effect) => effect.id));
@@ -2491,13 +3654,12 @@ function ingestEffects(effects) {
 function getEffectShake(effect) {
   if (effect.kind === "explosion" || effect.kind === "meteor") return 12;
   if (effect.kind === "spin") return 10;
-  if (effect.kind === "slash") return effect.style === "warrior_cleave" ? 9 : 6;
+  if (effect.kind === "slash") return String(effect.style || "").startsWith("warrior_cleave") ? 10 : 6;
   if (effect.kind === "dash" && effect.style === "shield_charge") return 13;
   if (effect.kind === "dash" && effect.style === "warrior_dash") return 9;
   if (effect.kind === "dash" && (effect.style === "martial_rising" || effect.style === "martial_dash")) return 7;
   if (effect.kind === "dash" && (effect.style === "shadow_lunge" || effect.style === "shadow_dash")) return 5;
   if (effect.kind === "dash" && effect.style === "mage_blink") return 5;
-  if (effect.kind === "dash" && effect.style === "cleric_dash") return 4;
   if (effect.kind === "freeze") return 3;
   if (effect.kind === "death") return 5;
   if (effect.kind === "impact" && (effect.style === "player_hit" || effect.style === "player_poison_hit")) {
@@ -2507,17 +3669,37 @@ function getEffectShake(effect) {
   if (effect.kind === "impact" && effect.style === "heavy_hit") return 7;
   if (effect.kind === "impact" && effect.style === "enemy_hit") return 3;
   if (effect.kind === "impact" && effect.style === "shield_slam") return 8;
+  if (effect.kind === "impact" && effect.style === "cleave_execute") return 7;
   if (effect.kind === "impact" && (effect.style || "").includes("impact")) return 4;
   return 0;
+}
+
+function isAttachedFrostBreathEffect(effect) {
+  return effect?.style === "frost_breath_aura" && effect.ownerId !== undefined && effect.ownerId !== null;
+}
+
+function syncAttachedFloatingEffect(effect) {
+  if (!isAttachedFrostBreathEffect(effect) || !state?.players) return;
+  const owner = state.players.find((player) => String(player.id) === String(effect.ownerId));
+  if (!owner || owner.spectator) return;
+  const position = getVisualPosition(visuals.players, owner);
+  effect.x = position.x;
+  effect.y = position.y;
 }
 
 function updateFloatingEffects(dt) {
   screenShake = Math.max(0, screenShake - dt * 32);
   for (const effect of floatingEffects) {
+    const wasDelayed = effect.age < 0;
     effect.age += dt;
+    if (wasDelayed && effect.age >= 0 && effect.pendingShake > 0) {
+      screenShake = Math.max(screenShake, effect.pendingShake);
+      effect.pendingShake = 0;
+    }
     if (effect.kind === "damage" || effect.kind === "heal" || effect.kind === "xp" || (effect.kind === "poison" && effect.value)) {
       effect.y -= dt * 42;
     }
+    syncAttachedFloatingEffect(effect);
   }
   for (let i = floatingEffects.length - 1; i >= 0; i -= 1) {
     if (floatingEffects[i].age >= floatingEffects[i].ttl) floatingEffects.splice(i, 1);
@@ -2569,17 +3751,13 @@ function frame() {
     pixiRenderer.render(now, dt, viewW, viewH);
   } else {
     ctx.clearRect(0, 0, viewW, viewH);
-    if (!state) {
-      drawEmpty();
-    } else {
-      drawGame();
-    }
   }
 
   animationFrameId = requestAnimationFrame(frame);
 }
 
 function drawEmpty() {
+  // Legacy canvas fallback is intentionally dormant; frame() only clears when Pixi is unavailable.
   ctx.fillStyle = "#0b0d0e";
   ctx.fillRect(0, 0, viewW, viewH);
   drawStars(0, 0);
@@ -2809,6 +3987,7 @@ function drawPlayers() {
     const dashPulse = now - player.lastDashAt < 180 ? 1 : 0;
     const sizeScale = Math.max(1, Number(player.sizeScale || 1));
     const tauntGuard = player.statusEffects && player.statusEffects.includes("taunt_guard");
+    const mechaActive = player.statusEffects && player.statusEffects.includes("mecha");
     const hitIFrame = Number(player.hitIFrameTime || 0) > 0;
     const bodyRadius = (player.id === selfId ? 22 : 18) * sizeScale;
 
@@ -2840,6 +4019,10 @@ function drawPlayers() {
       ctx.arc(x, y, 38 * sizeScale * guardPulse, 0, Math.PI * 2);
       ctx.stroke();
       ctx.setLineDash([]);
+    }
+
+    if (mechaActive) {
+      drawMechaSuitAura(x, y, sizeScale, player.id === selfId, now, player.facing || 0);
     }
 
     if (player.shield > 0) {
@@ -2923,7 +4106,7 @@ function drawPlayers() {
     if (player.id === selfId) {
       drawSelfGauges(x, y - bodyRadius - 30, player);
     } else {
-      drawPlayerNameOnly(x, y - bodyRadius - 16, player.name);
+      drawPlayerNameOnly(x, y - bodyRadius - 16, player.title ? `[${player.title}] ${player.name}` : player.name);
     }
 
     if (now - player.lastAttackAt < 130) {
@@ -3604,13 +4787,6 @@ function drawClassMark(player, x, y, scale = 1) {
     ctx.lineTo(x - 4, y - 1);
     ctx.lineTo(x - 11, y + 3);
     ctx.stroke();
-  } else if (player.classId === "cleric") {
-    ctx.beginPath();
-    ctx.moveTo(x - 10, y);
-    ctx.lineTo(x + 10, y);
-    ctx.moveTo(x, y - 10);
-    ctx.lineTo(x, y + 10);
-    ctx.stroke();
   }
   ctx.restore();
 }
@@ -3650,6 +4826,123 @@ function getEnemyHitReaction(enemy) {
   };
 }
 
+function enemyWindupProgress(windup) {
+  const duration = Math.max(0.1, Number(windup?.duration || windup?.time || 1));
+  return 1 - clamp01(Number(windup?.time || 0) / duration);
+}
+
+function isEnemyLineWindupKind(kind) {
+  return (
+    kind === "charge" ||
+    kind === "snipe" ||
+    kind === "spit" ||
+    kind === "boss_volley" ||
+    kind === "stalker_shuriken" ||
+    kind === "elite_volley" ||
+    kind === "elite_quake" ||
+    kind === "elite_crossfire"
+  );
+}
+
+function drawEnemyCastAura(enemy, x, y) {
+  const windup = enemy.windup;
+  if (!windup || isEnemyLineWindupKind(windup.kind)) return;
+  const progress = enemyWindupProgress(windup);
+  const radius = Math.max(12, Number(enemy.radius || 18));
+  const pulse = 0.5 + Math.sin(performance.now() / 95) * 0.5;
+  const ringRadius = radius * (1.2 + progress * 0.12 + pulse * 0.04);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.fillStyle = hexToRgba("#7f1d1d", 0.045 + progress * 0.035);
+  ctx.beginPath();
+  ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.26 + progress * 0.22);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(x, y, ringRadius, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.26 + progress * 0.34);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x - radius * 0.5, y);
+  ctx.lineTo(x + radius * 0.5, y);
+  ctx.moveTo(x, y - radius * 0.5);
+  ctx.lineTo(x, y + radius * 0.5);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function clipEnemyLineToWorld(fromX, fromY, toX, toY, lineWidth) {
+  const worldWidth = Number(state?.room?.world?.w);
+  const worldHeight = Number(state?.room?.world?.h);
+  if (!Number.isFinite(worldWidth) || !Number.isFinite(worldHeight) || worldWidth <= 0 || worldHeight <= 0) {
+    return { fromX, fromY, toX, toY };
+  }
+
+  const inset = Math.max(0, lineWidth * 0.5 + 1);
+  const minX = Math.min(inset, worldWidth * 0.5);
+  const maxX = Math.max(minX, worldWidth - inset);
+  const minY = Math.min(inset, worldHeight * 0.5);
+  const maxY = Math.max(minY, worldHeight - inset);
+  const clippedFromX = clamp(fromX, minX, maxX);
+  const clippedFromY = clamp(fromY, minY, maxY);
+  const dx = toX - clippedFromX;
+  const dy = toY - clippedFromY;
+  let scale = 1;
+  if (dx > 0) scale = Math.min(scale, (maxX - clippedFromX) / dx);
+  else if (dx < 0) scale = Math.min(scale, (minX - clippedFromX) / dx);
+  if (dy > 0) scale = Math.min(scale, (maxY - clippedFromY) / dy);
+  else if (dy < 0) scale = Math.min(scale, (minY - clippedFromY) / dy);
+  scale = clamp(scale, 0, 1);
+  return {
+    fromX: clippedFromX,
+    fromY: clippedFromY,
+    toX: clippedFromX + dx * scale,
+    toY: clippedFromY + dy * scale
+  };
+}
+
+function drawEnemyLineTelegraph(fromX, fromY, toX, toY, width, progress) {
+  const line = clipEnemyLineToWorld(fromX, fromY, toX, toY, width);
+  const dx = line.toX - line.fromX;
+  const dy = line.toY - line.fromY;
+  if (Math.hypot(dx, dy) < 1) return;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.14 + progress * 0.2);
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(line.fromX, line.fromY);
+  ctx.lineTo(line.toX, line.toY);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEnemyStraightWindup(enemy, x, y) {
+  const windup = enemy.windup || {};
+  const kind = windup.kind;
+  const progress = enemyWindupProgress(windup);
+  const radius = Math.max(12, Number(enemy.radius || 18));
+  const fromX = kind === "charge" && Number.isFinite(windup.startX) ? windup.startX : x;
+  const fromY = kind === "charge" && Number.isFinite(windup.startY) ? windup.startY : y;
+  const targetX = Number.isFinite(windup.x) ? windup.x : x + Math.cos(Number(windup.angle || 0)) * 420;
+  const targetY = Number.isFinite(windup.y) ? windup.y : y + Math.sin(Number(windup.angle || 0)) * 420;
+  const dx = targetX - fromX;
+  const dy = targetY - fromY;
+  const length = Math.hypot(dx, dy) || 1;
+  const worldLength = Math.max(state.room.world.w, state.room.world.h);
+  const extend = kind === "snipe" ? Math.max(worldLength * 0.35, radius * 8) : kind === "spit" ? radius * 1.35 : 0;
+  const toX = targetX + (dx / length) * extend;
+  const toY = targetY + (dy / length) * extend;
+  const width = kind === "snipe" ? 22 : kind === "spit" ? Math.max(12, radius * 0.95) : Math.max(20, radius * 1.35);
+  drawEnemyLineTelegraph(fromX, fromY, toX, toY, width, progress);
+}
+
 function drawEnemies() {
   for (const enemy of state.enemies) {
     const position = getVisualPosition(visuals.enemies, enemy);
@@ -3672,52 +4965,19 @@ function drawEnemies() {
       hitReaction.intensity > 0.16 ||
       (bomberArming && Math.sin(performance.now() / Math.max(45, 120 - armingProgress * 70)) > -0.25);
 
-    if (enemy.windup && (enemy.windup.kind === "charge" || enemy.windup.kind === "snipe")) {
-      const isSnipe = enemy.windup.kind === "snipe";
-      if (isSnipe) {
-        const dx = enemy.windup.x - x;
-        const dy = enemy.windup.y - y;
-        const length = Math.hypot(dx, dy) || 1;
-        const rayLength = Math.max(state.room.world.w, state.room.world.h) * 1.25;
-        const endX = x + (dx / length) * rayLength;
-        const endY = y + (dy / length) * rayLength;
-        const pulse = 0.3 + Math.sin(performance.now() / 110) * 0.08;
-        ctx.lineCap = "round";
-        ctx.strokeStyle = `rgba(248,113,113,${pulse})`;
-        ctx.lineWidth = 15;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(endX, endY);
-        ctx.stroke();
-      } else {
-        const lineStartX = Number.isFinite(enemy.windup.startX) ? enemy.windup.startX : x;
-        const lineStartY = Number.isFinite(enemy.windup.startY) ? enemy.windup.startY : y;
-        ctx.strokeStyle = hexToRgba(enemy.color, 0.78);
-        ctx.lineWidth = 5;
-        ctx.setLineDash([14, 8]);
-        ctx.beginPath();
-        ctx.moveTo(lineStartX, lineStartY);
-        ctx.lineTo(enemy.windup.x, enemy.windup.y);
-        ctx.stroke();
-        ctx.setLineDash([]);
-        const targetRadius = enemy.elite || enemy.type === "boss" ? 50 : 42;
-        ctx.fillStyle = hexToRgba(enemy.color, 0.12);
-        ctx.beginPath();
-        ctx.arc(enemy.windup.x, enemy.windup.y, targetRadius, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = hexToRgba(enemy.color, 0.82);
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(enemy.windup.x, enemy.windup.y, targetRadius, 0, Math.PI * 2);
-        ctx.stroke();
-      }
+    if (enemy.windup) {
+      drawEnemyCastAura(enemy, x, y);
+    }
+
+    if (enemy.windup && (enemy.windup.kind === "charge" || enemy.windup.kind === "snipe" || enemy.windup.kind === "spit")) {
+      drawEnemyStraightWindup(enemy, x, y);
     }
 
     if (enemy.windup && enemy.windup.kind === "stalker_stab") {
       drawStalkerStabWindup(enemy, x, y);
     }
 
-    if (enemy.windup && enemy.windup.kind === "stalker_shuriken") {
+    if (enemy.windup && (enemy.windup.kind === "stalker_shuriken" || enemy.windup.kind === "boss_volley")) {
       drawStalkerShurikenWindup(enemy, x, y);
     }
 
@@ -3758,10 +5018,6 @@ function drawEnemies() {
 
     if (enemy.type === "boss") {
       drawBossAura(enemy, x, y);
-    }
-
-    if (enemy.elite) {
-      drawEliteBadge(enemy, x, y);
     }
 
     ctx.fillStyle = hexToRgba(enemy.color, 0.17);
@@ -3845,7 +5101,7 @@ function drawStalkerStabWindup(enemy, x, y) {
   const angle = Number.isFinite(windup.angle) ? windup.angle : 0;
   const range = Math.max(70, Number(windup.range || 108));
   const arc = Math.max(0.42, Number(windup.arc || 0.74));
-  const color = enemy.color || "#8d7cae";
+  const color = "#ff2d55";
   drawStalkerStabTelegraph(x, y, range, angle, arc, color, progress);
 }
 
@@ -3858,7 +5114,7 @@ function drawStalkerShurikenWindup(enemy, x, y) {
     : Math.atan2(Number(windup.y || y) - y, Number(windup.x || x) - x);
   const spread = Math.max(0.16, Number(windup.spread || 0.34));
   const range = Math.max(260, Number(windup.range || 620));
-  const color = enemy.color || "#8d7cae";
+  const color = "#ff2d55";
   drawStalkerShurikenTelegraph(x, y, range, angle, spread, color, progress);
 }
 
@@ -3877,20 +5133,20 @@ function drawStalkerStabTelegraph(x, y, range, angle, arc, color, progress) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = hexToRgba("#f5d0fe", 0.42 + progress * 0.34);
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.42 + progress * 0.34);
   ctx.lineWidth = 3 + progress * 2;
   ctx.beginPath();
   ctx.arc(0, 0, range * (0.88 + progress * 0.08), -arc / 2, arc / 2);
   ctx.stroke();
 
-  ctx.strokeStyle = hexToRgba("#f6f1e8", 0.62 + progress * 0.28);
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.62 + progress * 0.28);
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(range * 0.12, 0);
   ctx.lineTo(range * charge, 0);
   ctx.stroke();
 
-  ctx.fillStyle = hexToRgba("#f6f1e8", 0.72 + progress * 0.24);
+  ctx.fillStyle = hexToRgba("#ff2d55", 0.72 + progress * 0.24);
   ctx.beginPath();
   ctx.moveTo(range * charge + 10, 0);
   ctx.lineTo(range * charge - 8, -7);
@@ -3902,36 +5158,18 @@ function drawStalkerStabTelegraph(x, y, range, angle, arc, color, progress) {
 }
 
 function drawStalkerShurikenTelegraph(x, y, range, angle, spread, color, progress) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-  ctx.lineCap = "round";
-
+  const lineLength = range * (0.7 + progress * 0.18);
   for (const offset of [-spread, 0, spread]) {
-    ctx.save();
-    ctx.rotate(offset);
-    ctx.strokeStyle = hexToRgba(color, 0.12 + progress * 0.24);
-    ctx.lineWidth = 18 - Math.abs(offset) * 18;
-    ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(range * (0.7 + progress * 0.18), 0);
-    ctx.stroke();
-
-    ctx.strokeStyle = hexToRgba("#f5d0fe", 0.32 + progress * 0.42);
-    ctx.lineWidth = offset === 0 ? 4 : 3;
-    ctx.beginPath();
-    ctx.moveTo(24, 0);
-    ctx.lineTo(range * (0.58 + progress * 0.28), 0);
-    ctx.stroke();
-    ctx.restore();
+    const lane = angle + offset;
+    drawEnemyLineTelegraph(
+      x + Math.cos(lane) * 18,
+      y + Math.sin(lane) * 18,
+      x + Math.cos(lane) * lineLength,
+      y + Math.sin(lane) * lineLength,
+      Math.max(8, 18 - Math.abs(offset) * 18),
+      progress
+    );
   }
-
-  ctx.strokeStyle = hexToRgba(color, 0.72);
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.arc(0, 0, 20 + progress * 8, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.restore();
 }
 
 function isEliteWindupKind(kind) {
@@ -3952,7 +5190,7 @@ function drawEliteWindup(enemy, x, y) {
     const dirY = Number.isFinite(windup.dirY) ? windup.dirY : Math.sin(windup.angle || 0);
     const length = Number(windup.radius || 250);
     const width = Number(windup.width || 64);
-    drawEliteLineTelegraph(x, y, x + dirX * length, y + dirY * length, width, color, progress);
+    drawEliteLineTelegraph(x, y, x + dirX * length, y + dirY * length, width, progress);
     return;
   }
 
@@ -3961,7 +5199,7 @@ function drawEliteWindup(enemy, x, y) {
       const angle = Number.isFinite(point.angle) ? point.angle : Math.atan2((point.y || y) - y, (point.x || x) - x);
       const endX = x + Math.cos(angle) * Math.max(state.room.world.w, state.room.world.h);
       const endY = y + Math.sin(angle) * Math.max(state.room.world.w, state.room.world.h);
-      drawEliteLineTelegraph(x, y, endX, endY, 20, color, progress);
+      drawEliteLineTelegraph(x, y, endX, endY, 20, progress);
     }
     return;
   }
@@ -4018,57 +5256,16 @@ function drawEliteWindup(enemy, x, y) {
   });
 }
 
-function drawEliteLineTelegraph(fromX, fromY, toX, toY, width, color, progress) {
-  ctx.save();
-  ctx.lineCap = "round";
-  ctx.strokeStyle = hexToRgba(color, 0.16 + progress * 0.24);
-  ctx.lineWidth = width;
-  ctx.beginPath();
-  ctx.moveTo(fromX, fromY);
-  ctx.lineTo(toX, toY);
-  ctx.stroke();
-  ctx.strokeStyle = hexToRgba("#fef2f2", 0.4 + progress * 0.36);
-  ctx.lineWidth = Math.max(3, width * 0.16);
-  ctx.beginPath();
-  ctx.moveTo(fromX, fromY);
-  ctx.lineTo(toX, toY);
-  ctx.stroke();
-  ctx.restore();
+function drawEliteLineTelegraph(fromX, fromY, toX, toY, width, progress) {
+  drawEnemyLineTelegraph(fromX, fromY, toX, toY, width, progress);
 }
 
-function drawEliteBadge(enemy, x, y) {
-  const color = enemy.affix === "venom" ? "#9aa15f" : enemy.affix === "volatile" ? "#c85d56" : enemy.affix === "frenzy" ? "#e8794f" : "#caa35a";
-  const label = enemy.affix === "venom" ? "V" : enemy.affix === "volatile" ? "X" : enemy.affix === "frenzy" ? "F" : "B";
-  const badgeY = y - enemy.radius - 18;
-
-  ctx.save();
-  ctx.translate(x, badgeY);
-  ctx.rotate(Math.PI / 4);
-  ctx.fillStyle = "rgba(17,17,15,0.86)";
-  ctx.strokeStyle = color;
-  ctx.lineWidth = 2;
-  roundRect(-8, -8, 16, 16, 3);
-  ctx.fill();
-  ctx.stroke();
-  ctx.rotate(-Math.PI / 4);
-  ctx.fillStyle = "#f8f3e9";
-  ctx.font = "900 9px Inter, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(label, 0, 0.5);
-  ctx.restore();
-
-  ctx.save();
-  ctx.strokeStyle = hexToRgba(color, 0.72);
-  ctx.lineWidth = 3;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x - enemy.radius * 0.58, y - enemy.radius * 0.5);
-  ctx.lineTo(x - enemy.radius * 0.24, y - enemy.radius * 0.78);
-  ctx.moveTo(x + enemy.radius * 0.58, y - enemy.radius * 0.5);
-  ctx.lineTo(x + enemy.radius * 0.24, y - enemy.radius * 0.78);
-  ctx.stroke();
-  ctx.restore();
+function eliteAffixColor(affix, fallback = "#caa35a") {
+  if (affix === "venom") return "#9aa15f";
+  if (affix === "volatile") return "#c85d56";
+  if (affix === "frenzy") return "#e8794f";
+  if (affix === "bulwark") return "#93c5fd";
+  return fallback;
 }
 
 function drawBarrierPlates(enemy, x, y, pulse = 1) {
@@ -4129,7 +5326,11 @@ function drawEnemyStatusPips(enemy, x, y) {
   const markers = [];
   if (enemy.statusEffects.includes("freeze") || enemy.statusEffects.includes("frozen")) markers.push({ label: "F", color: "#bfdbfe" });
   if (enemy.statusEffects.includes("slow")) markers.push({ label: "S", color: "#8aa8bd" });
-  if (enemy.statusEffects.includes("poison")) markers.push({ label: "P", color: "#9aa15f" });
+  if (enemy.statusEffects.includes("poison")) {
+    const poisonStacks = Math.max(0, Math.min(3, Math.floor(Number(enemy.poisonStacks || 0))));
+    markers.push({ label: poisonStacks > 0 ? `P${poisonStacks}` : "P", color: "#9aa15f" });
+  }
+  if (enemy.statusEffects.includes("venom")) markers.push({ label: "v", color: "#c084fc" });
   if (enemy.statusEffects.includes("burn")) markers.push({ label: "B", color: "#c9824c" });
   if (enemy.statusEffects.includes("vulnerable")) markers.push({ label: "V", color: "#caa35a" });
   if (enemy.statusEffects.includes("marked")) markers.push({ label: "M", color: classColors.assassin });
@@ -4138,14 +5339,13 @@ function drawEnemyStatusPips(enemy, x, y) {
   if (enemy.statusEffects.includes("barrier")) markers.push({ label: "G", color: "#93a4b8" });
   if (markers.length === 0) return;
 
-  const size = 10;
+  const size = 12;
   const gap = 3;
   const totalWidth = markers.length * size + (markers.length - 1) * gap;
   const startX = x - totalWidth / 2 + size / 2;
   const pipY = y + enemy.radius + 8;
 
   ctx.save();
-  ctx.font = "800 7px Inter, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   for (let i = 0; i < markers.length; i += 1) {
@@ -4158,6 +5358,7 @@ function drawEnemyStatusPips(enemy, x, y) {
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = marker.color;
+    ctx.font = marker.label.length > 1 ? "800 7px Inter, sans-serif" : "800 8px Inter, sans-serif";
     ctx.fillText(marker.label, px, pipY + 0.4);
   }
   ctx.restore();
@@ -4481,7 +5682,7 @@ function drawEnemySprite(enemy, x, y, flash) {
 
   drawEnemySurfaceShading(type, r, color, now);
   drawEnemyDetailOverlay(type, r, color, enemy, now);
-  if (enemy.elite) drawEliteTrim(r, enemy.affix || "", enemy.color || color);
+  if (enemy.elite) drawEliteMutation(r, enemy.affix || "", enemy.color || color);
   ctx.restore();
 }
 
@@ -5097,23 +6298,120 @@ function drawEnemyEyesLocal(r, y = -4, spread = 8, eyeColor = "#11110f") {
   ctx.fill();
 }
 
-function drawEliteTrim(r, affix, color) {
-  const trimColor =
-    affix === "venom"
-      ? "#9aa15f"
-      : affix === "volatile"
-        ? "#c85d56"
-        : affix === "frenzy"
-          ? "#e8794f"
-          : "#caa35a";
+function drawEliteMutation(r, affix, color) {
+  const mutationColor = eliteAffixColor(affix, color || "#caa35a");
   ctx.save();
-  ctx.strokeStyle = hexToRgba(trimColor || color, 0.74);
-  ctx.lineWidth = Math.max(2.5, r * 0.08);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  if (affix === "bulwark") {
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * r * 0.18, -r * 0.52);
+      ctx.lineTo(side * r * 0.72, -r * 0.46);
+      ctx.lineTo(side * r * 0.94, -r * 0.08);
+      ctx.lineTo(side * r * 0.58, r * 0.2);
+      ctx.lineTo(side * r * 0.24, r * 0.04);
+      ctx.closePath();
+      ctx.fillStyle = "#111827";
+      ctx.strokeStyle = hexToRgba(mutationColor, 0.72);
+      ctx.lineWidth = Math.max(2, r * 0.075);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#1e293b";
+    ctx.strokeStyle = hexToRgba("#f8fafc", 0.38);
+    ctx.lineWidth = Math.max(1.6, r * 0.06);
+    drawPolygon(0, r * 0.08, r * 0.38, 6, Math.PI / 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba(mutationColor, 0.56);
+    ctx.lineWidth = Math.max(2, r * 0.08);
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 0.2);
+    ctx.lineTo(0, r * 0.34);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  if (affix === "venom") {
+    for (const [ox, oy, size] of [
+      [-0.4, 0.22, 0.26],
+      [0.04, 0.34, 0.32],
+      [0.46, 0.18, 0.22]
+    ]) {
+      ctx.beginPath();
+      ctx.arc(ox * r, oy * r, size * r, 0, Math.PI * 2);
+      ctx.fillStyle = "#365314";
+      ctx.strokeStyle = hexToRgba(mutationColor, 0.62);
+      ctx.lineWidth = Math.max(1.5, r * 0.055);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.fillStyle = hexToRgba("#f8fafc", 0.78);
+    ctx.strokeStyle = hexToRgba(mutationColor, 0.46);
+    ctx.lineWidth = Math.max(1, r * 0.04);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(side * r * 0.16, -r * 0.1);
+      ctx.lineTo(side * r * 0.34, -r * 0.04);
+      ctx.lineTo(side * r * 0.24, r * 0.24);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (affix === "volatile") {
+    ctx.fillStyle = "#7f1d1d";
+    ctx.strokeStyle = hexToRgba(mutationColor, 0.78);
+    ctx.lineWidth = Math.max(1.8, r * 0.07);
+    drawPolygon(0, r * 0.02, r * 0.34, 6, Math.PI / 6);
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, r * 0.02, r * 0.13, 0, Math.PI * 2);
+    ctx.fillStyle = hexToRgba("#f8fafc", 0.72);
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba(mutationColor, 0.62);
+    ctx.lineWidth = Math.max(1.8, r * 0.07);
+    ctx.beginPath();
+    for (const [x1, y1, x2, y2] of [
+      [-0.16, -0.18, -0.54, -0.54],
+      [0.16, -0.14, 0.58, -0.42],
+      [-0.14, 0.18, -0.48, 0.56],
+      [0.14, 0.2, 0.52, 0.52]
+    ]) {
+      ctx.moveTo(x1 * r, y1 * r);
+      ctx.lineTo(x2 * r, y2 * r);
+    }
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+
+  ctx.fillStyle = "#111827";
+  ctx.strokeStyle = hexToRgba(mutationColor, 0.74);
+  ctx.lineWidth = Math.max(1.8, r * 0.065);
+  for (const side of [-1, 1]) {
+    ctx.beginPath();
+    ctx.moveTo(side * r * 0.12, -r * 0.58);
+    ctx.lineTo(side * r * 0.8, -r * 1.05);
+    ctx.lineTo(side * r * 0.52, -r * 0.34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.strokeStyle = hexToRgba(mutationColor, 0.68);
+  ctx.lineWidth = Math.max(2.2, r * 0.085);
   ctx.beginPath();
-  ctx.moveTo(-r * 0.78, -r * 0.78);
-  ctx.lineTo(-r * 0.32, -r * 1.04);
-  ctx.moveTo(r * 0.78, -r * 0.78);
-  ctx.lineTo(r * 0.32, -r * 1.04);
+  ctx.moveTo(-r * 0.46, -r * 0.06);
+  ctx.lineTo(r * 0.18, r * 0.28);
+  ctx.moveTo(-r * 0.24, -r * 0.3);
+  ctx.lineTo(r * 0.42, r * 0.04);
   ctx.stroke();
   ctx.restore();
 }
@@ -5526,10 +6824,20 @@ function drawProjectiles() {
     const x = position.x;
     const y = position.y;
     const style = projectile.style || "";
+    const enemyProjectile =
+      projectile.hostile || style === "stalker_shuriken" || style === "sniper_bolt" || style === "venom_spit";
     const color =
-      projectile.style === "stalker_shuriken"
-        ? "#8d7cae"
-        : projectile.poison
+      enemyProjectile
+        ? "#ff2d55"
+        : projectile.style === "stalker_shuriken"
+          ? "#8d7cae"
+        : style.includes("fire")
+          ? "#f97316"
+        : style.includes("missile")
+          ? "#fb923c"
+          : style.includes("mecha_laser_shot")
+            ? "#67e8f9"
+          : projectile.poison
           ? "#9aa15f"
           : projectile.hostile
             ? "#c85d56"
@@ -5539,12 +6847,12 @@ function drawProjectiles() {
     ctx.translate(x, y);
     ctx.rotate(Number(projectile.angle) || 0);
 
-    if (projectile.style === "stalker_shuriken") {
+    if (enemyProjectile) {
+      drawEnemyThreatProjectile(projectile, color);
+    } else if (projectile.style === "stalker_shuriken") {
       drawShurikenProjectile(projectile, color);
     } else if (projectile.style === "sniper_bolt") {
       drawSniperProjectile(projectile, color);
-    } else if (projectile.hostile) {
-      drawSpitProjectile(projectile, color);
     } else if (style.includes("arrow") || projectile.classId === "ranger") {
       drawArrowProjectile(projectile, color, style);
     } else if (projectile.classId === "mage") {
@@ -5555,8 +6863,6 @@ function drawProjectiles() {
       drawTechProjectile(projectile, color, style);
     } else if (projectile.classId === "puppeteer") {
       drawThreadProjectile(projectile, color, style);
-    } else if (projectile.classId === "cleric") {
-      drawHolyProjectile(projectile, color);
     } else {
       drawSimpleProjectile(projectile, color);
     }
@@ -5584,7 +6890,7 @@ function drawHazards() {
         stripeAlpha: 0.38,
         coreColor: "#fbbf24"
       });
-    } else if (hazard.type === "acid_pool") {
+    } else if (hazard.type === "acid_pool" || hazard.type === "poison_pool") {
       const armed = hazard.armed || Number(hazard.armTime || 0) <= 0;
       const armTime = Number(hazard.armTime || 0);
       const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || armTime || 1));
@@ -5650,6 +6956,7 @@ function drawHazards() {
 function drawEngineerTurretHazard(x, y, hazard) {
   const color = hazard.color || classColors.engineer;
   const r = Math.max(16, hazard.radius || 22);
+  const laser = String(hazard.style || "").includes("laser");
   const pulse = 1 + Math.sin(performance.now() / 180 + Number(hazard.id || 0)) * 0.04;
   const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || 0));
   const build = hazard.armed ? 1 : clamp01(1 - Number(hazard.armTime || 0) / armTimeMax);
@@ -5675,24 +6982,32 @@ function drawEngineerTurretHazard(x, y, hazard) {
       ctx.stroke();
     }
   }
-  ctx.fillStyle = hexToRgba(color, 0.18);
-  ctx.strokeStyle = hexToRgba(color, 0.78);
+  ctx.fillStyle = hexToRgba(laser ? "#0f172a" : color, laser ? 0.74 : 0.18);
+  ctx.strokeStyle = hexToRgba(laser ? "#93c5fd" : color, 0.78);
   ctx.lineWidth = 3;
   roundRect(-r * 0.78, -r * 0.58, r * 1.56, r * 1.16, 5);
   ctx.fill();
   ctx.stroke();
-  ctx.fillStyle = color;
+  ctx.fillStyle = laser ? "#bfdbfe" : color;
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.28 * pulse, 0, Math.PI * 2);
   ctx.fill();
   if (hazard.armed || build > 0.72) {
-    ctx.strokeStyle = "#fef3c7";
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = laser ? "#7dd3fc" : "#fef3c7";
+    ctx.lineWidth = laser ? 6 : 4;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(r * 0.2, 0);
-    ctx.lineTo(r * (0.68 + build * 0.47), 0);
+    ctx.moveTo(r * 0.08, 0);
+    ctx.lineTo(r * (laser ? 1.45 : 0.68 + build * 0.47), 0);
     ctx.stroke();
+    if (laser) {
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(r * 0.36, 0);
+      ctx.lineTo(r * 1.64, 0);
+      ctx.stroke();
+    }
   }
   ctx.strokeStyle = hexToRgba("#111827", 0.55);
   ctx.lineWidth = 2;
@@ -5706,7 +7021,10 @@ function drawEngineerTurretHazard(x, y, hazard) {
 }
 
 function drawEngineerMineHazard(x, y, hazard) {
-  const color = hazard.color || classColors.engineer;
+  const style = String(hazard.style || "");
+  const charged = style.includes("charged");
+  const dashMine = style.includes("dash");
+  const color = dashMine ? "#facc15" : charged ? "#c084fc" : hazard.color || classColors.engineer;
   const armed = hazard.armed || Number(hazard.armTime || 0) <= 0;
   const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || 0));
   const build = armed ? 1 : clamp01(1 - Number(hazard.armTime || 0) / armTimeMax);
@@ -5725,12 +7043,28 @@ function drawEngineerMineHazard(x, y, hazard) {
     ctx.stroke();
     ctx.setLineDash([]);
   }
-  ctx.fillStyle = hexToRgba(armed ? color : "#94a3b8", 0.16);
+  ctx.fillStyle = hexToRgba(armed ? color : "#94a3b8", charged ? 0.24 : 0.16);
   ctx.strokeStyle = hexToRgba(armed ? color : "#94a3b8", 0.8);
   ctx.lineWidth = 3;
   drawPolygon(0, 0, r * pulse, 6, Math.PI / 6);
   ctx.fill();
   ctx.stroke();
+  if (charged) {
+    ctx.strokeStyle = hexToRgba("#f5d0fe", 0.82);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.42 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (dashMine) {
+    ctx.fillStyle = hexToRgba("#fde68a", armed ? 0.78 : 0.38);
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.72, r * 0.24);
+    ctx.lineTo(r * 0.74, 0);
+    ctx.lineTo(-r * 0.72, -r * 0.24);
+    ctx.closePath();
+    ctx.fill();
+  }
   ctx.strokeStyle = armed ? "#fef3c7" : "rgba(226,232,240,0.7)";
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -5745,15 +7079,17 @@ function drawEngineerMineHazard(x, y, hazard) {
 function drawEngineerDroneHazard(x, y, hazard) {
   const color = hazard.color || classColors.engineer;
   const r = Math.max(13, hazard.radius || 16);
+  const style = String(hazard.style || "");
+  const missile = style.includes("missile");
+  const kamikaze = style.includes("kamikaze");
   const spin = performance.now() / 260;
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(spin);
-  ctx.fillStyle = hexToRgba(color, 0.16);
-  ctx.strokeStyle = hexToRgba(color, 0.78);
+  ctx.rotate(kamikaze ? Number(hazard.angle || 0) : spin);
+  ctx.fillStyle = hexToRgba(kamikaze ? "#fb923c" : color, kamikaze ? 0.3 : 0.16);
+  ctx.strokeStyle = hexToRgba(kamikaze ? "#fed7aa" : color, 0.78);
   ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  roundRect(-r * 0.72, -r * 0.46, r * 1.44, r * 0.92, 5);
   ctx.fill();
   ctx.stroke();
   for (let i = 0; i < 4; i += 1) {
@@ -5762,8 +7098,31 @@ function drawEngineerDroneHazard(x, y, hazard) {
     ctx.moveTo(r * 0.45, 0);
     ctx.lineTo(r * 1.35, 0);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(r * 1.5, 0, r * 0.22, 0, Math.PI * 2);
+    ctx.stroke();
   }
-  ctx.fillStyle = "#fef3c7";
+  if (missile) {
+    ctx.strokeStyle = "#fb923c";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.8, -r * 0.68);
+    ctx.lineTo(r * 0.8, -r * 0.68);
+    ctx.moveTo(-r * 0.8, r * 0.68);
+    ctx.lineTo(r * 0.8, r * 0.68);
+    ctx.stroke();
+  }
+  if (kamikaze) {
+    ctx.fillStyle = hexToRgba("#f97316", 0.65);
+    ctx.beginPath();
+    ctx.moveTo(-r * 1.32, 0);
+    ctx.lineTo(-r * 2.18, -r * 0.42);
+    ctx.lineTo(-r * 1.86, 0);
+    ctx.lineTo(-r * 2.18, r * 0.42);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.fillStyle = kamikaze ? "#fed7aa" : "#fef3c7";
   ctx.beginPath();
   ctx.arc(0, 0, r * 0.28, 0, Math.PI * 2);
   ctx.fill();
@@ -5860,7 +7219,6 @@ function drawPuppetHazard(x, y, hazard) {
 }
 
 function drawBossBeamHazard(x, y, hazard) {
-  const color = hazard.color || "#c85d56";
   const angle = Number(hazard.angle || 0);
   const length = Math.max(120, Number(hazard.length || hazard.radius || 820));
   const width = Math.max(18, Number(hazard.width || 34));
@@ -5869,37 +7227,15 @@ function drawBossBeamHazard(x, y, hazard) {
   const charge = 1 - clamp01(armTime / armTimeMax);
   const endX = x + Math.cos(angle) * length;
   const endY = y + Math.sin(angle) * length;
-  const pulse = 0.85 + charge * 0.35 + Math.sin(performance.now() / 72) * 0.04;
 
   ctx.save();
   ctx.lineCap = "round";
-  ctx.strokeStyle = hexToRgba(color, 0.12 + charge * 0.18);
-  ctx.lineWidth = width * 2.4 * pulse;
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.16 + charge * 0.22);
+  ctx.lineWidth = width * (1.35 + charge * 0.35);
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(endX, endY);
   ctx.stroke();
-
-  ctx.strokeStyle = hexToRgba("#fee2e2", 0.32 + charge * 0.34);
-  ctx.lineWidth = width * 0.72;
-  ctx.setLineDash([18, 12]);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.strokeStyle = hexToRgba(color, 0.76 + charge * 0.18);
-  ctx.lineWidth = Math.max(3, width * 0.18);
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-
-  ctx.fillStyle = hexToRgba(color, 0.18 + charge * 0.18);
-  ctx.beginPath();
-  ctx.arc(x, y, width * (1.2 + charge * 0.55), 0, Math.PI * 2);
-  ctx.fill();
   ctx.restore();
 }
 
@@ -5943,103 +7279,67 @@ function drawBossShockwaveHazard(x, y, hazard) {
 
 function drawArrowRainHazard(x, y, hazard) {
   const radius = hazard.radius || 150;
-  const color = hazard.color || "#7fa671";
+  const color = "#f1d08b";
   const armed = hazard.armed || Number(hazard.armTime || 0) <= 0;
   const armTime = Number(hazard.armTime || 0);
   const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || armTime || 0.2));
   const now = performance.now();
-
-  if (!armed) {
-    const charge = 1 - clamp01(armTime / armTimeMax);
-    drawDangerTelegraph(x, y, radius, color, charge, {
-      spokes: 12,
-      stripeAlpha: 0.18,
-      coreColor: "#ecfccb"
-    });
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(x, y, radius * 0.94, 0, Math.PI * 2);
-    ctx.clip();
-    for (let i = 0; i < 14; i += 1) {
-      const seed = pseudoRandom(Number(hazard.id || 1) + i * 7.13, i * 2.91);
-      const angle = seed * Math.PI * 2;
-      const dist = Math.sqrt(pseudoRandom(i * 3.19, Number(hazard.id || 1) + 8.4)) * radius * 0.86;
-      const px = x + Math.cos(angle) * dist;
-      const py = y + Math.sin(angle) * dist - radius * (0.52 + charge * 0.28);
-      const fall = clamp01(charge * 1.15 - (i % 5) * 0.08);
-      ctx.strokeStyle = hexToRgba("#ecfccb", 0.18 + fall * 0.48);
-      ctx.lineWidth = 2;
-      ctx.lineCap = "round";
-      ctx.beginPath();
-      ctx.moveTo(px - 14, py - 28 + fall * radius * 0.28);
-      ctx.lineTo(px + 4, py + 16 + fall * radius * 0.28);
-      ctx.stroke();
-    }
-    ctx.restore();
-    return;
-  }
-
-  const fill = ctx.createRadialGradient(x, y, radius * 0.08, x, y, radius);
-  fill.addColorStop(0, "rgba(236, 252, 203, 0.18)");
-  fill.addColorStop(0.62, hexToRgba(color, 0.13));
-  fill.addColorStop(1, "rgba(15, 23, 42, 0.02)");
-  ctx.fillStyle = fill;
+  const pulse = 1 + Math.sin(now / 210 + Number(hazard.id || 0)) * 0.012;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#4a3415", armed ? 0.035 : 0.025);
+  ctx.strokeStyle = hexToRgba(color, armed ? 0.36 : 0.24);
+  ctx.lineWidth = armed ? 2.4 : 1.8;
   ctx.beginPath();
-  ctx.arc(x, y, radius, 0, Math.PI * 2);
+  ctx.arc(x, y, radius * pulse, 0, Math.PI * 2);
   ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = hexToRgba("#fde68a", armed ? 0.12 : 0.08);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(x, y, radius * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+  if (!armed) return;
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(x, y, radius * 0.98, 0, Math.PI * 2);
   ctx.clip();
 
-  const count = Math.max(18, Math.floor(radius / 5.4));
+  const count = 9;
   for (let i = 0; i < count; i += 1) {
     const seed = pseudoRandom(Number(hazard.id || 1) + i * 11.17, i * 5.31);
     const seed2 = pseudoRandom(i * 3.77, Number(hazard.id || 1) + 19.9);
-    const angle = seed * Math.PI * 2;
-    const spread = Math.sqrt(seed2) * radius * 0.92;
-    const baseX = x + Math.cos(angle) * spread;
-    const baseY = y + Math.sin(angle) * spread;
-    const fall = (now / 420 + seed * 1.7 + i * 0.071) % 1;
-    const dropX = baseX - 34 + fall * 28;
-    const dropY = baseY - radius * 0.52 + fall * radius * 1.04;
+    const lane = (i - (count - 1) / 2) * radius * 0.12 + (seed - 0.5) * radius * 0.12;
+    const baseX = x + lane;
+    const baseY = y + (seed2 - 0.5) * radius * 0.34;
+    const fall = (now / 360 + seed * 1.3 + i * 0.071) % 1;
+    const slant = (i % 2 ? -1 : 1) * 3;
+    const dropX = baseX;
+    const dropY = y - radius * 2.1 + fall * radius * 2.45;
     const length = 34 + seed2 * 18;
-    const alpha = 0.35 + fall * 0.45;
+    const alpha = 0.42 + fall * 0.2;
 
-    ctx.strokeStyle = `rgba(236, 252, 203, ${alpha})`;
-    ctx.lineWidth = 2.1;
+    ctx.strokeStyle = hexToRgba(i % 3 === 0 ? "#fff7ed" : color, alpha);
+    ctx.lineWidth = i % 3 === 0 ? 2.2 : 1.8;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(dropX - length * 0.24, dropY - length * 0.7);
-    ctx.lineTo(dropX + length * 0.18, dropY + length * 0.18);
+    ctx.moveTo(dropX - slant, dropY - length * 0.82);
+    ctx.lineTo(dropX + slant * 0.45, dropY + length * 0.32);
     ctx.stroke();
 
-    ctx.strokeStyle = `rgba(127, 166, 113, ${Math.min(0.82, alpha + 0.18)})`;
+    ctx.strokeStyle = hexToRgba("#fde68a", Math.min(0.78, alpha + 0.12));
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(dropX + length * 0.18, dropY + length * 0.18);
-    ctx.lineTo(dropX + length * 0.02, dropY - length * 0.08);
-    ctx.moveTo(dropX + length * 0.18, dropY + length * 0.18);
-    ctx.lineTo(dropX - length * 0.08, dropY + length * 0.08);
+    ctx.moveTo(dropX + slant * 0.45, dropY + length * 0.32);
+    ctx.lineTo(dropX - slant * 0.18, dropY + length * 0.05);
+    ctx.moveTo(dropX + slant * 0.45, dropY + length * 0.32);
+    ctx.lineTo(dropX + slant * 0.08, dropY + length * 0.02);
     ctx.stroke();
   }
 
   ctx.restore();
-
-  ctx.strokeStyle = hexToRgba(color, 0.78);
-  ctx.lineWidth = 3;
-  ctx.setLineDash([12, 8]);
-  ctx.beginPath();
-  ctx.arc(x, y, radius * (0.98 + Math.sin(now / 180) * 0.012), 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  ctx.strokeStyle = "rgba(236, 252, 203, 0.5)";
-  ctx.lineWidth = 1.4;
-  ctx.beginPath();
-  ctx.arc(x, y, radius * 0.68, 0, Math.PI * 2);
-  ctx.stroke();
 }
 
 function drawDangerTelegraph(x, y, radius, color, charge, options = {}) {
@@ -6444,10 +7744,11 @@ function drawToxicMark(x, y, size) {
 function drawArrowProjectile(projectile, color, style) {
   const piercing = style === "piercing_arrow";
   const poison = projectile.poison || style === "poison_arrow";
+  const fire = style.includes("fire");
   const length = piercing ? Math.max(58, (projectile.radius || 18) * 3.2) : style === "arrow_fan" ? 30 : 34;
   const width = piercing ? Math.max(12, (projectile.radius || 18) * 0.72) : 6;
 
-  ctx.strokeStyle = hexToRgba(poison ? "#9aa15f" : color, 0.32);
+  ctx.strokeStyle = hexToRgba(fire ? "#fb923c" : poison ? "#9aa15f" : color, 0.32);
   ctx.lineWidth = piercing ? Math.max(18, (projectile.radius || 18) * 1.15) : 9;
   ctx.lineCap = "round";
   ctx.beginPath();
@@ -6462,7 +7763,7 @@ function drawArrowProjectile(projectile, color, style) {
   ctx.lineTo(length * 0.34, 0);
   ctx.stroke();
 
-  ctx.fillStyle = poison ? "#bef264" : "#f8fafc";
+  ctx.fillStyle = fire ? "#fed7aa" : poison ? "#bef264" : "#f8fafc";
   ctx.beginPath();
   ctx.moveTo(length * (piercing ? 0.68 : 0.56), 0);
   ctx.lineTo(length * 0.16, -width);
@@ -6496,12 +7797,6 @@ function drawArcaneProjectile(projectile, color, style) {
   ctx.beginPath();
   ctx.arc(0, 0, radius * 2.1 * pulse, 0, Math.PI * 2);
   ctx.fill();
-
-  ctx.strokeStyle = hexToRgba(color, 0.72);
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 1.35, 0, Math.PI * 2);
-  ctx.stroke();
 
   ctx.strokeStyle = "#f5d0fe";
   ctx.lineWidth = 2;
@@ -6558,31 +7853,51 @@ function drawAlchemyProjectile(projectile, color, style) {
   ctx.restore();
 }
 
-function drawHolyProjectile(projectile, color) {
-  const radius = Math.max(6, projectile.radius || 9);
-  ctx.fillStyle = hexToRgba(color, 0.2);
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 2.15, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#fef3c7";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-radius * 1.5, 0);
-  ctx.lineTo(radius * 1.5, 0);
-  ctx.moveTo(0, -radius * 1.5);
-  ctx.lineTo(0, radius * 1.5);
-  ctx.stroke();
-
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(0, 0, radius * 0.72, 0, Math.PI * 2);
-  ctx.fill();
-}
-
 function drawTechProjectile(projectile, color, style) {
-  const radius = Math.max(6, projectile.radius || 8);
+  const mechaLaserShot = String(style || "").includes("mecha_laser_shot");
+  const radius = mechaLaserShot ? Math.max(3.5, projectile.radius || 4.5) : Math.max(6, projectile.radius || 8);
+  if (String(style || "").includes("missile")) {
+    drawEngineerMissileProjectile(radius, color);
+    return;
+  }
+  if (mechaLaserShot) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.strokeStyle = hexToRgba("#06131f", 0.32);
+    ctx.lineWidth = Math.max(6, radius * 1.35);
+    ctx.beginPath();
+    ctx.moveTo(-radius * 3.4, 0);
+    ctx.lineTo(radius * 2.85, 0);
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba("#67e8f9", 0.76);
+    ctx.lineWidth = Math.max(3.4, radius * 0.78);
+    ctx.beginPath();
+    ctx.moveTo(-radius * 3.15, 0);
+    ctx.lineTo(radius * 2.75, 0);
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba("#f8fafc", 0.82);
+    ctx.lineWidth = Math.max(1.7, radius * 0.28);
+    ctx.beginPath();
+    ctx.moveTo(-radius * 1.8, 0);
+    ctx.lineTo(radius * 2.55, 0);
+    ctx.stroke();
+    ctx.fillStyle = hexToRgba("#f8fafc", 0.72);
+    ctx.beginPath();
+    ctx.arc(radius * 2.35, 0, Math.max(3, radius * 0.42), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+    return;
+  }
   const rail = style === "rail_bolt" || style === "drone_laser";
+  const electric = !rail && (style.includes("electric") || style.includes("shock"));
+  if (electric) {
+    const phase = performance.now() / 120 + Number(projectile.id || 0) * 0.41;
+    const boltColor = style.includes("mecha") ? "#f5d0fe" : "#67e8f9";
+    drawLightningLine(-radius * 2.8, 0, radius * 2.1, 0, boltColor, Math.max(4, radius * 0.62), phase);
+    drawRadialSparks(radius * 1.85, 0, radius * 2.2, "#f8fafc", 5, (phase % 1));
+    return;
+  }
   ctx.strokeStyle = hexToRgba(color, rail ? 0.42 : 0.28);
   ctx.lineWidth = rail ? radius * 1.8 : radius * 1.25;
   ctx.lineCap = "round";
@@ -6605,6 +7920,47 @@ function drawTechProjectile(projectile, color, style) {
   ctx.lineTo(radius * 0.2, radius * 0.8);
   ctx.closePath();
   ctx.fill();
+}
+
+function drawEngineerMissileProjectile(radius, color) {
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const flame = Math.sin(performance.now() / 40) * radius * 0.22;
+  ctx.fillStyle = hexToRgba("#f97316", 0.54);
+  ctx.beginPath();
+  ctx.moveTo(-radius * 1.25, 0);
+  ctx.lineTo(-radius * (2.65 + flame * 0.08), -radius * 0.46);
+  ctx.lineTo(-radius * 2.15, 0);
+  ctx.lineTo(-radius * (2.65 + flame * 0.08), radius * 0.46);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#f8fafc";
+  ctx.strokeStyle = hexToRgba(color || "#fb923c", 0.9);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(radius * 1.9, 0);
+  ctx.lineTo(radius * 0.88, -radius * 0.62);
+  ctx.lineTo(-radius * 1.15, -radius * 0.44);
+  ctx.lineTo(-radius * 1.42, 0);
+  ctx.lineTo(-radius * 1.15, radius * 0.44);
+  ctx.lineTo(radius * 0.88, radius * 0.62);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = "#fb923c";
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.82, -radius * 0.42);
+  ctx.lineTo(-radius * 1.45, -radius * 1.04);
+  ctx.lineTo(-radius * 0.18, -radius * 0.5);
+  ctx.closePath();
+  ctx.moveTo(-radius * 0.82, radius * 0.42);
+  ctx.lineTo(-radius * 1.45, radius * 1.04);
+  ctx.lineTo(-radius * 0.18, radius * 0.5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawThreadProjectile(projectile, color) {
@@ -6655,6 +8011,58 @@ function drawSpitProjectile(projectile, color) {
   ctx.lineTo(-radius * 0.38, 0);
   ctx.lineTo(-radius * 1.6, radius * 0.55);
   ctx.stroke();
+}
+
+function drawEnemyThreatProjectile(projectile, color) {
+  const radius = Math.max(7, projectile.radius || 8);
+  const sniper = projectile.style === "sniper_bolt";
+  const pulse = 0.78 + Math.sin(performance.now() / 75 + Number(projectile.id || 0)) * 0.14;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = hexToRgba(color, 0.16 * pulse);
+  ctx.lineWidth = radius * (sniper ? 2.6 : 2.0);
+  ctx.beginPath();
+  ctx.moveTo(-radius * (sniper ? 5.2 : 3.8), 0);
+  ctx.lineTo(radius * 1.05, 0);
+  ctx.stroke();
+
+  ctx.strokeStyle = hexToRgba("#fecaca", 0.42 * pulse);
+  ctx.lineWidth = Math.max(3, radius * 0.34);
+  ctx.beginPath();
+  ctx.moveTo(-radius * (sniper ? 5.8 : 4.2), 0);
+  ctx.lineTo(radius * (sniper ? 2.8 : 2.15), 0);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle = "#2b0710";
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(radius * (sniper ? 3.1 : 2.45), 0);
+  ctx.lineTo(-radius * 0.3, -radius * 0.86);
+  ctx.lineTo(-radius * 1.28, -radius * 0.36);
+  ctx.lineTo(-radius * 0.78, 0);
+  ctx.lineTo(-radius * 1.28, radius * 0.36);
+  ctx.lineTo(-radius * 0.3, radius * 0.86);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = hexToRgba(color, 0.86);
+  ctx.beginPath();
+  ctx.moveTo(radius * (sniper ? 2.2 : 1.72), 0);
+  ctx.lineTo(-radius * 0.08, -radius * 0.42);
+  ctx.lineTo(-radius * 0.42, 0);
+  ctx.lineTo(-radius * 0.08, radius * 0.42);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = hexToRgba("#fee2e2", 0.72);
+  ctx.beginPath();
+  ctx.arc(radius * 0.32, 0, radius * 0.2, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawSniperProjectile(projectile, color) {
@@ -6801,6 +8209,7 @@ function drawChests() {
 
 function drawFloatingEffects() {
   for (const effect of floatingEffects) {
+    if (effect.age < 0) continue;
     const alpha = Math.max(0, 1 - effect.age / effect.ttl);
     const color = effect.color || "#f6f1e8";
     const progress = clamp01(effect.age / effect.ttl);
@@ -6816,7 +8225,7 @@ function drawFloatingEffects() {
     } else if (effect.kind === "dash") {
       drawDashEffect(effect, color, progress);
     } else if (effect.kind === "explosion" && effect.style === "boss_beam_fire") {
-      drawBossBeamFireEffect(effect, color, progress);
+      drawBossBeamFireEffect(effect, progress);
     } else if (effect.kind === "explosion" || effect.kind === "death" || effect.kind === "level") {
       drawBurstRingEffect(effect, color, progress);
     } else if (effect.kind === "shield") {
@@ -6909,7 +8318,7 @@ function drawFloatingNumber(effect, color) {
   ctx.restore();
 }
 
-function drawBossBeamFireEffect(effect, color, progress) {
+function drawBossBeamFireEffect(effect, progress) {
   const angle = Number(effect.angle || 0);
   const length = Math.max(120, Number(effect.length || 780));
   const width = Math.max(20, Number(effect.radius || 34));
@@ -6921,15 +8330,8 @@ function drawBossBeamFireEffect(effect, color, progress) {
 
   ctx.save();
   ctx.lineCap = "round";
-  ctx.strokeStyle = hexToRgba(color, 0.24 * alpha);
-  ctx.lineWidth = width * (2.8 - progress * 1.2);
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.lineTo(endX, endY);
-  ctx.stroke();
-
-  ctx.strokeStyle = `rgba(254,242,242,${0.76 * alpha})`;
-  ctx.lineWidth = Math.max(4, width * (0.42 - progress * 0.08));
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.26 * alpha);
+  ctx.lineWidth = width * (2.35 - progress * 0.8);
   ctx.beginPath();
   ctx.moveTo(startX, startY);
   ctx.lineTo(endX, endY);
@@ -6938,9 +8340,9 @@ function drawBossBeamFireEffect(effect, color, progress) {
 }
 
 function drawSlashEffect(effect, color, progress) {
-  if (pixiRenderer && (effect.style === "warrior_basic" || effect.style === "warrior_cleave")) return;
+  if (pixiRenderer && (effect.style === "warrior_basic" || String(effect.style || "").startsWith("warrior_cleave"))) return;
   if (effect.style === "stalker_stab") {
-    drawStalkerStabSlashEffect(effect, color, progress);
+    drawStalkerStabSlashEffect(effect, "#ff2d55", progress);
     return;
   }
   if ((effect.style || "").startsWith("martial_")) {
@@ -6959,6 +8361,7 @@ function drawSlashEffect(effect, color, progress) {
   const radius = effect.radius || 120;
   const brute = effect.style === "brute_swing";
   const cleave = effect.style === "warrior_cleave";
+  const slashColor = brute ? "#ff2d55" : color;
   const side = effect.swingSide === -1 ? -1 : 1;
   const activeProgress = clamp01(progress / (cleave ? 0.82 : 0.76));
   const ease = 1 - Math.pow(1 - activeProgress, 3);
@@ -6982,7 +8385,7 @@ function drawSlashEffect(effect, color, progress) {
   ctx.lineJoin = "round";
   ctx.globalCompositeOperation = "source-over";
 
-  ctx.fillStyle = hexToRgba(color, glowAlpha);
+  ctx.fillStyle = hexToRgba(slashColor, glowAlpha);
   ctx.beginPath();
   ctx.moveTo(originX + Math.cos(trailStart) * bladeRadius * 0.34, Math.sin(trailStart) * bladeRadius * 0.34);
   ctx.arc(originX, 0, bladeRadius * (1.08 + progress * 0.08), trailStart, endAngle);
@@ -6995,7 +8398,7 @@ function drawSlashEffect(effect, color, progress) {
     const localStart = Math.max(startAngle, localEnd - trailSpan * (0.62 + i * 0.08));
     const trailRadius = bladeRadius * (0.88 + i * 0.055 + progress * 0.08);
     const alpha = (brute ? 0.26 : cleave ? 0.24 : 0.18) * (1 - i * 0.18) * (1 - after * 0.35);
-    ctx.strokeStyle = hexToRgba(color, alpha);
+    ctx.strokeStyle = hexToRgba(slashColor, alpha);
     ctx.lineWidth = Math.max(5, (brute ? 32 : cleave ? 36 : 24) - i * 7);
     ctx.beginPath();
     ctx.arc(originX, 0, trailRadius, localStart, localEnd);
@@ -7030,7 +8433,7 @@ function drawSlashEffect(effect, color, progress) {
     ctx.restore();
     return;
   }
-  drawSwordBladeSnapshot(hiltX, hiltY, bladeTipX, bladeTipY, cleave ? 26 : 18, color, cleave);
+  drawSwordBladeSnapshot(hiltX, hiltY, bladeTipX, bladeTipY, cleave ? 26 : 18, slashColor, cleave);
 
   ctx.restore();
 }
@@ -7268,7 +8671,7 @@ function drawStalkerStabSlashEffect(effect, color, progress) {
   ctx.lineTo(radius * (0.72 + thrust * 0.28), 0);
   ctx.stroke();
 
-  ctx.fillStyle = `rgba(245,208,254,${0.78 * fade})`;
+  ctx.fillStyle = `rgba(254,202,202,${0.78 * fade})`;
   const tipX = radius * (0.82 + thrust * 0.22);
   ctx.beginPath();
   ctx.moveTo(tipX + 16, 0);
@@ -7401,7 +8804,7 @@ function drawMartialFlurryEffect(effect, color, progress) {
 }
 
 function drawSpinEffect(effect, color, progress) {
-  if (pixiRenderer && effect.style === "warrior_spin") return;
+  if (pixiRenderer?.ready && effect.style === "warrior_spin") return;
 
   if ((effect.style || "").startsWith("martial_flurry")) {
     drawMartialFlurryEffect(effect, color, progress);
@@ -7632,7 +9035,6 @@ function drawDashEffect(effect, color, progress) {
   const warrior = style === "warrior_dash";
   const ranger = style === "ranger_dash";
   const blink = style === "mage_blink";
-  const cleric = style === "cleric_dash";
   const martial = style === "martial_dash" || style === "martial_rising";
   const assassin = style === "shadow_dash" || style === "shadow_lunge";
   const alchemist = style === "alchemist_dash";
@@ -7646,7 +9048,7 @@ function drawDashEffect(effect, color, progress) {
     drawProgressiveDashEffect(effect, color, progress, { enemy, charge, warrior, ranger, martial, assassin, alchemist });
     return;
   }
-  const width = enemy ? 18 : charge ? 42 : warrior ? 32 : martial ? 18 : assassin ? 14 : cleric ? 18 : blink ? 16 : ranger ? 10 : puppet ? 12 : 12;
+  const width = enemy ? 18 : charge ? 42 : warrior ? 32 : martial ? 18 : assassin ? 14 : blink ? 16 : ranger ? 10 : puppet ? 12 : 12;
 
   ctx.save();
   ctx.translate(effect.x, effect.y);
@@ -7657,7 +9059,7 @@ function drawDashEffect(effect, color, progress) {
 
   const trail = ctx.createLinearGradient(-radius, 0, radius, 0);
   trail.addColorStop(0, "rgba(255,255,255,0)");
-  trail.addColorStop(0.35, hexToRgba(color, enemy ? 0.24 : charge || warrior ? 0.42 : blink ? 0.28 : cleric ? 0.34 : 0.38));
+  trail.addColorStop(0.35, hexToRgba(color, enemy ? 0.24 : charge || warrior ? 0.42 : blink ? 0.28 : 0.38));
   trail.addColorStop(
     0.78,
     charge || warrior
@@ -7666,11 +9068,9 @@ function drawDashEffect(effect, color, progress) {
         ? hexToRgba("#fff7ed", 0.72)
         : assassin
           ? hexToRgba("#ddd6fe", 0.78)
-          : cleric
-            ? hexToRgba("#fef3c7", 0.74)
-            : blink
-              ? hexToRgba("#e9d5ff", 0.78)
-              : hexToRgba(color, 0.6)
+          : blink
+            ? hexToRgba("#e9d5ff", 0.78)
+            : hexToRgba(color, 0.6)
   );
   trail.addColorStop(1, enemy ? hexToRgba("#fecaca", 0.78) : blink ? hexToRgba("#ffffff", 0.78) : hexToRgba("#ffffff", 0.72));
   ctx.strokeStyle = trail;
@@ -7684,7 +9084,7 @@ function drawDashEffect(effect, color, progress) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.strokeStyle = hexToRgba(color, charge || warrior ? 0.74 : cleric ? 0.5 : 0.58);
+  ctx.strokeStyle = hexToRgba(color, charge || warrior ? 0.74 : 0.58);
   ctx.lineWidth = charge || warrior ? 5 : 3;
   const trailLines = ranger ? 1 : 2;
   for (let i = -trailLines; i <= trailLines; i += 1) {
@@ -7713,14 +9113,6 @@ function drawDashEffect(effect, color, progress) {
       ctx.arc(x, 0, 24 + progress * 20, 0, Math.PI * 2);
       ctx.stroke();
       drawLightningLine(x - 24, -18, x + 24, 18, "#e9d5ff", 3, effect.seed + progress * 4);
-    }
-  }
-
-  if (cleric) {
-    ctx.strokeStyle = hexToRgba("#fef3c7", 0.84);
-    ctx.lineWidth = 3;
-    for (const x of [-radius * 0.42, radius * 0.42]) {
-      drawHexRing(x, 0, 18 + progress * 18, "#fef3c7", 3);
     }
   }
 
@@ -7780,12 +9172,98 @@ function drawDashEffect(effect, color, progress) {
   ctx.restore();
 }
 
+function drawJaggedMeteorTail(fromX, fromY, toX, toY, width, alpha = 1) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const px = -uy;
+  const py = ux;
+  const length = Math.max(1, Math.hypot(toX - fromX, toY - fromY));
+  const back = Math.min(length * 0.2, width * 1.8);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#f97316", 0.18 * alpha);
+  ctx.strokeStyle = hexToRgba("#fed7aa", 0.22 * alpha);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(toX - ux * width * 0.16 + px * width * 0.58, toY - uy * width * 0.16 + py * width * 0.58);
+  ctx.lineTo(fromX + px * width * 0.18, fromY + py * width * 0.18);
+  ctx.lineTo(fromX - ux * back, fromY - uy * back);
+  ctx.lineTo(fromX - px * width * 0.24, fromY - py * width * 0.24);
+  ctx.lineTo(toX - ux * width * 0.16 - px * width * 0.52, toY - uy * width * 0.16 - py * width * 0.52);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  const trail = ctx.createLinearGradient(fromX, fromY, toX, toY);
+  trail.addColorStop(0, "rgba(255,255,255,0)");
+  trail.addColorStop(0.42, hexToRgba("#fb923c", 0.32 * alpha));
+  trail.addColorStop(0.82, hexToRgba("#fde68a", 0.76 * alpha));
+  trail.addColorStop(1, hexToRgba("#fff7ed", 0.9 * alpha));
+  ctx.strokeStyle = trail;
+  ctx.lineCap = "round";
+  ctx.lineWidth = Math.max(3, width * 0.22);
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX - ux * width * 0.32, toY - uy * width * 0.32);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawJaggedMeteorRock(x, y, size, angle, alpha = 1) {
+  const points = [
+    [0.9, -0.02],
+    [0.5, -0.58],
+    [0.04, -0.42],
+    [-0.38, -0.64],
+    [-0.9, -0.2],
+    [-0.72, 0.3],
+    [-0.18, 0.58],
+    [0.42, 0.42]
+  ];
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.globalAlpha *= alpha;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "#3f1f13";
+  ctx.strokeStyle = "#fed7aa";
+  ctx.lineWidth = Math.max(2, size * 0.12);
+  ctx.beginPath();
+  for (let i = 0; i < points.length; i += 1) {
+    const [px, py] = points[i];
+    const sx = px * size * 1.28;
+    const sy = py * size * 0.86;
+    if (i === 0) ctx.moveTo(sx, sy);
+    else ctx.lineTo(sx, sy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = hexToRgba("#f97316", 0.42);
+  ctx.lineWidth = Math.max(1.5, size * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(-size * 0.46, -size * 0.18);
+  ctx.lineTo(size * 0.3, size * 0.12);
+  ctx.moveTo(-size * 0.12, size * 0.3);
+  ctx.lineTo(size * 0.42, size * 0.08);
+  ctx.stroke();
+
+  ctx.fillStyle = hexToRgba("#fde68a", 0.32);
+  ctx.beginPath();
+  ctx.ellipse(size * 0.24, -size * 0.12, size * 0.18, size * 0.1, -0.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
 function drawMeteorHazard(x, y, hazard) {
   const now = performance.now();
   const radius = hazard.radius || 150;
   const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || 1));
   const impact = clamp01(1 - Number(hazard.timer || 0) / armTimeMax);
-  const eased = 1 - Math.pow(1 - impact, 2.4);
   const pulse = 1 + Math.sin(now / 92) * 0.035;
   const targetRadius = radius * (0.92 - impact * 0.24);
 
@@ -7819,40 +9297,10 @@ function drawMeteorHazard(x, y, hazard) {
   ctx.lineTo(x, y + targetRadius);
   ctx.stroke();
 
-  const startX = x - radius * 1.62;
-  const startY = y - radius * 4.1;
-  const meteorX = startX + radius * 1.42 * eased;
-  const meteorY = startY + radius * 3.82 * eased;
   const shadowRadius = radius * (0.12 + impact * 0.18);
   ctx.fillStyle = `rgba(0,0,0,${0.2 + impact * 0.24})`;
   ctx.beginPath();
   ctx.ellipse(x, y, shadowRadius * 1.55, shadowRadius * 0.72, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  const trail = ctx.createLinearGradient(startX, startY, meteorX, meteorY);
-  trail.addColorStop(0, "rgba(255,255,255,0)");
-  trail.addColorStop(0.3, "rgba(248,113,113,0.36)");
-  trail.addColorStop(0.68, "rgba(251,146,60,0.9)");
-  trail.addColorStop(1, "#fff7ed");
-  ctx.strokeStyle = trail;
-  ctx.lineCap = "round";
-  ctx.lineWidth = 20 + impact * 10;
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.lineTo(meteorX, meteorY);
-  ctx.stroke();
-
-  ctx.fillStyle = "#7c2d12";
-  ctx.strokeStyle = "#fed7aa";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.arc(meteorX, meteorY, 13 + impact * 13, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = `rgba(251,191,36,${0.22 + impact * 0.34})`;
-  ctx.beginPath();
-  ctx.arc(meteorX - radius * 0.03, meteorY - radius * 0.03, 5 + impact * 8, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -7872,6 +9320,15 @@ function drawBurstRingEffect(effect, color, progress) {
     effect.style === "alchemy_splash"
   ) {
     drawAlchemyBurstEffect(effect, color, progress);
+    return;
+  }
+  if (
+    effect.style === "engineer_missile_explosion" ||
+    effect.style === "drone_kamikaze_explosion" ||
+    effect.style === "engineer_dash_mine_blast" ||
+    effect.style === "engineer_charged_mine_blast"
+  ) {
+    drawEngineerBlastEffect(effect, color, progress);
     return;
   }
   if (effect.style === "shock_mine") {
@@ -7996,6 +9453,47 @@ function drawShockMineBurstEffect(effect, color, progress) {
   ctx.restore();
 }
 
+function drawEngineerBlastEffect(effect, color, progress) {
+  const style = String(effect.style || "");
+  const missile = style.includes("missile") || style.includes("kamikaze");
+  const charged = style.includes("charged");
+  const dashMine = style.includes("dash");
+  const radius = effect.radius || (missile ? 132 : 108);
+  const alpha = 1 - progress;
+  const outer = missile ? "#f97316" : charged ? "#c084fc" : dashMine ? "#facc15" : color;
+  const core = missile ? "#fff7ed" : charged ? "#f5d0fe" : "#fef3c7";
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const gradient = ctx.createRadialGradient(effect.x, effect.y, 0, effect.x, effect.y, radius * (0.7 + progress * 0.35));
+  gradient.addColorStop(0, hexToRgba(core, 0.78 * alpha));
+  gradient.addColorStop(0.32, hexToRgba(outer, 0.38 * alpha));
+  gradient.addColorStop(1, hexToRgba(outer, 0));
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius * (0.28 + progress * 0.42), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = hexToRgba(core, 0.9 * alpha);
+  ctx.lineWidth = missile ? 8 : 5;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius * (0.18 + progress * 0.78), 0, Math.PI * 2);
+  ctx.stroke();
+
+  const sparks = missile ? 18 : 11;
+  for (let i = 0; i < sparks; i += 1) {
+    const angle = (Math.PI * 2 * i) / sparks + (effect.seed || 0) * 0.17;
+    const inner = radius * (0.12 + progress * 0.08);
+    const outerDist = radius * (0.38 + progress * (missile ? 0.82 : 0.58));
+    ctx.strokeStyle = hexToRgba(i % 2 ? core : outer, (0.84 - progress * 0.45) * alpha);
+    ctx.lineWidth = missile ? (i % 3 === 0 ? 5 : 3) : 3;
+    ctx.beginPath();
+    ctx.moveTo(effect.x + Math.cos(angle) * inner, effect.y + Math.sin(angle) * inner);
+    ctx.lineTo(effect.x + Math.cos(angle) * outerDist, effect.y + Math.sin(angle) * outerDist);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 function drawMeteorImpactEffect(effect, color, progress) {
   const baseRadius = effect.radius || 150;
   const shockRadius = baseRadius * (0.28 + progress * 0.92);
@@ -8049,6 +9547,10 @@ function drawMeteorImpactEffect(effect, color, progress) {
 }
 
 function drawShieldEffect(effect, color, progress) {
+  if (effect.style === "engineer_mecha_board") {
+    drawEngineerMechaBoardEffect(effect, color, progress);
+    return;
+  }
   if (effect.style === "martial_focus") {
     drawMartialFocusShieldEffect(effect, color, progress);
     return;
@@ -8187,7 +9689,41 @@ function drawReviveEffect(effect, color, progress) {
   drawHexRing(effect.x, effect.y, radius * (0.76 + progress * 0.22), color, 3);
 }
 
+function drawFrostBreathAuraEffect(effect, color, progress) {
+  const radius = effect.rangeRadius || effect.radius || 120;
+  const activeAlpha = effect.active ? 1 : 0.72;
+  const baseAngle = Number(effect.seed || 0) * 0.17;
+  const fill = ctx.createRadialGradient(effect.x, effect.y, radius * 0.18, effect.x, effect.y, radius * 0.92);
+  fill.addColorStop(0, `rgba(219,234,254,${0.035 * activeAlpha})`);
+  fill.addColorStop(0.62, `rgba(147,197,253,${0.055 * activeAlpha})`);
+  fill.addColorStop(1, "rgba(147,197,253,0)");
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius * 0.86, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = hexToRgba(color, 0.16 * activeAlpha);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius * 0.76, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = "rgba(219,234,254,0.14)";
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = "round";
+  for (let i = 0; i < 3; i += 1) {
+    const a = baseAngle + (Math.PI * 2 * i) / 3;
+    ctx.beginPath();
+    ctx.arc(effect.x, effect.y, radius * (0.46 + i * 0.13), a - 0.34, a + 0.42);
+    ctx.stroke();
+  }
+}
+
 function drawFrostEffect(effect, color, progress) {
+  if (effect.style === "frost_breath_aura") {
+    drawFrostBreathAuraEffect(effect, color, progress);
+    return;
+  }
   if (effect.style === "frost_lock") {
     drawFreezeLockEffect(effect, color, progress);
     return;
@@ -8270,10 +9806,10 @@ function drawFrostEffect(effect, color, progress) {
 }
 
 function drawSnapFreezeWave(effect, color, progress) {
-  const radius = effect.radius || 160;
+  const radius = effect.rangeRadius || effect.radius || 160;
   const flash = 1 - progress;
   const snap = progress < 0.18 ? progress / 0.18 : 1;
-  const plateRadius = radius * (0.94 + Math.sin(progress * Math.PI) * 0.04);
+  const plateRadius = radius;
   const flashAlpha = Math.max(0, 1 - progress * 3.8);
 
   const fill = ctx.createRadialGradient(effect.x, effect.y, radius * 0.08, effect.x, effect.y, plateRadius);
@@ -8389,7 +9925,7 @@ function drawFreezeLockEffect(effect, color, progress) {
 
 function drawPoisonEffect(effect, color, progress) {
   const radius = (effect.radius || 34) * (0.78 + progress * 0.22);
-  ctx.fillStyle = "rgba(132, 204, 22, 0.12)";
+  ctx.fillStyle = hexToRgba(color, 0.12);
   ctx.beginPath();
   ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
   ctx.fill();
@@ -8402,7 +9938,7 @@ function drawPoisonEffect(effect, color, progress) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = "#bef264";
+  ctx.fillStyle = color;
   for (let i = 0; i < 4; i += 1) {
     const angle = (Math.PI * 2 * i) / 4 + progress * 1.4;
     ctx.beginPath();
@@ -8452,7 +9988,7 @@ function drawBossPhaseSurgeEffect(x, y, radius, color, progress) {
 
 function drawWarningEffect(effect, color, progress) {
   const radius = effect.radius || 64;
-  if (effect.style === "sniper_lock") {
+  if (effect.style === "sniper_lock" || effect.style === "charge_predict" || effect.style === "spit_cast") {
     return;
   }
 
@@ -8482,11 +10018,6 @@ function drawWarningEffect(effect, color, progress) {
   }
 
   if (effect.style === "arrow_rain") {
-    drawDangerTelegraph(effect.x, effect.y, radius, color, progress, {
-      spokes: 12,
-      stripeAlpha: 0.2,
-      coreColor: "#ecfccb"
-    });
     return;
   }
 
@@ -8519,11 +10050,18 @@ function drawWarningEffect(effect, color, progress) {
   }
 
   if (effect.style === "boss_beam") {
-    drawDangerTelegraph(effect.x, effect.y, radius, color, progress, {
-      spokes: 14,
-      stripeAlpha: 0.2,
-      coreColor: "#fee2e2"
-    });
+    const angle = Number(effect.angle || 0);
+    const length = Math.max(180, Number(effect.length || radius * 8 || 780));
+    const width = Math.max(18, Number(effect.width || effect.beamWidth || 34));
+    const half = length * 0.5;
+    drawEnemyLineTelegraph(
+      effect.x - Math.cos(angle) * half,
+      effect.y - Math.sin(angle) * half,
+      effect.x + Math.cos(angle) * half,
+      effect.y + Math.sin(angle) * half,
+      width,
+      progress
+    );
     return;
   }
 
@@ -8576,14 +10114,7 @@ function drawWarningEffect(effect, color, progress) {
   }
 
   if (effect.style === "taunt") {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 5;
-    for (let i = 0; i < 3; i += 1) {
-      ctx.beginPath();
-      ctx.arc(effect.x, effect.y, radius * (0.34 + i * 0.22 + progress * 0.08), 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    drawRadialSparks(effect.x, effect.y, radius * 0.72, color, 12, progress);
+    drawCanvasTauntExpandingRing(effect, progress);
     return;
   }
 
@@ -8594,6 +10125,48 @@ function drawWarningEffect(effect, color, progress) {
   ctx.arc(effect.x, effect.y, radius * (0.88 + progress * 0.08), 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
+}
+
+function drawCanvasTauntExpandingRing(effect, progress) {
+  const radius = effect.radius || effect.rangeRadius || 230;
+  const t = clamp01(progress);
+  const ease = 1 - Math.pow(1 - t, 2.6);
+  const fade = 1 - Math.max(0, (t - 0.74) / 0.26);
+  const ringRadius = radius * (0.08 + ease * 0.92);
+  const innerT = clamp01((t - 0.16) / 0.84);
+  const innerRadius = radius * (0.05 + (1 - Math.pow(1 - innerT, 2.2)) * 0.68);
+  const alpha = Math.max(0, fade);
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#7f1d1d", 0.055 * alpha);
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, ringRadius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba("#ff2d55", 0.92 * alpha);
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, ringRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = hexToRgba("#ef4444", 0.38 * alpha);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, innerRadius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  for (let i = 0; i < 14; i += 1) {
+    const angle = (Math.PI * 2 * i) / 14 + t * 0.18;
+    const from = ringRadius * (0.9 + (i % 2) * 0.03);
+    const to = ringRadius * (1.03 + (i % 3) * 0.035);
+    ctx.strokeStyle = hexToRgba(i % 3 ? "#ff2d55" : "#fecaca", 0.5 * alpha);
+    ctx.lineWidth = i % 2 ? 4 : 6;
+    ctx.beginPath();
+    ctx.moveTo(effect.x + Math.cos(angle) * from, effect.y + Math.sin(angle) * from);
+    ctx.lineTo(effect.x + Math.cos(angle) * to, effect.y + Math.sin(angle) * to);
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawThreadMarkWarning(effect, color, progress) {
@@ -8717,15 +10290,16 @@ function drawBruteSwingTelegraph(x, y, radius, angle, color, progress) {
   const reach = Math.max(70, radius);
   const sweep = Math.PI * 0.82;
   const pulse = 0.65 + progress * 0.35;
+  const dangerColor = "#ff2d55";
 
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
 
   const warning = ctx.createRadialGradient(16, 0, reach * 0.08, 16, 0, reach);
-  warning.addColorStop(0, hexToRgba(color, 0.04));
-  warning.addColorStop(0.58, hexToRgba(color, 0.16 + progress * 0.1));
-  warning.addColorStop(1, hexToRgba(color, 0));
+  warning.addColorStop(0, hexToRgba(dangerColor, 0.04));
+  warning.addColorStop(0.58, hexToRgba(dangerColor, 0.16 + progress * 0.1));
+  warning.addColorStop(1, hexToRgba(dangerColor, 0));
   ctx.fillStyle = warning;
   ctx.beginPath();
   ctx.moveTo(0, 0);
@@ -8733,13 +10307,13 @@ function drawBruteSwingTelegraph(x, y, radius, angle, color, progress) {
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = hexToRgba("#fee2e2", 0.44 + progress * 0.28);
+  ctx.strokeStyle = hexToRgba(dangerColor, 0.44 + progress * 0.28);
   ctx.lineWidth = 3 + progress * 2;
   ctx.beginPath();
   ctx.arc(0, 0, reach * (0.72 + progress * 0.22), -sweep * 0.48, sweep * 0.48);
   ctx.stroke();
 
-  ctx.strokeStyle = hexToRgba(color, 0.3 + progress * 0.38);
+  ctx.strokeStyle = hexToRgba(dangerColor, 0.3 + progress * 0.38);
   ctx.lineWidth = 3;
   for (let i = -1; i <= 1; i += 1) {
     const laneAngle = i * sweep * 0.24;
@@ -8754,8 +10328,12 @@ function drawBruteSwingTelegraph(x, y, radius, angle, color, progress) {
 
 function drawMeteorEffect(effect, color, progress) {
   const radius = effect.radius || 150;
-  const impact = clamp01(progress);
-  const fall = 1 - Math.pow(1 - impact, 2.2);
+  const duration = Math.max(0.1, Number(effect.ttl || effect.duration || 0));
+  const impactAt = Math.max(0, Number(effect.impactAt || effect.fallTime || 0));
+  const fallEnd = impactAt > 0 && duration > 0 ? Math.max(0.2, Math.min(0.92, impactAt / duration)) : 0.72;
+  const fallProgress = clamp01(progress / fallEnd);
+  const impact = clamp01((progress - fallEnd) / Math.max(0.08, 1 - fallEnd));
+  const fall = 1 - Math.pow(1 - fallProgress, 2.2);
   const startX = effect.x - radius * 1.45;
   const startY = effect.y - radius * 3.75;
   const rockX = startX + radius * 1.22 * fall;
@@ -8778,44 +10356,33 @@ function drawMeteorEffect(effect, color, progress) {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  const trail = ctx.createLinearGradient(startX, startY, rockX, rockY);
-  trail.addColorStop(0, "rgba(255,255,255,0)");
-  trail.addColorStop(0.36, "rgba(251,146,60,0.42)");
-  trail.addColorStop(0.72, "rgba(251,191,36,0.9)");
-  trail.addColorStop(1, "#fff7ed");
-  ctx.strokeStyle = trail;
-  ctx.lineWidth = 18;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(startX, startY);
-  ctx.lineTo(rockX, rockY);
-  ctx.stroke();
-
-  ctx.strokeStyle = "rgba(248,113,113,0.66)";
-  ctx.lineWidth = 4;
-  for (const offset of [-0.13, 0.13]) {
+  if (impact <= 0.05) {
+    drawJaggedMeteorTail(startX, startY, rockX, rockY, 20, 0.92);
+    ctx.strokeStyle = "rgba(248,113,113,0.66)";
+    ctx.lineWidth = 4;
+    for (const offset of [-0.13, 0.13]) {
+      ctx.beginPath();
+      ctx.moveTo(startX + radius * offset, startY - radius * 0.04);
+      ctx.lineTo(rockX + radius * offset * 0.42, rockY + radius * 0.04);
+      ctx.stroke();
+    }
+  } else {
+    ctx.strokeStyle = `rgba(251,146,60,${0.52 * (1 - impact)})`;
+    ctx.lineWidth = 7;
     ctx.beginPath();
-    ctx.moveTo(startX + radius * offset, startY - radius * 0.04);
-    ctx.lineTo(rockX + radius * offset * 0.42, rockY + radius * 0.04);
+    ctx.arc(effect.x, effect.y, radius * (0.28 + impact * 0.62), 0, Math.PI * 2);
     ctx.stroke();
+    drawRadialSparks(effect.x, effect.y, radius * (0.48 + impact * 0.22), "#fde68a", 14, impact);
   }
 
-  ctx.fillStyle = "#7c2d12";
-  ctx.strokeStyle = "#fed7aa";
-  ctx.lineWidth = 3;
+  ctx.fillStyle = `rgba(251,191,36,${0.2 + fallProgress * 0.2 + (1 - impact) * impact * 0.34})`;
   ctx.beginPath();
-  ctx.arc(rockX, rockY, 14 + progress * 8, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.fillStyle = `rgba(251,191,36,${0.24 + progress * 0.28})`;
-  ctx.beginPath();
-  ctx.arc(effect.x, effect.y, radius * (0.12 + progress * 0.08), 0, Math.PI * 2);
+  ctx.arc(effect.x, effect.y, radius * (0.12 + fallProgress * 0.08 + impact * 0.1), 0, Math.PI * 2);
   ctx.fill();
 }
 
 function drawTrapEffect(effect, color, progress) {
-  if (effect.style === "shock_mine") {
+  if (effect.style === "shock_mine" || effect.style === "charged_mine" || effect.style === "engineer_dash_mine") {
     drawShockMineTrapEffect(effect, color, progress);
     return;
   }
@@ -8904,6 +10471,8 @@ function drawAlchemyPoolCastEffect(effect, color, progress) {
 }
 
 function drawArrowRainLaunchEffect(effect, color, progress) {
+  const arrowColor = "#f1d08b";
+  const light = "#fff7ed";
   const fromX = Number.isFinite(effect.fromX) ? effect.fromX : effect.x;
   const fromY = Number.isFinite(effect.fromY) ? effect.fromY : effect.y;
   const toX = Number.isFinite(effect.toX) ? effect.toX : effect.x;
@@ -8913,9 +10482,10 @@ function drawArrowRainLaunchEffect(effect, color, progress) {
   const dist = Math.hypot(dx, dy) || 1;
   const nx = -dy / dist;
   const ny = dx / dist;
+  const rainRadius = effect.radius || 150;
   const launch = clamp01(progress / 0.62);
-  const rain = clamp01((progress - 0.46) / 0.54);
-  const arcHeight = Math.min(240, Math.max(110, dist * 0.24));
+  const rain = clamp01((progress - 0.72) / 0.28);
+  const arcHeight = Math.max(180, Math.min(460, dist * 0.46 + rainRadius * 0.5));
   const controlX = (fromX + toX) * 0.5;
   const controlY = Math.min(fromY, toY) - arcHeight;
 
@@ -8923,38 +10493,48 @@ function drawArrowRainLaunchEffect(effect, color, progress) {
   ctx.globalCompositeOperation = "lighter";
   ctx.lineCap = "round";
 
-  for (let i = -3; i <= 3; i += 1) {
-    const offset = i * 9;
-    const t = clamp01(launch - Math.abs(i) * 0.045);
-    const one = 1 - t;
-    const x = one * one * (fromX + nx * offset) + 2 * one * t * (controlX + nx * offset * 0.35) + t * t * (toX + nx * offset * 0.22);
-    const y = one * one * (fromY + ny * offset) + 2 * one * t * (controlY + ny * offset * 0.35) + t * t * (toY + ny * offset * 0.22);
-    const tx = 2 * one * (controlX - fromX) + 2 * t * (toX - controlX);
-    const ty = 2 * one * (controlY - fromY) + 2 * t * (toY - controlY);
-    const angle = Math.atan2(ty, tx);
-    const alpha = 0.28 + t * 0.58;
+  ctx.strokeStyle = hexToRgba("#4a3415", 0.26);
+  ctx.lineWidth = 7;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.quadraticCurveTo(controlX, controlY, toX, toY);
+  ctx.stroke();
 
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(angle);
-    ctx.strokeStyle = hexToRgba(i === 0 ? "#ecfccb" : color, alpha);
-    ctx.lineWidth = i === 0 ? 3.2 : 2.1;
-    ctx.beginPath();
-    ctx.moveTo(-28, 0);
-    ctx.lineTo(18, 0);
-    ctx.stroke();
-    ctx.strokeStyle = hexToRgba("#f8fafc", alpha * 0.82);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(18, 0);
-    ctx.lineTo(6, -5);
-    ctx.moveTo(18, 0);
-    ctx.lineTo(6, 5);
-    ctx.stroke();
-    ctx.restore();
-  }
+  ctx.strokeStyle = hexToRgba(arrowColor, 0.42);
+  ctx.lineWidth = 3.5;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.quadraticCurveTo(controlX, controlY, toX, toY);
+  ctx.stroke();
 
-  ctx.strokeStyle = hexToRgba(color, 0.24 * (1 - rain));
+  const one = 1 - launch;
+  const arrowX = one * one * fromX + 2 * one * launch * controlX + launch * launch * toX;
+  const arrowY = one * one * fromY + 2 * one * launch * controlY + launch * launch * toY;
+  const tx = 2 * one * (controlX - fromX) + 2 * launch * (toX - controlX);
+  const ty = 2 * one * (controlY - fromY) + 2 * launch * (toY - controlY);
+  const arrowAngle = Math.atan2(ty, tx);
+  const arrowAlpha = 0.46 + launch * 0.42;
+
+  ctx.save();
+  ctx.translate(arrowX, arrowY);
+  ctx.rotate(arrowAngle);
+  ctx.strokeStyle = hexToRgba(light, arrowAlpha);
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.moveTo(-32, 0);
+  ctx.lineTo(20, 0);
+  ctx.stroke();
+  ctx.strokeStyle = hexToRgba("#f8fafc", arrowAlpha * 0.82);
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(20, 0);
+  ctx.lineTo(7, -5);
+  ctx.moveTo(20, 0);
+  ctx.lineTo(7, 5);
+  ctx.stroke();
+  ctx.restore();
+
+  ctx.strokeStyle = hexToRgba(arrowColor, 0.24 * (1 - rain));
   ctx.lineWidth = 2;
   ctx.setLineDash([8, 8]);
   ctx.beginPath();
@@ -8964,22 +10544,35 @@ function drawArrowRainLaunchEffect(effect, color, progress) {
   ctx.setLineDash([]);
 
   if (rain > 0) {
-    const radius = effect.radius || 150;
+    const radius = rainRadius;
+    ctx.fillStyle = hexToRgba("#4a3415", 0.024 + rain * 0.012);
+    ctx.strokeStyle = hexToRgba(arrowColor, 0.22 + rain * 0.16);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(toX, toY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba("#fde68a", 0.07 + rain * 0.07);
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.arc(toX, toY, radius * 0.72, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.beginPath();
     ctx.arc(toX, toY, radius * 0.92, 0, Math.PI * 2);
     ctx.clip();
-    for (let i = 0; i < 16; i += 1) {
+    for (let i = 0; i < 7; i += 1) {
       const seed = pseudoRandom((effect.seed || 0) + i * 13.1, i * 4.7);
       const seed2 = pseudoRandom(i * 2.3, (effect.seed || 0) + 4.9);
-      const angle = seed * Math.PI * 2;
-      const spread = Math.sqrt(seed2) * radius * 0.82;
-      const x = toX + Math.cos(angle) * spread;
-      const y = toY + Math.sin(angle) * spread - radius * (0.58 - rain * 0.52);
-      ctx.strokeStyle = hexToRgba("#ecfccb", 0.18 + rain * 0.48);
+      const lane = (i - 3) * radius * 0.13 + (seed - 0.5) * radius * 0.1;
+      const x = toX + lane;
+      const landY = toY + (seed2 - 0.5) * radius * 0.28;
+      const y = landY - radius * 2.05 + rain * radius * 2.28;
+      const slant = (i % 2 ? -1 : 1) * 2;
+      ctx.strokeStyle = hexToRgba(light, 0.18 + rain * 0.38);
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.moveTo(x - 12, y - 26);
-      ctx.lineTo(x + 5, y + 18);
+      ctx.moveTo(x - slant, y - 38);
+      ctx.lineTo(x + slant, y + 26);
       ctx.stroke();
     }
   }
@@ -8988,9 +10581,28 @@ function drawArrowRainLaunchEffect(effect, color, progress) {
 }
 
 function drawArrowRainBurst(effect, color, progress) {
+  const arrowColor = "#f1d08b";
+  const light = "#fff7ed";
+  const accent = "#fde68a";
   const radius = effect.radius || 72;
-  const count = effect.style === "arrow_rain_tick" ? 7 : 18;
+  const rainProgress = Math.max(0, Math.min(1, (progress - 0.68) / 0.32));
+  if (rainProgress <= 0) return;
+  const count = effect.style === "arrow_rain_tick" ? 4 : 8;
   ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#4a3415", 0.024 + rainProgress * 0.012);
+  ctx.strokeStyle = hexToRgba(arrowColor, 0.22 + rainProgress * 0.16);
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = hexToRgba(accent, 0.07 + rainProgress * 0.07);
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(effect.x, effect.y, radius * 0.72, 0, Math.PI * 2);
+  ctx.stroke();
+
   ctx.beginPath();
   ctx.arc(effect.x, effect.y, radius * 0.96, 0, Math.PI * 2);
   ctx.clip();
@@ -8998,40 +10610,99 @@ function drawArrowRainBurst(effect, color, progress) {
   for (let i = 0; i < count; i += 1) {
     const seed = pseudoRandom((effect.seed || 0.2) + i * 9.7, i * 4.19);
     const seed2 = pseudoRandom(i * 2.31, (effect.seed || 0.4) + i * 0.61);
-    const angle = seed * Math.PI * 2;
-    const spread = Math.sqrt(seed2) * radius * 0.82;
-    const x = effect.x + Math.cos(angle) * spread;
-    const y = effect.y + Math.sin(angle) * spread;
-    const drop = 1 - progress;
+    const lane = (i - (count - 1) / 2) * radius * 0.12 + (seed - 0.5) * radius * 0.1;
+    const x = effect.x + lane;
+    const fall = (rainProgress * 1.35 + i / count) % 1;
+    const landY = effect.y + (seed2 - 0.5) * radius * 0.32;
+    const y = landY - radius * 2.05 + fall * radius * 2.32;
     const length = radius * (0.18 + seed * 0.08);
+    const slant = (i % 2 ? -1 : 1) * 2;
 
-    ctx.strokeStyle = `rgba(236,252,203,${0.82 - progress * 0.42})`;
-    ctx.lineWidth = effect.style === "arrow_rain_tick" ? 2.2 : 2.8;
+    ctx.strokeStyle = hexToRgba(light, 0.34 + rainProgress * 0.28);
+    ctx.lineWidth = effect.style === "arrow_rain_tick" ? 1.8 : 2.2;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.moveTo(x - length * 0.52, y - length * (1.35 + drop));
-    ctx.lineTo(x + length * 0.22, y + length * (0.32 - progress * 0.18));
+    ctx.moveTo(x - slant, y - length * 0.82);
+    ctx.lineTo(x + slant * 0.45, y + length * 0.32);
     ctx.stroke();
 
-    ctx.strokeStyle = hexToRgba(color, 0.72 - progress * 0.3);
+    ctx.strokeStyle = hexToRgba(accent, 0.72 - progress * 0.3);
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.moveTo(x + length * 0.22, y + length * 0.32);
-    ctx.lineTo(x - length * 0.02, y + length * 0.06);
-    ctx.moveTo(x + length * 0.22, y + length * 0.32);
-    ctx.lineTo(x - length * 0.12, y + length * 0.24);
+    ctx.moveTo(x + slant * 0.45, y + length * 0.32);
+    ctx.lineTo(x - slant * 0.16, y + length * 0.04);
+    ctx.moveTo(x + slant * 0.45, y + length * 0.32);
+    ctx.lineTo(x + slant * 0.08, y + length * 0.02);
     ctx.stroke();
   }
   ctx.restore();
+}
 
-  ctx.strokeStyle = hexToRgba(color, 0.52 - progress * 0.28);
-  ctx.lineWidth = 3;
+function drawEngineerMechaLaserEffect(effect, color, progress) {
+  const fromX = Number.isFinite(effect.fromX) ? effect.fromX : effect.x;
+  const fromY = Number.isFinite(effect.fromY) ? effect.fromY : effect.y;
+  const toX = Number.isFinite(effect.toX) ? effect.toX : effect.x;
+  const toY = Number.isFinite(effect.toY) ? effect.toY : effect.y;
+  const giant = effect.style === "engineer_mecha_giant_laser" || effect.style === "engineer_laser_module_beam";
+  const width = Math.max(giant ? 46 : 13, Number(effect.width || (giant ? 56 : 16)));
+  const flash = 1 - Math.min(1, progress);
+  const coreAlpha = giant ? 0.9 : 0.82;
+  const dx = toX - fromX;
+  const dy = toY - fromY;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = hexToRgba("#06131f", giant ? 0.34 : 0.22);
+  ctx.lineWidth = width * (giant ? 1.75 : 1.45);
   ctx.beginPath();
-  ctx.arc(effect.x, effect.y, radius * (0.55 + progress * 0.28), 0, Math.PI * 2);
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
   ctx.stroke();
+
+  ctx.strokeStyle = hexToRgba(color, giant ? 0.78 : 0.68);
+  ctx.lineWidth = width * (giant ? 0.92 : 0.78);
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  ctx.strokeStyle = hexToRgba("#f8fafc", coreAlpha);
+  ctx.lineWidth = Math.max(giant ? 9 : 4, width * (giant ? 0.22 : 0.18));
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+
+  if (giant) {
+    ctx.strokeStyle = hexToRgba("#67e8f9", 0.42 + flash * 0.22);
+    ctx.lineWidth = Math.max(3, width * 0.08);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(fromX + px * side * width * 0.48, fromY + py * side * width * 0.48);
+      ctx.lineTo(toX + px * side * width * 0.24, toY + py * side * width * 0.24);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle = hexToRgba("#f8fafc", giant ? 0.74 : 0.52);
+  ctx.beginPath();
+  ctx.arc(fromX, fromY, Math.max(8, width * (giant ? 0.34 : 0.28)) * (1 + flash * 0.18), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawShotEffect(effect, color, progress) {
+  if (effect.style === "engineer_mecha_boot") {
+    drawEngineerMechaBootEffect(effect, color, progress);
+    return;
+  }
+
   if (effect.style === "arrow_rain_launch") {
     drawArrowRainLaunchEffect(effect, color, progress);
     return;
@@ -9043,7 +10714,7 @@ function drawShotEffect(effect, color, progress) {
   }
 
   if (effect.style === "stalker_shuriken") {
-    drawStalkerShurikenShotEffect(effect, color, progress);
+    drawStalkerShurikenShotEffect(effect, "#ff2d55", progress);
     return;
   }
 
@@ -9052,10 +10723,22 @@ function drawShotEffect(effect, color, progress) {
     return;
   }
 
+  if (effect.style === "engineer_mecha_hand_laser" || effect.style === "engineer_mecha_giant_laser" || effect.style === "engineer_laser_module_beam") {
+    drawEngineerMechaLaserEffect(effect, color, progress);
+    return;
+  }
+
   if (
     effect.style === "engineer_bolt" ||
+    effect.style === "engineer_mecha_bolt" ||
+    effect.style === "engineer_mecha_laser_muzzle" ||
     effect.style === "turret_fire" ||
     effect.style === "rail_turret" ||
+    effect.style === "engineer_turret_laser" ||
+    effect.style === "engineer_drone_laser" ||
+    effect.style === "engineer_missile_launch" ||
+    effect.style === "drone_missile_launch" ||
+    effect.style === "drone_kamikaze_start" ||
     effect.style === "drone_launch"
   ) {
     drawTechShotEffect(effect, color, progress);
@@ -9074,6 +10757,73 @@ function drawShotEffect(effect, color, progress) {
 
   if (effect.style === "alchemist_elixir_spray") {
     drawAlchemistElixirSprayEffect(effect, color, progress);
+    return;
+  }
+
+  if (effect.style === "ranger_laser_arrow") {
+    const fromX = Number.isFinite(effect.fromX) ? effect.fromX : effect.x;
+    const fromY = Number.isFinite(effect.fromY) ? effect.fromY : effect.y;
+    const toX = Number.isFinite(effect.toX) ? effect.toX : effect.x;
+    const toY = Number.isFinite(effect.toY) ? effect.toY : effect.y;
+    const width = Math.max(24, Number(effect.width || 34));
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const px = -uy;
+    const py = ux;
+    const travel = Math.max(0.05, Math.min(1, progress * 1.05));
+    const tail = Math.max(0, travel - 0.34);
+    const headX = fromX + dx * travel;
+    const headY = fromY + dy * travel;
+    const tailX = fromX + dx * tail;
+    const tailY = fromY + dy * tail;
+    const beamAlpha = Math.min(1, (1 - progress) * 1.18 + 0.12);
+    const muzzleAlpha = Math.max(0, (1 - progress) * (1 - progress * 1.8));
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.lineCap = "round";
+    ctx.fillStyle = hexToRgba("#f8fff1", muzzleAlpha * 0.28);
+    ctx.beginPath();
+    ctx.arc(fromX, fromY, width * (0.42 + muzzleAlpha * 0.3), 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.strokeStyle = hexToRgba("#12301f", beamAlpha * 0.24);
+    ctx.lineWidth = width * 2.05;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(headX, headY);
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba(color, beamAlpha * 0.82);
+    ctx.lineWidth = width * 1.08;
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(headX, headY);
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba("#f8fff1", beamAlpha * 0.9);
+    ctx.lineWidth = Math.max(7, width * 0.3);
+    ctx.beginPath();
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(headX, headY);
+    ctx.stroke();
+
+    ctx.strokeStyle = hexToRgba("#f8fff1", beamAlpha * 0.78);
+    ctx.lineWidth = Math.max(4, width * 0.16);
+    ctx.beginPath();
+    ctx.moveTo(headX - ux * width * 1.25 + px * width * 0.44, headY - uy * width * 1.25 + py * width * 0.44);
+    ctx.lineTo(headX + ux * width * 0.42, headY + uy * width * 0.42);
+    ctx.moveTo(headX - ux * width * 1.25 - px * width * 0.44, headY - uy * width * 1.25 - py * width * 0.44);
+    ctx.lineTo(headX + ux * width * 0.42, headY + uy * width * 0.42);
+    ctx.stroke();
+
+    ctx.fillStyle = hexToRgba("#f8fff1", beamAlpha * 0.52);
+    ctx.beginPath();
+    ctx.arc(headX, headY, Math.max(8, width * 0.28), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     return;
   }
 
@@ -9138,6 +10888,149 @@ function drawShotEffect(effect, color, progress) {
     ctx.lineTo(radius * 0.45, i * radius * 0.22);
     ctx.stroke();
   }
+  ctx.restore();
+}
+
+function drawMechaSuitAura(x, y, sizeScale, self, now, facing = 0) {
+  const base = (self ? 46 : 40) * sizeScale;
+  const pulse = 1 + Math.sin(now / 118) * 0.04;
+  const angle = Number(facing || 0);
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+  const px = -uy;
+  const py = ux;
+
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#0f172a", 0.2);
+  ctx.beginPath();
+  ctx.ellipse(x, y + base * 0.24, base * 1.18, base * 0.58, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawHexRing(x, y, base * (1.03 + pulse * 0.04), classColors.engineer, 4);
+  ctx.strokeStyle = hexToRgba("#f8f3e9", 0.42);
+  ctx.lineWidth = 2.5 * sizeScale;
+  ctx.beginPath();
+  ctx.arc(x, y, base * 0.72, -Math.PI * 0.18 + now / 900, Math.PI * 0.8 + now / 900);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(x, y, base * 0.88, Math.PI * 0.92 - now / 1100, Math.PI * 1.56 - now / 1100);
+  ctx.stroke();
+
+  for (const side of [-1, 1]) {
+    const sx = x + px * side * base * 0.54 - ux * base * 0.02;
+    const sy = y + py * side * base * 0.54 - uy * base * 0.02;
+    ctx.fillStyle = hexToRgba("#241a07", 0.72);
+    ctx.strokeStyle = hexToRgba("#ffd166", 0.86);
+    ctx.lineWidth = 2.4 * sizeScale;
+    ctx.beginPath();
+    ctx.moveTo(sx + ux * base * 0.38, sy + uy * base * 0.38);
+    ctx.lineTo(sx - ux * base * 0.14 + px * side * base * 0.24, sy - uy * base * 0.14 + py * side * base * 0.24);
+    ctx.lineTo(sx - ux * base * 0.46 + px * side * base * 0.1, sy - uy * base * 0.46 + py * side * base * 0.1);
+    ctx.lineTo(sx - ux * base * 0.24 - px * side * base * 0.16, sy - uy * base * 0.24 - py * side * base * 0.16);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba("#67e8f9", 0.46);
+    ctx.lineWidth = 2 * sizeScale;
+    ctx.beginPath();
+    ctx.moveTo(sx - ux * base * 0.24 - px * side * base * 0.04, sy - uy * base * 0.24 - py * side * base * 0.04);
+    ctx.lineTo(sx + ux * base * 0.26 + px * side * base * 0.02, sy + uy * base * 0.26 + py * side * base * 0.02);
+    ctx.stroke();
+  }
+
+  for (const side of [-1, 1]) {
+    const bx = x - ux * base * 0.5 + px * side * base * 0.34;
+    const by = y - uy * base * 0.5 + py * side * base * 0.34;
+    const flame = 0.74 + Math.sin(now / 85 + side) * 0.16;
+    ctx.fillStyle = hexToRgba("#f97316", 0.26 * flame);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(bx - ux * base * 0.52 + px * side * base * 0.13, by - uy * base * 0.52 + py * side * base * 0.13);
+    ctx.lineTo(bx - ux * base * 0.18, by - uy * base * 0.18);
+    ctx.lineTo(bx - ux * base * 0.52 - px * side * base * 0.13, by - uy * base * 0.52 - py * side * base * 0.13);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  ctx.fillStyle = hexToRgba("#67e8f9", 0.78);
+  ctx.beginPath();
+  ctx.arc(x + ux * base * 0.32, y + uy * base * 0.32, Math.max(3.5, base * 0.09), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawEngineerMechaBoardEffect(effect, color, progress) {
+  const radius = effect.radius || 104;
+  const alpha = 1 - progress * 0.18;
+  const lock = easeOutCubic(Math.min(1, progress * 1.45));
+  const spin = progress * Math.PI * 1.8;
+  ctx.save();
+  ctx.translate(effect.x, effect.y);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#0f172a", 0.28 * alpha);
+  ctx.beginPath();
+  ctx.ellipse(0, radius * 0.18, radius * 0.82, radius * 0.36, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  drawHexRing(0, 0, radius * (0.38 + lock * 0.54), color, 5);
+  drawHexRing(0, 0, radius * (0.2 + lock * 0.34), "#67e8f9", 3);
+  ctx.strokeStyle = hexToRgba("#f8f3e9", 0.5 * alpha);
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 8]);
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * (0.66 + progress * 0.12), spin, spin + Math.PI * 1.34);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (let i = 0; i < 6; i += 1) {
+    const a = spin + (Math.PI * 2 * i) / 6;
+    const slide = radius * (0.62 - lock * 0.24);
+    const cx = Math.cos(a) * slide;
+    const cy = Math.sin(a) * slide * 0.72;
+    ctx.fillStyle = hexToRgba(i % 2 ? "#3f3426" : "#241a07", 0.78 * alpha);
+    ctx.strokeStyle = hexToRgba(i % 2 ? "#67e8f9" : "#ffd166", 0.72 * alpha);
+    ctx.lineWidth = 2.2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a + Math.PI * 0.5);
+    roundRect(-radius * 0.11, -radius * 0.06, radius * 0.22, radius * 0.12, 4);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  ctx.fillStyle = hexToRgba("#67e8f9", 0.24 * alpha);
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * (0.13 + lock * 0.07), 0, Math.PI * 2);
+  ctx.fill();
+  drawRadialSparks(0, 0, radius * (0.54 + lock * 0.36), "#f8f3e9", 12, progress);
+  ctx.restore();
+}
+
+function drawEngineerMechaBootEffect(effect, color, progress) {
+  const radius = effect.radius || 74;
+  const alpha = 1 - progress;
+  ctx.save();
+  ctx.translate(effect.x, effect.y);
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < 4; i += 1) {
+    const angle = -Math.PI * 0.5 + (i - 1.5) * 0.32;
+    const len = radius * (0.7 + progress * 1.05 + i * 0.04);
+    ctx.strokeStyle = hexToRgba(i % 2 ? "#67e8f9" : "#f97316", alpha * (0.38 - i * 0.04));
+    ctx.lineWidth = Math.max(3, radius * (0.13 - i * 0.014));
+    ctx.lineCap = "round";
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(angle) * radius * 0.16, Math.sin(angle) * radius * 0.1);
+    ctx.lineTo(Math.cos(angle) * len, Math.sin(angle) * len);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = hexToRgba(color, 0.72 * alpha);
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(0, 0, radius * (0.32 + progress * 0.38), Math.PI * 0.12, Math.PI * 1.88);
+  ctx.stroke();
+  drawRadialSparks(0, 0, radius * (0.42 + progress * 0.55), "#f8f3e9", 9, progress * 1.7);
   ctx.restore();
 }
 
@@ -9232,10 +11125,37 @@ function drawEngineerDeviceThrowEffect(effect, color, progress) {
 function drawTechShotEffect(effect, color, progress) {
   const radius = effect.radius || 48;
   const angle = effect.angle || 0;
-  const rail = effect.style === "rail_turret";
+  const style = String(effect.style || "");
+  if (style.includes("missile_launch")) {
+    drawEngineerMissileLaunchEffect(effect, color, progress);
+    return;
+  }
+  if (style.includes("kamikaze_start")) {
+    drawEngineerKamikazeStartEffect(effect, color, progress);
+    return;
+  }
+  const rail = effect.style === "rail_turret" || style.includes("turret_laser") || style.includes("drone_laser");
   const drone = effect.style === "drone_launch";
-  const length = radius * (rail ? 1.8 : drone ? 1.25 : 1.05);
+  const electricBolt = (style.includes("electric") || style.includes("shock")) && !style.includes("engineer_bolt") && !style.includes("mecha_bolt");
+  const length = radius * (rail ? 2.25 : drone ? 1.25 : 1.05);
   const alpha = 1 - progress * 0.35;
+  if (electricBolt && !rail) {
+    const fromX = effect.x - Math.cos(angle) * length * 0.58;
+    const fromY = effect.y - Math.sin(angle) * length * 0.58;
+    const toX = effect.x + Math.cos(angle) * length * (0.82 + progress * 0.12);
+    const toY = effect.y + Math.sin(angle) * length * (0.82 + progress * 0.12);
+    const boltColor = style.includes("mecha") ? "#f5d0fe" : "#67e8f9";
+    drawLightningLine(fromX, fromY, toX, toY, boltColor, Math.max(5, radius * 0.12), (effect.seed || 0) + progress * 4.2);
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.fillStyle = hexToRgba("#f8fafc", 0.52 * alpha);
+    ctx.beginPath();
+    ctx.arc(toX, toY, 8 + progress * 7, 0, Math.PI * 2);
+    ctx.fill();
+    drawRadialSparks(toX, toY, 28 + radius * 0.16, boltColor, 7, progress);
+    ctx.restore();
+    return;
+  }
 
   ctx.save();
   ctx.translate(effect.x, effect.y);
@@ -9281,6 +11201,48 @@ function drawTechShotEffect(effect, color, progress) {
     ctx.fill();
   }
 
+  ctx.restore();
+}
+
+function drawEngineerMissileLaunchEffect(effect, color, progress) {
+  const radius = effect.radius || 58;
+  const angle = effect.angle || 0;
+  const alpha = 1 - progress;
+  ctx.save();
+  ctx.translate(effect.x, effect.y);
+  ctx.rotate(angle);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.fillStyle = hexToRgba("#f97316", 0.45 * alpha);
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.18, 0);
+  ctx.lineTo(-radius * (1.25 + progress), -radius * 0.34);
+  ctx.lineTo(-radius * 0.72, 0);
+  ctx.lineTo(-radius * (1.25 + progress), radius * 0.34);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = hexToRgba("#fed7aa", 0.78 * alpha);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.12, 0);
+  ctx.lineTo(radius * (0.85 + progress * 0.36), 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawEngineerKamikazeStartEffect(effect, color, progress) {
+  const radius = effect.radius || 78;
+  const alpha = 1 - progress;
+  ctx.save();
+  ctx.translate(effect.x, effect.y);
+  ctx.rotate(effect.angle || 0);
+  ctx.globalCompositeOperation = "lighter";
+  ctx.strokeStyle = hexToRgba("#fb923c", 0.78 * alpha);
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(-radius * 0.6, -radius * 0.36);
+  ctx.lineTo(radius * (0.9 + progress * 0.7), 0);
+  ctx.lineTo(-radius * 0.6, radius * 0.36);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -9466,7 +11428,7 @@ function drawStalkerShurikenShotEffect(effect, color, progress) {
     ctx.lineTo(length, 0);
     ctx.stroke();
 
-    ctx.strokeStyle = hexToRgba("#f5d0fe", 0.84 * (1 - progress * 0.35));
+    ctx.strokeStyle = hexToRgba("#fecaca", 0.84 * (1 - progress * 0.35));
     ctx.lineWidth = offset === 0 ? 4 : 3;
     ctx.beginPath();
     ctx.moveTo(14, 0);
@@ -9750,11 +11712,39 @@ function drawChainEffect(effect, color, progress) {
     drawEngineerOverclockChain(fromX, fromY, toX, toY, color, progress, effect.seed || 0);
     return;
   }
+  if (effect.style === "engineer_turret_laser" || effect.style === "engineer_drone_laser") {
+    drawEngineerTrackingLaserLine(fromX, fromY, toX, toY, color, progress);
+    return;
+  }
   if (effect.style === "assassin_mark_chain") {
     drawAssassinMarkChain(fromX, fromY, toX, toY, color, progress, effect.seed || 0);
     return;
   }
   drawLightningLine(fromX, fromY, toX, toY, color, 5, effect.seed + progress * 3);
+}
+
+function drawEngineerTrackingLaserLine(fromX, fromY, toX, toY, color, progress) {
+  const alpha = 1 - progress * 0.35;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = hexToRgba(color || "#7dd3fc", 0.26 * alpha);
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+  ctx.strokeStyle = hexToRgba("#f8fafc", 0.88 * alpha);
+  ctx.lineWidth = 3.2;
+  ctx.beginPath();
+  ctx.moveTo(fromX, fromY);
+  ctx.lineTo(toX, toY);
+  ctx.stroke();
+  ctx.fillStyle = hexToRgba("#bfdbfe", 0.76 * alpha);
+  ctx.beginPath();
+  ctx.arc(toX, toY, 7 + progress * 7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
 function drawEngineerOverclockChain(fromX, fromY, toX, toY, color, progress, seed) {
@@ -9927,32 +11917,153 @@ function drawLightningLine(fromX, fromY, toX, toY, color, width, seed) {
   const dx = toX - fromX;
   const dy = toY - fromY;
   const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
   const nx = -dy / length;
   const ny = dx / length;
-  const steps = 5;
+  const boltWidth = Math.max(2, Number(width) || 4);
+  const steps = Math.max(5, Math.min(11, Math.round(length / 42)));
+  const jitter = Math.max(9, Math.min(38, length * 0.08));
+  const points = lightningPathPoints(fromX, fromY, dx, dy, ux, uy, nx, ny, steps, seed, jitter);
+  const phase = Number(seed) || 0;
+  const ribbon = (source, spread, wobble = 0.34) => {
+    const left = [];
+    const right = [];
+    for (let i = 0; i < source.length; i += 1) {
+      const prev = source[Math.max(0, i - 1)];
+      const next = source[Math.min(source.length - 1, i + 1)];
+      const lineDx = next.x - prev.x;
+      const lineDy = next.y - prev.y;
+      const lineLength = Math.hypot(lineDx, lineDy) || 1;
+      const px = -lineDy / lineLength;
+      const py = lineDx / lineLength;
+      const taper = i === 0 || i === source.length - 1 ? 0.48 : 1;
+      const jag = 1 + ((i % 2 ? 1 : -1) * wobble + Math.sin(phase * 3.1 + i * 2.17) * wobble * 0.28);
+      const w = Math.max(0.9, spread * taper * jag);
+      left.push({ x: source[i].x + px * w, y: source[i].y + py * w });
+      right.unshift({ x: source[i].x - px * w * 0.82, y: source[i].y - py * w * 0.82 });
+    }
+    return [...left, ...right];
+  };
+  const fillRibbon = (source, spread, fillColor, fillAlpha, strokeColor, strokeAlpha, strokeWidth, wobble = 0.34) => {
+    const poly = ribbon(source, spread, wobble);
+    if (!poly.length) return;
+    ctx.beginPath();
+    ctx.moveTo(poly[0].x, poly[0].y);
+    for (let i = 1; i < poly.length; i += 1) ctx.lineTo(poly[i].x, poly[i].y);
+    ctx.closePath();
+    ctx.fillStyle = hexToRgba(fillColor, fillAlpha);
+    ctx.fill();
+    if (strokeAlpha > 0 && strokeWidth > 0) {
+      ctx.strokeStyle = hexToRgba(strokeColor || fillColor, strokeAlpha);
+      ctx.lineWidth = strokeWidth;
+      ctx.stroke();
+    }
+  };
+  const branchRibbon = (start, end, spread, branchAlpha) => {
+    const branchDx = end.x - start.x;
+    const branchDy = end.y - start.y;
+    const branchLength = Math.hypot(branchDx, branchDy) || 1;
+    const branchUx = branchDx / branchLength;
+    const branchUy = branchDy / branchLength;
+    const px = -branchUy;
+    const py = branchUx;
+    const mid = {
+      x: start.x + branchDx * 0.56 + px * Math.sin(phase * 5.7 + branchLength) * spread * 0.8,
+      y: start.y + branchDy * 0.56 + py * Math.sin(phase * 5.7 + branchLength) * spread * 0.8
+    };
+    ctx.beginPath();
+    ctx.moveTo(start.x + px * spread, start.y + py * spread);
+    ctx.lineTo(mid.x + px * spread * 0.48, mid.y + py * spread * 0.48);
+    ctx.lineTo(end.x + branchUx * spread * 0.8, end.y + branchUy * spread * 0.8);
+    ctx.lineTo(mid.x - px * spread * 0.34, mid.y - py * spread * 0.34);
+    ctx.lineTo(start.x - px * spread * 0.72, start.y - py * spread * 0.72);
+    ctx.closePath();
+    ctx.fillStyle = hexToRgba(color, branchAlpha);
+    ctx.fill();
+    ctx.strokeStyle = hexToRgba("#f8fafc", branchAlpha * 0.62);
+    ctx.lineWidth = Math.max(0.8, spread * 0.16);
+    ctx.stroke();
+    ctx.strokeStyle = hexToRgba("#f8fafc", branchAlpha * 0.7);
+    ctx.lineWidth = Math.max(1.2, spread * 0.24);
+    ctx.beginPath();
+    ctx.moveTo(start.x, start.y);
+    ctx.lineTo(end.x, end.y);
+    ctx.stroke();
+  };
 
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
-  ctx.strokeStyle = hexToRgba(color, 0.24);
-  ctx.lineWidth = width + 5;
-  drawJaggedPath(fromX, fromY, dx, dy, nx, ny, steps, seed, length * 0.052);
-  ctx.stroke();
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "butt";
+  ctx.lineJoin = "miter";
+  fillRibbon(points, boltWidth * 2.65, "#061226", 0.16, color, 0.18, 1.6, 0.2);
+  fillRibbon(points, boltWidth * 1.36, color, 0.62, color, 0.34, 1.2, 0.4);
+  fillRibbon(points, Math.max(1.7, boltWidth * 0.5), "#f8fafc", 0.78, "#ffffff", 0.32, 0.8, 0.2);
 
-  ctx.strokeStyle = hexToRgba("#e9d5ff", 0.82);
-  ctx.lineWidth = Math.max(2, width * 0.38);
-  drawJaggedPath(fromX, fromY, dx, dy, nx, ny, steps, seed + 1.7, length * 0.032);
-  ctx.stroke();
+  for (let i = 1; i < points.length - 1; i += 1) {
+    if (i % 3 === 1) {
+      const nick = Math.max(3, boltWidth * (0.58 + (i % 2) * 0.18));
+      ctx.beginPath();
+      ctx.moveTo(points[i].x + nx * nick, points[i].y + ny * nick);
+      ctx.lineTo(points[i].x - ux * nick * 0.85, points[i].y - uy * nick * 0.85);
+      ctx.lineTo(points[i].x - nx * nick * 0.5, points[i].y - ny * nick * 0.5);
+      ctx.lineTo(points[i].x + ux * nick * 0.85, points[i].y + uy * nick * 0.85);
+      ctx.closePath();
+      ctx.fillStyle = hexToRgba("#f8fafc", 0.34);
+      ctx.fill();
+      ctx.strokeStyle = hexToRgba(color, 0.22);
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+    const forkSeed = Math.sin(phase * 13.7 + i * 4.31 + jitter * 0.21);
+    const side = (i % 4 === 1 ? 1 : -1) * (forkSeed >= 0 ? 1 : -1);
+    const forkLength = jitter * (0.85 + Math.abs(forkSeed) * 0.78) + boltWidth * 2.1;
+    const forkBack = jitter * (0.22 + Math.abs(Math.sin(i * 2.9)) * 0.22);
+    const start = points[i];
+    const end = {
+      x: start.x + nx * side * forkLength + ux * forkBack,
+      y: start.y + ny * side * forkLength + uy * forkBack
+    };
+    branchRibbon(start, end, Math.max(1.4, boltWidth * 0.42) + 1.8, 0.22);
+  }
+
+  ctx.fillStyle = hexToRgba("#f8fafc", 0.46);
+  ctx.beginPath();
+  ctx.arc(toX, toY, Math.max(4, boltWidth * 0.9), 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
 }
 
-function drawJaggedPath(fromX, fromY, dx, dy, nx, ny, steps, seed, jitter) {
-  ctx.beginPath();
-  ctx.moveTo(fromX, fromY);
-  for (let i = 1; i < steps; i += 1) {
+function lightningPathPoints(fromX, fromY, dx, dy, ux, uy, nx, ny, steps, seed, jitter) {
+  const points = [];
+  const snapSeed = Math.floor((Number(seed) || 0) * 11);
+  for (let i = 0; i <= steps; i += 1) {
     const t = i / steps;
-    const offset = Math.sin(seed + i * 2.31) * jitter;
-    ctx.lineTo(fromX + dx * t + nx * offset, fromY + dy * t + ny * offset);
+    const edge = i === 0 || i === steps ? 0 : 1;
+    const taper = Math.sin(t * Math.PI);
+    const s = snapSeed * 1.73 + i * 5.19 + Math.hypot(dx, dy) * 0.017;
+    const zigzag = (i % 2 === 0 ? 1 : -1) * (0.56 + Math.abs(Math.sin(s * 1.31)) * 0.72);
+    const fracture = Math.sin(s * 2.07) * 0.46 + Math.sin(s * 3.41) * 0.18;
+    const offset = (zigzag + fracture) * jitter * taper * edge;
+    const slide = Math.sin(s * 0.73 + snapSeed * 0.37) * jitter * 0.16 * taper * edge;
+    points.push({
+      x: fromX + dx * t + nx * offset + ux * slide,
+      y: fromY + dy * t + ny * offset + uy * slide
+    });
   }
-  ctx.lineTo(fromX + dx, fromY + dy);
+  return points;
+}
+
+function strokeLightningPath(points, color, width, alpha) {
+  if (!points.length) return;
+  ctx.strokeStyle = hexToRgba(color, alpha);
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i += 1) {
+    ctx.lineTo(points[i].x, points[i].y);
+  }
+  ctx.stroke();
 }
 
 function drawAim(camera) {
@@ -10123,9 +12234,11 @@ function getCamera() {
   const position = follow ? getVisualPosition(visuals.players, follow) : null;
   const x = position ? position.x : world.w / 2;
   const y = position ? position.y : world.h / 2;
+  const cameraX = world.w <= viewW ? world.w / 2 : clamp(x, viewW / 2, Math.max(viewW / 2, world.w - viewW / 2));
+  const cameraY = world.h <= viewH ? world.h / 2 : clamp(y, viewH / 2, Math.max(viewH / 2, world.h - viewH / 2));
   return {
-    x: clamp(x, viewW / 2, Math.max(viewW / 2, world.w - viewW / 2)),
-    y: clamp(y, viewH / 2, Math.max(viewH / 2, world.h - viewH / 2))
+    x: cameraX,
+    y: cameraY
   };
 }
 
@@ -10138,6 +12251,11 @@ function roundRect(x, y, width, height, radius) {
   ctx.arcTo(x, y + height, x, y, r);
   ctx.arcTo(x, y, x + width, y, r);
   ctx.closePath();
+}
+
+function easeOutCubic(t) {
+  const clamped = clamp(t, 0, 1);
+  return 1 - Math.pow(1 - clamped, 3);
 }
 
 function drawPolygon(x, y, radius, sides, rotation = 0) {

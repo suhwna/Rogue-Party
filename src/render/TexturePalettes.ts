@@ -10,7 +10,6 @@ export const classPalettes = {
   martialist: ["#d08b5f", "#642f20", "#fde68a"],
   alchemist: ["#9aa15f", "#3f4b24", "#bef264"],
   assassin: ["#8a6f9e", "#21142f", "#f5d0fe"],
-  cleric: ["#caa35a", "#59421f", "#dcfce7"],
 } as const satisfies Record<string, Palette>;
 
 export const enemyPalettes = {

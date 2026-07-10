@@ -5,6 +5,7 @@ export interface BossProfileLike {
   readonly color: string;
   readonly pattern: string;
   readonly signaturePatterns?: readonly string[];
+  readonly phasePatterns?: Readonly<Record<string | number, readonly string[]>>;
 }
 
 export interface BossProfileView {
@@ -14,6 +15,7 @@ export interface BossProfileView {
   readonly color: string;
   readonly pattern: string;
   readonly signaturePatterns: readonly string[];
+  readonly phasePatterns?: Readonly<Record<string | number, readonly string[]>> | null;
 }
 
 export interface BossPhaseEnemyLike {
@@ -36,6 +38,7 @@ export interface BossPatternEnemyLike {
   bossPatternCursor?: number;
   bossCycle?: number;
   currentBossPattern?: string;
+  bossPhase?: number;
 }
 
 function clampChapter(chapter: number | undefined, maxChapters: number): number {
@@ -76,7 +79,21 @@ export function bossProfileView(profile: BossProfileLike | null | undefined): Bo
     color: profile.color,
     pattern: profile.pattern,
     signaturePatterns: profile.signaturePatterns ?? [],
+    phasePatterns: profile.phasePatterns ?? null,
   };
+}
+
+export function getPhasePatterns(
+  profile: Pick<BossProfileLike, "signaturePatterns" | "phasePatterns"> | null | undefined,
+  phase: number | undefined,
+  fallbackPatterns: readonly string[] = [],
+): string[] {
+  const phaseKey = Math.max(1, Math.floor(phase ?? 1));
+  const phasePatterns = profile?.phasePatterns?.[phaseKey];
+  if (phasePatterns?.length) {
+    return phasePatterns.filter((pattern) => typeof pattern === "string" && pattern.trim().length > 0);
+  }
+  return getSignaturePatterns(profile, fallbackPatterns);
 }
 
 export function getSignaturePatterns(
@@ -89,14 +106,18 @@ export function getSignaturePatterns(
 
 export function nextBossPattern(
   enemy: BossPatternEnemyLike,
-  profile: Pick<BossProfileLike, "signaturePatterns"> | null | undefined,
+  profile: Pick<BossProfileLike, "signaturePatterns" | "phasePatterns"> | null | undefined,
   fallbackPatterns: readonly string[] = [],
 ): string {
-  const patterns = getSignaturePatterns(profile, fallbackPatterns);
+  const patterns = getPhasePatterns(profile, enemy.bossPhase, fallbackPatterns);
   if (!patterns.length) return "";
   const cursor = Math.max(0, Math.floor(enemy.bossPatternCursor ?? 0));
-  const pattern = patterns[cursor % patterns.length]!;
-  enemy.bossPatternCursor = cursor + 1;
+  let patternIndex = cursor % patterns.length;
+  if (patterns.length > 1 && patterns[patternIndex] === enemy.currentBossPattern) {
+    patternIndex = (patternIndex + 1) % patterns.length;
+  }
+  const pattern = patterns[patternIndex]!;
+  enemy.bossPatternCursor = patternIndex + 1;
   enemy.bossCycle = (enemy.bossCycle ?? 0) + 1;
   enemy.currentBossPattern = pattern;
   return pattern;

@@ -13,6 +13,7 @@ export interface HazardView {
   hostile?: boolean;
   armed?: boolean;
   armTime?: number;
+  armTimeMax?: number;
   small?: boolean;
   moveFromX?: number;
   moveFromY?: number;
@@ -63,6 +64,18 @@ export interface HazardRendererHost {
     zIndex: number,
     blendMode: string,
   ): void;
+  drawGfxLine?(x1: number, y1: number, x2: number, y2: number, width: number, color: string, alpha: number, zIndex: number, blendMode: string): void;
+  drawGfxLightning?(fromX: number, fromY: number, toX: number, toY: number, color: string, alpha: number, zIndex: number, width?: number, segments?: number, jitter?: number, phase?: number): void;
+  drawGfxPath?(
+    points: Array<{ x: number; y: number }>,
+    fillColor: string,
+    fillAlpha: number,
+    strokeColor: string,
+    strokeAlpha: number,
+    strokeWidth: number,
+    zIndex: number,
+    blendMode: string,
+  ): void;
   noise(x: number, y: number): number;
 }
 
@@ -84,6 +97,31 @@ export function hazardState(hazard: HazardView, now: number): HazardState {
 
 export function hazardSeed(hazard: HazardView): number {
   return Number(hazard.id || 0);
+}
+
+export function renderHostileHazardBoundary(
+  renderer: HazardRendererHost,
+  hazard: HazardView,
+  state: HazardState,
+  now: number,
+): void {
+  if (!hazard.hostile || (hazard.length && hazard.width)) return;
+  const pulse = 0.82 + Math.sin(now / 110 + hazardSeed(hazard)) * 0.1;
+  renderer.ring(hazard.x, hazard.y, state.radius * 1.01, "#ff2d55", (state.armed ? 0.5 : 0.34) * pulse, state.armed ? 4 : 3);
+  for (let i = 0; i < 4; i += 1) {
+    const angle = Math.PI / 4 + (Math.PI * 2 * i) / 4;
+    renderer.drawGfxLine?.(
+      hazard.x + Math.cos(angle) * state.radius * 0.84,
+      hazard.y + Math.sin(angle) * state.radius * 0.84,
+      hazard.x + Math.cos(angle) * state.radius * 1.04,
+      hazard.y + Math.sin(angle) * state.radius * 1.04,
+      4,
+      "#ff2d55",
+      state.armed ? 0.62 : 0.42,
+      hazard.y + 15 + i,
+      "normal",
+    );
+  }
 }
 
 export function renderBeamHazard(renderer: HazardRendererHost, hazard: HazardView, state: HazardState): boolean {
@@ -111,7 +149,9 @@ export function renderEngineerTurret(renderer: HazardRendererHost, hazard: Hazar
   const turret = renderer.sprite("fx-turret", renderer.layers.hazard, hazard.x, hazard.y + Math.sin(now / 170 + id) * 1.2, size, size, "#d6b76d", 0.96);
   turret.zIndex = hazard.y + 8;
   renderer.sprite("shadow", renderer.layers.hazard, hazard.x, hazard.y + 25, 0.72, 0.56, "#000000", 0.55).zIndex = hazard.y - 2;
-  renderer.sprite("fx-lightning", renderer.layers.hazard, hazard.x + 18, hazard.y - 10, 0.35, 0.24, "#9ee6ff", state.armed ? 0.38 + Math.sin(now / 90) * 0.1 : 0.16).zIndex = hazard.y + 9;
+  if (renderer.drawGfxLightning) {
+    renderer.drawGfxLightning(hazard.x + 5, hazard.y - 10, hazard.x + 31, hazard.y - 15, "#67e8f9", state.armed ? 0.36 + Math.sin(now / 90) * 0.08 : 0.14, hazard.y + 9, 3.2, 4, 7, now / 140 + id);
+  }
   if (!state.armed) renderer.ring(hazard.x, hazard.y, state.radius * 0.72, "#9ee6ff", 0.16 + Math.sin(now / 80) * 0.05, 2);
 }
 
@@ -121,13 +161,17 @@ export function renderEngineerDrone(renderer: HazardRendererHost, hazard: Hazard
   drone.zIndex = hazard.y + 22;
   drone.blendMode = "normal";
   renderer.sprite("shadow", renderer.layers.hazard, hazard.x, hazard.y + 18, 0.54, 0.38, "#000000", 0.38).zIndex = hazard.y - 2;
-  renderer.sprite("fx-lightning", renderer.layers.hazard, hazard.x, hazard.y - 4, 0.48, 0.2, "#9ee6ff", 0.28 + Math.sin(now / 110) * 0.08).zIndex =
-    hazard.y + 23;
+  renderer.drawGfxLightning?.(hazard.x - 20, hazard.y - 9, hazard.x + 20, hazard.y - 7, "#67e8f9", 0.28 + Math.sin(now / 110) * 0.06, hazard.y + 23, 3.4, 5, 8, now / 120 + id);
 }
 
 export function renderEngineerMine(renderer: HazardRendererHost, hazard: HazardView, state: HazardState, now: number): void {
   const id = hazardSeed(hazard);
-  const mine = renderer.sprite("fx-mine", renderer.layers.hazard, hazard.x, hazard.y, 0.72, 0.72, state.armed ? "#9ee6ff" : "#d6b76d", 0.92);
+  const style = String(hazard.style || "");
+  const dash = style.includes("dash");
+  const charged = style.includes("charged");
+  const tint = charged ? "#a78bfa" : "#67e8f9";
+  const coreTint = state.armed ? tint : charged ? "#c4b5fd" : "#9ee6ff";
+  const mine = renderer.sprite("fx-mine", renderer.layers.hazard, hazard.x, hazard.y, dash ? 0.62 : 0.72, dash ? 0.62 : 0.72, coreTint, state.armed ? 0.92 : 0.78);
   mine.rotation = Math.sin(now / 160 + id) * 0.08;
   mine.blendMode = "add";
   mine.zIndex = hazard.y + 2;
@@ -135,10 +179,11 @@ export function renderEngineerMine(renderer: HazardRendererHost, hazard: HazardV
     hazard.x,
     hazard.y,
     Math.max(28, state.radius * (state.armed ? 0.78 : 0.56)),
-    "#9ee6ff",
+    tint,
     state.armed ? 0.18 : 0.12 + Math.sin(now / 95) * 0.05,
     2,
   );
+  renderer.drawGfxLightning?.(hazard.x - 16, hazard.y, hazard.x + 16, hazard.y, tint, dash ? 0.34 : 0.22, hazard.y + 3, 3, 4, 6, now / 140);
 }
 
 export function renderPuppet(renderer: HazardRendererHost, hazard: HazardView, now: number): void {
@@ -154,18 +199,21 @@ export function renderPuppet(renderer: HazardRendererHost, hazard: HazardView, n
 
 export function renderArrowRain(renderer: HazardRendererHost, hazard: HazardView, state: HazardState, now: number): void {
   const id = hazardSeed(hazard);
-  const warning = renderer.sprite("fx-warning-target", renderer.layers.hazard, hazard.x, hazard.y, state.radius / 49, state.radius / 49, "#f1d08b", state.armed ? 0.18 : 0.34);
-  warning.rotation = now / 900;
-  warning.blendMode = "add";
-  warning.zIndex = hazard.y - 12;
-  const dropCount = state.armed ? 8 : 4;
+  const pulse = 1 + Math.sin(now / 210 + id) * 0.012;
+  renderer.ring(hazard.x, hazard.y, state.radius * pulse, "#f1d08b", state.armed ? 0.36 : 0.24, state.armed ? 2.4 : 1.8);
+  renderer.ring(hazard.x, hazard.y, state.radius * 0.72, "#fde68a", state.armed ? 0.12 : 0.08, 1.2);
+  if (!state.armed) return;
+  const dropCount = 9;
+  const skyY = hazard.y - state.radius * 2.1;
   for (let i = 0; i < dropCount; i += 1) {
-    const t = (now / 240 + i * 0.37 + id * 0.11) % 1;
-    const a = renderer.noise(id + i * 17, 4) * Math.PI * 2;
-    const r = Math.sqrt(renderer.noise(id + i * 31, 9)) * state.radius * 0.78;
-    const x = hazard.x + Math.cos(a) * r;
-    const y = hazard.y + Math.sin(a) * r - 80 + t * 112;
-    const arrow = renderer.sprite("fx-arrow-rain", renderer.layers.hazard, x, y, 0.38, 0.48, "#f1d08b", state.armed ? 0.76 : 0.44);
+    const seed = renderer.noise(id + i * 17, 4);
+    const t = (now / 360 + i * 0.19 + id * 0.07) % 1;
+    const lane = (i - (dropCount - 1) / 2) * state.radius * 0.12 + (seed - 0.5) * state.radius * 0.12;
+    const x = hazard.x + lane;
+    const slant = (i % 2 ? -1 : 1) * 3;
+    const topY = skyY + t * state.radius * 2.45;
+    renderer.lineFx("beam", x - slant, topY - 42, x + slant, topY + 30, i % 3 === 0 ? 4 : 3, i % 3 === 0 ? "#fff7ed" : "#f1d08b", 0.58 + t * 0.18, hazard.y + 20 + i, "add");
+    const arrow = renderer.sprite("fx-arrow-rain", renderer.layers.hazard, x, topY + 8, 0.2, 0.28, i % 3 === 0 ? "#fff7ed" : "#f1d08b", 0.18);
     arrow.zIndex = hazard.y + 28 + i;
     arrow.blendMode = "add";
   }
@@ -205,8 +253,47 @@ export function renderMeteorHazard(renderer: HazardRendererHost, hazard: HazardV
   marker.rotation = now / 720;
   marker.blendMode = "add";
   marker.zIndex = hazard.y - 14;
-  renderer.sprite("fx-meteor-fall", renderer.layers.hazard, hazard.x - 48, hazard.y - 112, 0.72, 0.72, "#f97316", Math.max(0.16, 0.42 - (hazard.armTime || 0) * 0.1)).zIndex =
-    hazard.y + 26;
+}
+
+export function renderMortarBlast(renderer: HazardRendererHost, hazard: HazardView, state: HazardState): void {
+  const fromX = Number.isFinite(hazard.spawnFromX) ? Number(hazard.spawnFromX) : hazard.x;
+  const fromY = Number.isFinite(hazard.spawnFromY) ? Number(hazard.spawnFromY) : hazard.y;
+  const armMax = Math.max(0.1, Number(hazard.armTimeMax || hazard.armTime || 0.62));
+  const rawProgress = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
+  const travel = rawProgress * rawProgress * (3 - 2 * rawProgress);
+  const dx = hazard.x - fromX;
+  const dy = hazard.y - fromY;
+  const distance = Math.hypot(dx, dy) || 1;
+  const lift = Math.max(150, Math.min(360, distance * 0.36));
+  const controlX = fromX + dx * 0.5;
+  const controlY = Math.min(fromY, hazard.y) - lift;
+  const one = 1 - travel;
+  const shellX = one * one * fromX + 2 * one * travel * controlX + travel * travel * hazard.x;
+  const shellY = one * one * fromY + 2 * one * travel * controlY + travel * travel * hazard.y;
+  const tangentX = 2 * one * (controlX - fromX) + 2 * travel * (hazard.x - controlX);
+  const tangentY = 2 * one * (controlY - fromY) + 2 * travel * (hazard.y - controlY);
+  const angle = Math.atan2(tangentY, tangentX);
+  const ux = Math.cos(angle);
+  const uy = Math.sin(angle);
+
+  renderer.ring(hazard.x, hazard.y, state.radius * 0.78, "#fb923c", 0.24, 2);
+  renderer.drawGfxLine?.(shellX - ux * 46, shellY - uy * 46, shellX, shellY, 10, "#7c2d12", 0.3, shellY + 90, "add");
+  renderer.drawGfxLine?.(shellX - ux * 32, shellY - uy * 32, shellX, shellY, 4, "#f97316", 0.72, shellY + 92, "add");
+  renderer.drawGfxPath?.(
+    [
+      { x: shellX + ux * 13, y: shellY + uy * 13 },
+      { x: shellX - uy * 9, y: shellY + ux * 9 },
+      { x: shellX - ux * 12, y: shellY - uy * 12 },
+      { x: shellX + uy * 9, y: shellY - ux * 9 },
+    ],
+    "#2b1710",
+    0.96,
+    "#fb923c",
+    0.9,
+    2.6,
+    shellY + 96,
+    "normal",
+  );
 }
 
 export function renderDefaultHazard(renderer: HazardRendererHost, hazard: HazardView, state: HazardState): void {
@@ -258,15 +345,18 @@ export function renderDefaultHazard(renderer: HazardRendererHost, hazard: Hazard
 export function renderHazard(renderer: HazardRendererHost, hazard: HazardView, now: number): void {
   const state = hazardState(hazard, now);
   if (renderBeamHazard(renderer, hazard, state)) return;
+  renderHostileHazardBoundary(renderer, hazard, state, now);
   if (hazard.type === "engineer_turret") return renderEngineerTurret(renderer, hazard, state, now);
   if (hazard.type === "engineer_drone") return renderEngineerDrone(renderer, hazard, now);
   if (hazard.type === "engineer_mine") return renderEngineerMine(renderer, hazard, state, now);
   if (hazard.type === "puppet") return renderPuppet(renderer, hazard, now);
   if (hazard.type === "arrow_rain") return renderArrowRain(renderer, hazard, state, now);
   if (hazard.type === "alchemy_bomb") return renderAlchemyBomb(renderer, hazard, state, now);
-  if (hazard.type === "alchemy_pool" || hazard.type === "acid_pool") return renderAlchemyPool(renderer, hazard, state, now);
+  if (hazard.type === "alchemy_pool" || hazard.type === "acid_pool" || hazard.type === "poison_pool") return renderAlchemyPool(renderer, hazard, state, now);
   if (hazard.type === "alchemy_elixir_mist") return renderElixirMist(renderer, hazard, state, now);
   if (hazard.type === "meteor") return renderMeteorHazard(renderer, hazard, state, now);
+  if (hazard.type === "mortar_blast") return renderMortarBlast(renderer, hazard, state);
+  if (hazard.type === "warrior_followup_cleave") return;
   return renderDefaultHazard(renderer, hazard, state);
 }
 

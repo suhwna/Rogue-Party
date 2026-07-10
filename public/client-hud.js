@@ -23,6 +23,19 @@
     const stageName = getStageName(room);
 
     if (room.status === "lobby") return "LOBBY";
+    if (room.survival && room.survival.active) {
+      const elapsed = Math.max(0, Math.min(room.survival.duration || 540, Math.floor(room.survival.elapsed || 0)));
+      const minutes = Math.floor(elapsed / 60);
+      const seconds = String(elapsed % 60).padStart(2, "0");
+      const phase = room.survival.executionBossActive
+        ? "FATE EXECUTION"
+        : room.survival.executionPending
+          ? "SURVIVAL COMPLETE"
+          : room.survival.bossActive
+            ? stageName || "BOSS"
+            : stageName || "SURVIVE";
+      return `CH ${chapter} · ${minutes}:${seconds} / 9:00 · ${phase}`;
+    }
     if (room.status === "map") return `CH ${chapter} · MAP`;
     if (room.status === "advancement") return `STAGE ${wave} · LEVEL UP`;
     if (room.status === "combat" || room.status === "choice") {

@@ -54,13 +54,12 @@ function pickBotMapNode(availableNodes, getNodeGameplayKind, random = Math.rando
   })[0] || null;
 }
 
-function pickBestBotRelicChoice(bot, helpers, random = Math.random) {
-  return [...(bot.choices || [])].sort((a, b) => scoreBotRelicChoice(bot, b, helpers, random) - scoreBotRelicChoice(bot, a, helpers, random))[0] || null;
+function pickBestBotRelicChoice(bot, random = Math.random) {
+  return [...(bot.choices || [])].sort((a, b) => scoreBotRelicChoice(bot, b, random) - scoreBotRelicChoice(bot, a, random))[0] || null;
 }
 
-function scoreBotRelicChoice(bot, choice, helpers, random = Math.random) {
-  const rarity = helpers.normalizeRarity(choice.rarity || "common");
-  let score = helpers.rarityScore(rarity) * 100;
+function scoreBotRelicChoice(bot, choice, random = Math.random) {
+  let score = 100;
   if (choice.consumable && bot.hp < bot.maxHp * 0.55) score += 80;
   if (choice.target && choice.target !== "공용" && choice.target !== "Common") score += 18;
   if (choice.upgrading) score += 14;
@@ -68,13 +67,12 @@ function scoreBotRelicChoice(bot, choice, helpers, random = Math.random) {
   return score + random() * 12;
 }
 
-function pickBestBotSkillChoice(bot, helpers, random = Math.random) {
-  return [...(bot.pendingSkillChoices || [])].sort((a, b) => scoreBotSkillChoice(bot, b, helpers, random) - scoreBotSkillChoice(bot, a, helpers, random))[0] || null;
+function pickBestBotSkillChoice(bot, random = Math.random) {
+  return [...(bot.pendingSkillChoices || [])].sort((a, b) => scoreBotSkillChoice(bot, b, random) - scoreBotSkillChoice(bot, a, random))[0] || null;
 }
 
-function scoreBotSkillChoice(bot, choice, helpers, random = Math.random) {
-  const rarity = helpers.getSkillUpgradeRarity(choice);
-  let score = helpers.rarityScore(rarity) * 110;
+function scoreBotSkillChoice(bot, choice, random = Math.random) {
+  let score = 110;
   if (choice.slot) score += 80;
   if (choice.requires) score += 22;
   if (choice.tier && choice.tier > bot.jobTier) score += choice.tier * 18;

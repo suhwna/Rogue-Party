@@ -38,13 +38,17 @@
             <h3>${escapeHtml(meta.label)}</h3>
             <span>${escapeHtml(meta.role)}</span>
           </div>
-          <strong>스킬 전체 해금</strong>
+          <strong>대기방 전체 스킬 해금</strong>
         </div>
         <p>${escapeHtml(meta.summary)}</p>
-        <p class="lobby-class-passive"><b>패시브</b> ${escapeHtml(meta.passive)}</p>
         <div class="lobby-skill-tags">
           ${(meta.skills || [])
-            .map(([key, name]) => `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b>${escapeHtml(name)}</span>`)
+            .map(
+              ([key, name, detail]) =>
+                `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
+                  detail ? `<small>${escapeHtml(detail)}</small>` : ""
+                }</span></span>`
+            )
             .join("")}
         </div>
       `;
@@ -53,7 +57,7 @@
     function renderParty(players, room, classDescriptions) {
       return (players || [])
         .map((player) => {
-          const stateText = player.spectator ? "WATCHING" : player.ready ? "READY" : "TESTING";
+          const stateText = player.spectator ? "관전" : player.ready ? "준비 완료" : "테스트 중";
           const nameSuffix = `${player.id === room.hostId ? " · HOST" : ""}${player.bot ? " · BOT" : ""}${
             player.spectator ? " · VIEWER" : ""
           }`;

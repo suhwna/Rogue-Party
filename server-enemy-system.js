@@ -105,6 +105,56 @@ function getDefensePlayerAggroRadius(enemy) {
   return base + (enemy.elite ? 30 : 0) + Math.max(0, (enemy.radius || 18) - 18) * 0.55;
 }
 
+function getDefensePushbackTriggerCount(previousHp, currentHp, maxHp, alreadyTriggered = 0) {
+  const safeMaxHp = Math.max(1, Number(maxHp) || 1);
+  const before = Math.max(0, Number(previousHp) || 0);
+  const after = Math.max(0, Number(currentHp) || 0);
+  const thresholds = [safeMaxHp * (2 / 3), safeMaxHp * (1 / 3)];
+  let triggered = Math.max(0, Math.min(thresholds.length, Math.floor(Number(alreadyTriggered) || 0)));
+
+  while (triggered < thresholds.length) {
+    const threshold = thresholds[triggered];
+    if (!(before > threshold && after <= threshold)) break;
+    triggered += 1;
+  }
+  return triggered;
+}
+
+function getDefenseWallPush(world, objective, enemy, wallThickness = 36) {
+  const width = Math.max(1, Number(world?.w) || 1800);
+  const height = Math.max(1, Number(world?.h) || 1120);
+  const radius = Math.max(1, Number(enemy?.radius) || 18);
+  const inset = Math.max(0, Number(wallThickness) || 0) + radius + 8;
+  const minX = Math.min(width / 2, inset);
+  const maxX = Math.max(width / 2, width - inset);
+  const minY = Math.min(height / 2, inset);
+  const maxY = Math.max(height / 2, height - inset);
+  const enemyX = Number.isFinite(enemy?.x) ? enemy.x : width / 2;
+  const enemyY = Number.isFinite(enemy?.y) ? enemy.y : height / 2;
+  const originX = Number.isFinite(objective?.x) ? objective.x : width / 2;
+  const originY = Number.isFinite(objective?.y) ? objective.y : height / 2;
+  let dx = enemyX - originX;
+  let dy = enemyY - originY;
+
+  if (Math.hypot(dx, dy) < 0.001) {
+    const text = String(enemy?.id ?? "0");
+    let seed = 0;
+    for (let i = 0; i < text.length; i += 1) seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
+    const angle = ((seed % 360) * Math.PI) / 180;
+    dx = Math.cos(angle);
+    dy = Math.sin(angle);
+  }
+
+  const length = Math.hypot(dx, dy) || 1;
+  const dirX = dx / length;
+  const dirY = dy / length;
+  const travelX = Math.abs(dirX) < 0.0001 ? Infinity : dirX > 0 ? (maxX - enemyX) / dirX : (minX - enemyX) / dirX;
+  const travelY = Math.abs(dirY) < 0.0001 ? Infinity : dirY > 0 ? (maxY - enemyY) / dirY : (minY - enemyY) / dirY;
+  const distance = Math.max(0, Math.min(travelX, travelY));
+
+  return { dirX, dirY, distance };
+}
+
 function getEnemyCrowdPush(enemies, enemy) {
   let x = 0;
   let y = 0;
@@ -137,8 +187,10 @@ function getEnemyStatusEffects(enemy) {
   if (enemy.slowTimer > 0) effects.push("slow");
   if (enemy.freezeTimer > 0) effects.push("freeze");
   if (enemy.poisonTimer > 0) effects.push("poison");
+  if (enemy.venomTimer > 0) effects.push("venom");
   if (enemy.burnTimer > 0) effects.push("burn");
   if (enemy.vulnerableTimer > 0) effects.push("vulnerable");
+  if (enemy.weakenTimer > 0) effects.push("weaken");
   if (enemy.assassinMarkTimer > 0) effects.push("marked");
   if (enemy.threadMarkTimer > 0) effects.push("threaded");
   if (enemy.barrier > 0 && enemy.barrierTimer > 0) effects.push("barrier");
@@ -150,7 +202,7 @@ function getEnemyStatusEffects(enemy) {
 function getEnemyWindupChannel(kind) {
   if (!kind) return "";
   if (kind === "heal" || kind.includes("barrier")) return "support";
-  if (kind.includes("snipe") || kind.includes("spit") || kind.includes("mortar") || kind.includes("shuriken") || kind.includes("crossfire")) return "ranged";
+  if (kind.includes("snipe") || kind.includes("spit") || kind.includes("mortar") || kind.includes("shuriken") || kind.includes("crossfire") || kind.includes("volley") || kind.includes("ring")) return "ranged";
   if (kind.includes("charge")) return "charge";
   if (kind.includes("cleave") || kind.includes("stab") || kind.includes("swing")) return "melee";
   return "special";
@@ -182,6 +234,7 @@ function tickEnemyTimers(enemy, dt) {
   enemy.freezeTimer = Math.max(0, (enemy.freezeTimer || 0) - dt);
   enemy.tauntTimer = Math.max(0, (enemy.tauntTimer || 0) - dt);
   enemy.vulnerableTimer = Math.max(0, (enemy.vulnerableTimer || 0) - dt);
+  enemy.weakenTimer = Math.max(0, (enemy.weakenTimer || 0) - dt);
   enemy.assassinMarkTimer = Math.max(0, (enemy.assassinMarkTimer || 0) - dt);
   enemy.threadMarkTimer = Math.max(0, (enemy.threadMarkTimer || 0) - dt);
 
@@ -322,7 +375,7 @@ function getRangedCastProfile(enemy, kind, pressureMul = 1) {
   if (kind === "mortar") {
     return {
       radius: enemy.elite ? 108 : 86,
-      windupTime: (enemy.elite ? 1.14 : 1.42) * Math.max(0.95, cadence) * Math.min(1.18, pressureMul),
+      windupTime: (enemy.elite ? 1.08 : 1.34) * Math.max(0.95, cadence) * Math.min(1.18, pressureMul),
       recoveryTime: (enemy.elite ? 2.72 : 3.36) * cadence * pressureMul,
       warningRadius: enemy.elite ? 108 : 86
     };
@@ -330,9 +383,9 @@ function getRangedCastProfile(enemy, kind, pressureMul = 1) {
   if (kind === "snipe") {
     return {
       radius: 42,
-      windupTime: (enemy.elite ? 1.08 : 1.28) * Math.max(0.94, cadence) * Math.min(1.16, pressureMul),
+      windupTime: (enemy.elite ? 1.02 : 1.2) * Math.max(0.94, cadence) * Math.min(1.16, pressureMul),
       recoveryTime: (enemy.elite ? 2.35 : 3.05) * cadence * pressureMul,
-      projectileSpeed: enemy.elite ? 760 : 680,
+      projectileSpeed: enemy.elite ? 820 : 730,
       minRange: 180,
       maxRange: 820
     };
@@ -340,7 +393,7 @@ function getRangedCastProfile(enemy, kind, pressureMul = 1) {
   if (kind === "spit") {
     return {
       radius: (enemy.radius || 18) + 34,
-      windupTime: (enemy.elite ? 0.46 : 0.58) * Math.max(0.94, cadence) * Math.min(1.12, pressureMul),
+      windupTime: (enemy.elite ? 0.43 : 0.54) * Math.max(0.94, cadence) * Math.min(1.12, pressureMul),
       recoveryTime: (enemy.elite ? 1.28 : 1.72) * cadence * pressureMul,
       maxRange: 560
     };
@@ -428,6 +481,8 @@ module.exports = {
   deferSpecialPattern,
   getBasicPatternWindow,
   getDefensePlayerAggroRadius,
+  getDefensePushbackTriggerCount,
+  getDefenseWallPush,
   getChargeDashCooldown,
   getEliteSpecialCooldown,
   getEnemyAiState,
