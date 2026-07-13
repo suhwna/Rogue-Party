@@ -35,7 +35,7 @@ export class ChoiceController {
               </span>
               <strong>${this.options.escapeHtml(choice.name)}</strong>
               <span>${this.options.escapeHtml(choice.text)}</span>
-              <span class="choice-action-row"><span>유물 선택</span><i>CLICK</i></span>
+              <span class="choice-action-row"><span>유물 선택</span><i aria-hidden="true">›</i></span>
             </span>
           </button>
         `;
@@ -56,7 +56,7 @@ export class ChoiceController {
               </span>
               <strong>${this.options.escapeHtml(choice.name)}</strong>
               <span>${this.options.escapeHtml(choice.text)}</span>
-              <span class="choice-action-row"><span>강화 선택</span><i>CLICK</i></span>
+              <span class="choice-action-row"><span>강화 선택</span><i aria-hidden="true">›</i></span>
             </span>
           </button>
         `;

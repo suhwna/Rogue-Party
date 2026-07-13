@@ -71,10 +71,8 @@ export interface EquipmentLoadout {
 }
 
 export interface ChallengeProgress {
+  missionVersion: number;
   key: string;
-  seed: number;
-  modifierId: string;
-  ruleId: string;
   goalType: string;
   goalLabel: string;
   target: number;
@@ -88,6 +86,7 @@ export interface CombatProgress {
   poisonDamage: number;
   burnDamage: number;
   kills: number;
+  eliteKills: number;
   turretKills: number;
   bossKills: number;
   noDownWins: number;
@@ -135,9 +134,7 @@ export interface UserProgress {
   achievements: Record<string, string>;
   combatByClass: Record<string, CombatProgress>;
   cosmetics: { selectedTitle: string; selectedSkin: string };
-  startPerks: { unlocked: string[]; selected: string };
   challenges: {
-    activeMode: "standard" | "daily" | "weekly";
     daily: ChallengeProgress;
     weekly: ChallengeProgress;
     season: { id: string; xp: number; level: number; claimedLevels: string[] };
@@ -191,13 +188,11 @@ export const defaultProgress: Readonly<UserProgress> = Object.freeze({
   ),
   collections: { equipmentBases: [], runeTypes: [], monsters: [], bosses: [], relics: [] },
   achievements: {},
-  combatByClass: Object.fromEntries(CLASS_IDS.map((classId) => [classId, { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, turretKills: 0, bossKills: 0, noDownWins: 0 }])),
+  combatByClass: Object.fromEntries(CLASS_IDS.map((classId) => [classId, { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, eliteKills: 0, turretKills: 0, bossKills: 0, noDownWins: 0 }])),
   cosmetics: { selectedTitle: "", selectedSkin: "" },
-  startPerks: { unlocked: [], selected: "" },
   challenges: {
-    activeMode: "standard",
-    daily: { key: "", seed: 0, modifierId: "", ruleId: "", goalType: "stages", goalLabel: "", target: 1, progress: 0, completed: false, rewardClaimed: false },
-    weekly: { key: "", seed: 0, modifierId: "", ruleId: "", goalType: "victories", goalLabel: "", target: 1, progress: 0, completed: false, rewardClaimed: false },
+    daily: { missionVersion: 2, key: "", goalType: "eliteKills", goalLabel: "", target: 1, progress: 0, completed: false, rewardClaimed: false },
+    weekly: { missionVersion: 2, key: "", goalType: "eliteKills", goalLabel: "", target: 1, progress: 0, completed: false, rewardClaimed: false },
     season: { id: "", xp: 0, level: 1, claimedLevels: [] },
   },
   lastRunRewards: null,
@@ -251,6 +246,7 @@ export interface RunResultRecord {
   earnedAccountXp?: number;
   abyssDepth?: number;
   ascensionLevel?: number;
+  unlockedAscensionLevel?: number;
   classId?: string;
   challengeMode?: string;
   challengeModifierId?: string;

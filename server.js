@@ -9,15 +9,18 @@ const enemySystem = require("./server-enemy-system");
 const hazardSystem = require("./server-hazard-system");
 const networkServer = require("./server-network-server");
 const projectileSystem = require("./server-projectile-system");
+const progressionService = require("./server-progression-service");
 const roomManager = require("./server-room-manager");
 const playerSystem = require("./server-player-system");
 const rewardSystem = require("./server-reward-system");
 const skillSystem = require("./server-skill-system");
 const stateSerializer = require("./server-state-serializer");
 const stageSystem = require("./server-stage-system");
+const { createAccountStore } = require("./server-account-store");
 
 const PORT = Number(process.env.PORT || 5173);
 const PUBLIC_DIR = path.join(__dirname, "public");
+const accountStore = createAccountStore({ progression: progressionService });
 const TICK_RATE = 60;
 const STATE_RATE = 30;
 const MAX_PLAYERS = 4;
@@ -39,6 +42,7 @@ const PLAYER_PROJECTILE_TRAVEL_PADDING = 96;
 const MAP_LANES = 3;
 const MAX_PLAYER_LEVEL = 15;
 const MAX_WS_PAYLOAD_BYTES = 16 * 1024;
+const MAX_ACCOUNT_HTTP_BODY_BYTES = 512 * 1024;
 const MAX_INPUT_SEQUENCE = 1_000_000;
 const SAFE_ID_PATTERN = /^[a-z0-9_-]{1,64}$/i;
 const MINIBOSS_MIN_DEPTH_BY_CHAPTER = { 1: 6, 2: 4, 3: 3 };
@@ -49,9 +53,21 @@ const STARTING_CLASSES = new Set(["warrior", "ranger", "mage", "engineer"]);
 const GROWTH_NODE_IDS = ["attack", "survival", "speed", "special"];
 const MAX_GROWTH_NODE_LEVEL = 9999;
 const MAX_ASCENSION_LEVEL = 25;
-const CHALLENGE_MODIFIER_IDS = new Set(["", "healing_drought", "elite_hunt", "enemy_haste", "glass_cannon"]);
-const WEEKLY_RULE_IDS = new Set(["", "venom_week", "ember_week", "construct_week"]);
-const START_PERK_IDS = new Set(["", "supply_cache", "reinforced_start", "quick_start"]);
+const ACCOUNT_PROGRESS_ACTIONS = new Set([
+  "spend-mastery",
+  "equip-item",
+  "unequip-slot",
+  "salvage-item",
+  "enhance-item",
+  "reforge-item",
+  "lock-affix",
+  "equip-rune",
+  "unequip-rune",
+  "merge-rune",
+  "craft-boss",
+  "select-title",
+  "select-skin",
+]);
 const SKIN_COLORS = Object.freeze({
   victory_trim: "#f4d06f",
   abyss_glow: "#b89cff",
@@ -82,6 +98,14 @@ const STAGE_CLEAR_HEAL_RATIO = 0.15;
 const STAGE_CLEAR_REVIVE_RATIO = 0.35;
 const SURVIVAL_DURATION_SEC = 9 * 60;
 const SURVIVAL_BOSS_CHECKPOINTS = Object.freeze([3 * 60, 6 * 60, 9 * 60]);
+const SURVIVAL_MINIBOSS_SCHEDULE = Object.freeze([
+  { minute: 1, count: 1 },
+  { minute: 2, count: 1 },
+  { minute: 4, count: 2 },
+  { minute: 5, count: 2 },
+  { minute: 7, count: 3 },
+  { minute: 8, count: 3 }
+]);
 const SURVIVAL_EXECUTION_SPAWN_DELAY_MS = 2800;
 const SURVIVAL_EXECUTION_BOSS_HP_MUL = 28;
 const HOSTILE_PROJECTILE_TRAVEL_DISTANCE = Object.freeze({
@@ -2148,6 +2172,19 @@ const mimeTypes = {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (url.pathname.startsWith("/api/account/")) {
+    handleAccountRequest(req, res, url).catch((error) => {
+      console.error("[account] request failed", error);
+      sendJson(res, Number(error?.statusCode || 500), {
+        error: error?.statusCode === 400
+          ? "계정 요청 형식을 확인해 주세요."
+          : error?.statusCode === 413
+            ? "계정 데이터가 너무 큽니다."
+            : "계정 서버에서 요청을 처리하지 못했습니다.",
+      });
+    });
+    return;
+  }
   if (url.pathname === "/rooms") {
     const body = JSON.stringify({ rooms: getPublicRooms() });
     res.writeHead(200, {
@@ -2204,6 +2241,75 @@ const server = http.createServer((req, res) => {
   });
 });
 
+async function handleAccountRequest(req, res, url) {
+  if (req.method !== "POST") {
+    sendJson(res, 405, { error: "지원하지 않는 요청입니다." }, { Allow: "POST" });
+    return;
+  }
+  const body = await readJsonBody(req, MAX_ACCOUNT_HTTP_BODY_BYTES);
+  if (url.pathname === "/api/account/guest") {
+    const session = accountStore.createGuest({
+      displayName: body.displayName,
+      progress: body.localProgress,
+    });
+    sendJson(res, 201, session);
+    return;
+  }
+  if (url.pathname === "/api/account/session") {
+    const session = accountStore.getSession(body.accountId, body.sessionToken);
+    if (!session) {
+      sendJson(res, 401, { error: "저장된 계정 세션이 만료되었거나 올바르지 않습니다." });
+      return;
+    }
+    sendJson(res, 200, session);
+    return;
+  }
+  if (url.pathname === "/api/account/recover") {
+    const session = accountStore.recover(body.recoveryKey);
+    if (!session) {
+      sendJson(res, 401, { error: "복구 키를 확인해 주세요." });
+      return;
+    }
+    sendJson(res, 200, session);
+    return;
+  }
+  sendJson(res, 404, { error: "계정 API를 찾을 수 없습니다." });
+}
+
+function readJsonBody(req, maxBytes) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error("account payload too large"), { statusCode: 413 }));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {});
+      } catch {
+        reject(Object.assign(new Error("invalid account json"), { statusCode: 400 }));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function sendJson(res, statusCode, payload, extraHeaders = {}) {
+  if (res.headersSent) return;
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    ...extraHeaders,
+  });
+  res.end(JSON.stringify(payload));
+}
+
 server.on("upgrade", (req, socket) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.pathname !== "/ws") {
@@ -2225,6 +2331,7 @@ server.on("upgrade", (req, socket) => {
     buffer: Buffer.alloc(0),
     room: null,
     playerId: null,
+    accountId: null,
     joined: false
   };
   clients.set(client.id, client);
@@ -2342,14 +2449,17 @@ function handleMessage(client, message) {
   }
 
   if (message.type === "changeClass") {
-    if (message.growthLoadout) {
-      player.growthLoadout = sanitizeGrowthLoadout(message.growthLoadout, message.classId || player.classId);
-    }
-    changePlayerClass(room, player, sanitizeMessageId(message.classId));
+    const nextClassId = sanitizeStartingClass(message.classId);
+    player.growthLoadout = getAuthoritativeGrowthLoadout(player, nextClassId, message.growthLoadout);
+    changePlayerClass(room, player, nextClassId);
     return;
   }
   if (message.type === "setGrowthLoadout") {
     setPlayerGrowthLoadout(room, player, message.growthLoadout);
+    return;
+  }
+  if (message.type === "accountProgressAction") {
+    handleAccountProgressAction(room, player, message.actionPayload);
     return;
   }
 
@@ -2421,16 +2531,31 @@ function joinRoom(client, message) {
     return;
   }
 
+  const hasAccountCredentials = Boolean(message.accountId || message.accountToken);
+  const account = hasAccountCredentials
+    ? accountStore.authenticate(message.accountId, message.accountToken)
+    : null;
+  if (hasAccountCredentials && !account) {
+    send(client, { type: "error", message: "계정 세션을 확인하지 못했습니다. 계정 복구 후 다시 입장해 주세요." });
+    return;
+  }
+
   if (client.room) removeClientFromRoom(client, false);
 
   const player = createPlayer(client.id, sanitizeName(message.name), sanitizeStartingClass(message.classId), room);
-  player.growthLoadout = sanitizeGrowthLoadout(message.growthLoadout, player.classId);
+  client.accountId = account?.id || null;
+  player.accountId = account?.id || null;
+  player.accountRevision = Number(account?.revision || 0);
+  player.growthLoadout = getAuthoritativeGrowthLoadout(player, player.classId, message.growthLoadout);
   if (room.status === "lobby") {
     configurePlayerForLobbyTest(player, room, player.classId);
   }
 
   room.players.set(player.id, player);
   if (!room.hostId) room.hostId = player.id;
+  if (room.hostId === player.id) {
+    room.ascensionLevel = player.growthLoadout?.ascensionLevel || 0;
+  }
   client.room = room.code;
   client.playerId = player.id;
   client.joined = true;
@@ -2442,7 +2567,14 @@ function joinRoom(client, message) {
     player.choices = pickRelics(room, player);
   }
 
-  send(client, { type: "joined", id: player.id, room: room.code });
+  const accountSession = account ? accountStore.updateDisplayName(account.id, player.name) : null;
+  send(client, {
+    type: "joined",
+    id: player.id,
+    room: room.code,
+    account: accountSession?.account || null,
+    progress: accountSession?.progress || null,
+  });
 }
 
 function startRunFromLobby(room, player) {
@@ -2502,6 +2634,8 @@ function returnRoomToLobby(room, player) {
   room.restartAt = 0;
   room.runStartedAt = 0;
   room.runBossDefeats = [];
+  room.runDiscoveredMonsters = [];
+  room.runDiscoveredBosses = [];
   room.survival = null;
   room.result = null;
 
@@ -2519,6 +2653,7 @@ function returnRoomToLobby(room, player) {
   }
 
   ensureLobbyTrainingArena(room);
+  room.ascensionLevel = getRoomAscensionLevel(room);
   pushEvent(room, `${player.name} 님이 방 로비로 돌아왔습니다.`);
 }
 
@@ -2532,12 +2667,106 @@ function changePlayerClass(room, player, classId) {
 
 function setPlayerGrowthLoadout(room, player, growthLoadout) {
   if (!player || player.bot || player.spectator) return;
-  player.growthLoadout = sanitizeGrowthLoadout(growthLoadout, player.classId);
+  const isHost = room.hostId === player.id;
+  const requestedLoadout = {
+    ...(growthLoadout && typeof growthLoadout === "object" ? growthLoadout : {}),
+    ascensionLevel: isHost
+      ? growthLoadout?.ascensionLevel
+      : player.growthLoadout?.ascensionLevel || 0,
+  };
+  player.growthLoadout = getAuthoritativeGrowthLoadout(player, player.classId, requestedLoadout);
+  if (isHost && room.status === "lobby") {
+    room.ascensionLevel = player.growthLoadout.ascensionLevel;
+  }
   if (room.status === "lobby" && player.growthLoadout.classId === player.classId) {
     const wasReady = player.ready;
     configurePlayerForLobbyTest(player, room, player.classId);
     player.ready = wasReady;
   }
+}
+
+function getAuthoritativeGrowthLoadout(player, classId, requestedLoadout = null) {
+  const safeClassId = sanitizeStartingClass(classId);
+  const account = player?.accountId ? accountStore.getTrusted(player.accountId) : null;
+  if (!account) return sanitizeGrowthLoadout(requestedLoadout, safeClassId);
+  const unlockedAscension = clamp(
+    Math.floor(Number(account.progress?.records?.highestAscension || 0)),
+    0,
+    MAX_ASCENSION_LEVEL,
+  );
+  const requestedAscension = clamp(
+    Math.floor(Number(requestedLoadout?.ascensionLevel || 0)),
+    0,
+    unlockedAscension,
+  );
+  return sanitizeGrowthLoadout(
+    progressionService.getGrowthLoadout(account.progress, safeClassId, requestedAscension),
+    safeClassId,
+  );
+}
+
+function handleAccountProgressAction(room, player, actionPayload) {
+  if (room.status !== "lobby" || player.bot || player.spectator || !player.accountId) return;
+  const account = accountStore.getTrusted(player.accountId);
+  if (!account) return;
+  const payload = sanitizeAccountActionPayload(actionPayload, player.classId);
+  if (!payload) {
+    sendAccountProgress(player, account, "action-rejected", "지원하지 않는 성장 요청입니다.");
+    return;
+  }
+  const result = progressionService.performAction(account.progress, payload);
+  if (!result.changed) {
+    sendAccountProgress(player, account, "action-unchanged", result.message || "변경 조건을 충족하지 못했습니다.");
+    return;
+  }
+  const session = accountStore.updateProgress(account.id, result.progress, `action:${payload.action}`);
+  player.accountRevision = Number(session?.account?.revision || player.accountRevision || 0);
+  if (result.affectsLoadout) {
+    setPlayerGrowthLoadout(room, player, {
+      ...(player.growthLoadout || {}),
+      ascensionLevel: player.growthLoadout?.ascensionLevel || 0,
+    });
+  }
+  sendAccountProgress(player, session, "action-applied", result.message || "서버에 저장되었습니다.");
+}
+
+function sanitizeAccountActionPayload(value, fallbackClassId) {
+  const source = value && typeof value === "object" ? value : {};
+  const action = String(source.action || "");
+  if (!ACCOUNT_PROGRESS_ACTIONS.has(action)) return null;
+  const nodeId = GROWTH_NODE_IDS.includes(source.nodeId) ? source.nodeId : "attack";
+  const slot = ["weapon", "armor", "amulet", "core"].includes(source.slot) ? source.slot : "";
+  return {
+    action,
+    classId: sanitizeStartingClass(source.classId || fallbackClassId),
+    nodeId,
+    itemId: sanitizeMessageId(source.itemId),
+    slot,
+    affixIndex: clamp(Math.floor(Number(source.affixIndex || 0)), 0, 3),
+    runeId: sanitizeMessageId(source.runeId),
+    runeSlot: clamp(Math.floor(Number(source.runeSlot || 0)), 0, 2),
+    runeType: sanitizeMessageId(source.runeType),
+    tier: clamp(Math.floor(Number(source.tier || 1)), 1, 5),
+    recipeId: sanitizeMessageId(source.recipeId),
+    title: String(source.title || "").slice(0, 80),
+    skin: sanitizeMessageId(source.skin),
+  };
+}
+
+function sendAccountProgress(player, session, reason, message = "") {
+  const client = player ? clients.get(String(player.id)) : null;
+  if (!client || !session) return;
+  send(client, {
+    type: "accountProgress",
+    account: session.account || {
+      id: session.id,
+      revision: session.revision,
+      updatedAt: session.updatedAt,
+    },
+    progress: session.progress,
+    reason,
+    message,
+  });
 }
 
 function toggleReady(room, player) {
@@ -2682,8 +2911,7 @@ function sanitizeGrowthLoadout(loadout, fallbackClassId = "warrior") {
     nodes,
     gearBonuses: sanitizeGearBonuses(source.gearBonuses),
     challenge: sanitizeChallengeLoadout(source.challenge),
-    cosmetic: sanitizeCosmeticLoadout(source.cosmetic),
-    startPerkId: START_PERK_IDS.has(String(source.startPerkId || "")) ? String(source.startPerkId || "") : ""
+    cosmetic: sanitizeCosmeticLoadout(source.cosmetic)
   };
 }
 
@@ -2722,17 +2950,12 @@ function sanitizeGearBonuses(source) {
 }
 
 function sanitizeChallengeLoadout(source) {
-  const challenge = source && typeof source === "object" ? source : {};
-  const mode = ["daily", "weekly"].includes(challenge.mode) ? challenge.mode : "standard";
-  const modifierId = CHALLENGE_MODIFIER_IDS.has(String(challenge.modifierId || ""))
-    ? String(challenge.modifierId || "")
-    : "";
   return {
-    mode,
-    key: String(challenge.key || "").replace(/[^0-9A-Z-]/gi, "").slice(0, 24),
-    seed: clamp(Math.floor(Number(challenge.seed) || 0), 0, 0xffffffff),
-    modifierId: mode === "standard" ? "" : modifierId,
-    ruleId: mode === "weekly" && WEEKLY_RULE_IDS.has(String(challenge.ruleId || "")) ? String(challenge.ruleId || "") : ""
+    mode: "standard",
+    key: "",
+    seed: 0,
+    modifierId: "",
+    ruleId: ""
   };
 }
 
@@ -2862,15 +3085,6 @@ function applyPlayerGrowthBonuses(player, room) {
     player.constructDamageMul *= 1.25;
     player.constructDurationMul *= 1.15;
   }
-  if (loadout.startPerkId === "reinforced_start") {
-    player.maxHp = Math.round(player.maxHp * 1.06);
-    player.hp = player.maxHp;
-  } else if (loadout.startPerkId === "quick_start") {
-    player.speedMul *= 1.05;
-  } else if (loadout.startPerkId === "supply_cache") {
-    player.shield = Math.max(player.shield || 0, Math.round(player.maxHp * 0.12));
-    player.shieldTimer = Math.max(player.shieldTimer || 0, 12);
-  }
   player.permanentGrowth = {
     applied: true,
     classId: loadout.classId,
@@ -2881,8 +3095,7 @@ function applyPlayerGrowthBonuses(player, room) {
     bonuses,
     gearBonuses: gear,
     challenge: { ...loadout.challenge, modifierId: activeModifier || "", ruleId: weeklyRuleId || "" },
-    cosmetic: loadout.cosmetic,
-    startPerkId: loadout.startPerkId
+    cosmetic: loadout.cosmetic
   };
 }
 
@@ -2899,8 +3112,7 @@ function getPlayerGrowthView(player) {
     bonuses: player.permanentGrowth?.bonuses || calculateGrowthBonuses(loadout.classId, loadout.nodes),
     gearBonuses: player.permanentGrowth?.gearBonuses || sanitizeGearBonuses(loadout.gearBonuses),
     challenge: player.permanentGrowth?.challenge || loadout.challenge,
-    cosmetic: player.permanentGrowth?.cosmetic || loadout.cosmetic,
-    startPerkId: player.permanentGrowth?.startPerkId || loadout.startPerkId
+    cosmetic: player.permanentGrowth?.cosmetic || loadout.cosmetic
   };
 }
 
@@ -2913,13 +3125,10 @@ function getRoomChallenge(room) {
 }
 
 function getRoomAscensionLevel(room) {
-  let ascensionLevel = 0;
-  for (const player of getActivePlayers(room)) {
-    if (player.bot || player.spectator) continue;
-    const loadout = sanitizeGrowthLoadout(player.growthLoadout, player.classId);
-    ascensionLevel = Math.max(ascensionLevel, loadout.ascensionLevel);
-  }
-  return clamp(ascensionLevel, 0, MAX_ASCENSION_LEVEL);
+  const host = room.hostId ? room.players.get(room.hostId) : null;
+  if (!host || host.bot || host.spectator) return 0;
+  const loadout = sanitizeGrowthLoadout(host.growthLoadout, host.classId);
+  return clamp(loadout.ascensionLevel, 0, MAX_ASCENSION_LEVEL);
 }
 
 function getAbyssDifficulty(room) {
@@ -3191,6 +3400,8 @@ function startRun(room) {
   room.restartAt = 0;
   room.runStartedAt = Date.now();
   room.runBossDefeats = [];
+  room.runDiscoveredMonsters = [];
+  room.runDiscoveredBosses = [];
   room.survival = null;
   room.result = null;
 
@@ -3725,6 +3936,7 @@ function startSurvivalMode(room) {
     checkpointIndex: 0,
     bossActive: false,
     bossEnemyId: null,
+    minibossScheduleIndex: 0,
     rewardCheckpointPending: 0,
     nextSpawnAt: now + 650,
     finalBossMaxHp: 0,
@@ -3811,6 +4023,7 @@ function updateSurvivalMode(room, dt, now) {
     return;
   }
 
+  spawnScheduledSurvivalMiniBosses(room);
   spawnSurvivalEnemies(room, now, false);
 }
 
@@ -3823,10 +4036,11 @@ function spawnSurvivalEnemies(room, now, force = false) {
   const minute = survival.elapsed / 60;
   const players = Math.max(1, getActivePlayers(room).length);
   const alive = room.enemies.filter((enemy) => enemy.hp > 0 && !enemy.trainingDummy).length;
-  const maxAlive = Math.round(24 + minute * 4 + (players - 1) * 8);
-  const batchSize = Math.min(maxAlive - alive, 1 + Math.floor(survival.elapsed / 105) + (players >= 3 ? 1 : 0));
-  const interval = 1.08 - elapsedRatio * 0.66;
-  survival.nextSpawnAt = now + Math.round(Math.max(0.42, interval) * 1000);
+  const maxAlive = Math.round(32 + minute * 5 + (players - 1) * 9);
+  const batchTarget = force ? 5 + players : 2 + Math.floor(survival.elapsed / 120) + (players >= 3 ? 1 : 0);
+  const batchSize = Math.min(maxAlive - alive, batchTarget);
+  const interval = 0.92 - elapsedRatio * 0.52;
+  survival.nextSpawnAt = now + Math.round(Math.max(0.4, interval) * 1000);
   if (batchSize <= 0) return;
 
   const trait = room.waveTrait || getSurvivalTrait(room);
@@ -3838,6 +4052,50 @@ function spawnSurvivalEnemies(room, now, force = false) {
   }
 }
 
+function spawnScheduledSurvivalMiniBosses(room) {
+  const survival = room.survival;
+  if (!survival?.active || survival.bossActive || survival.finalBossDefeated) return;
+
+  while (survival.minibossScheduleIndex < SURVIVAL_MINIBOSS_SCHEDULE.length) {
+    const schedule = SURVIVAL_MINIBOSS_SCHEDULE[survival.minibossScheduleIndex];
+    if (survival.elapsed < schedule.minute * 60) return;
+    survival.minibossScheduleIndex += 1;
+    spawnSurvivalMiniBossWave(room, schedule.minute, schedule.count);
+  }
+}
+
+function spawnSurvivalMiniBossWave(room, minute, count) {
+  const total = Math.max(1, Math.floor(count || 1));
+  const centerX = room.world.w * 0.5;
+  const centerY = room.world.h * 0.5;
+  const ring = Math.min(330, Math.max(220, Math.min(room.world.w, room.world.h) * 0.28));
+  let spawned = 0;
+
+  for (let index = 0; index < total; index += 1) {
+    const angle = -Math.PI / 2 + (Math.PI * 2 * index) / total + minute * 0.31;
+    const boss = spawnMiniBoss(room, {
+      survival: true,
+      minute,
+      index,
+      count: total,
+      x: centerX + Math.cos(angle) * ring,
+      y: centerY + Math.sin(angle) * ring
+    });
+    if (boss) spawned += 1;
+  }
+
+  if (spawned > 0) pushEvent(room, `${minute}분 생존 미니보스 ${spawned}마리 등장. 각 미니보스는 유물을 확정 드롭합니다.`);
+}
+
+function clearSurvivalRegularEnemiesForBoss(room) {
+  const survivingMiniBosses = room.enemies.filter((enemy) => enemy.hp > 0 && enemy.miniBoss);
+  room.enemies = survivingMiniBosses;
+  room.projectiles = [];
+  room.hazards = [];
+  room.pendingReinforcements = [];
+  return survivingMiniBosses.length;
+}
+
 function spawnSurvivalCheckpointBoss(room, checkpoint) {
   const survival = room.survival;
   if (!survival?.active || survival.bossActive) return;
@@ -3846,12 +4104,8 @@ function spawnSurvivalCheckpointBoss(room, checkpoint) {
   const profile = room.challengeMode === "weekly" && checkpoint === SURVIVAL_BOSS_CHECKPOINTS.length
     ? getBossProfileById(room.weeklyBossId) || getChapterBossProfile(room.floor)
     : getChapterBossProfile(room.floor);
-  room.enemies = [];
-  room.projectiles = [];
-  room.hazards = [];
-  room.relicChests = [];
-  room.pendingReinforcements = [];
-  room.waveTrait = waveTraits.boss_gate;
+  const survivingMiniBosses = clearSurvivalRegularEnemiesForBoss(room);
+  room.waveTrait = waveTraits.boss;
   room.activeMapNode = {
     id: `survival-boss-${checkpoint}`,
     floor: room.floor,
@@ -3859,7 +4113,7 @@ function spawnSurvivalCheckpointBoss(room, checkpoint) {
     lane: 1,
     kind: "boss",
     resolvedKind: "boss",
-    traitId: waveTraits.boss_gate.id,
+    traitId: waveTraits.boss.id,
     modifierId: "safe_path",
     bossId: profile.id
   };
@@ -3867,7 +4121,7 @@ function spawnSurvivalCheckpointBoss(room, checkpoint) {
   survival.bossActive = true;
   survival.bossEnemyId = null;
   spawnChapterBoss(room);
-  const boss = room.enemies.find((enemy) => enemy.type === "boss" && enemy.hp > 0);
+  const boss = [...room.enemies].reverse().find((enemy) => enemy.type === "boss" && !enemy.miniBoss && enemy.hp > 0);
   if (!boss) return;
   boss.survivalCheckpoint = checkpoint;
   survival.bossEnemyId = boss.id;
@@ -3879,7 +4133,12 @@ function spawnSurvivalCheckpointBoss(room, checkpoint) {
     targetId: boss.id
   };
   regroupPartyForStage(room);
-  pushEvent(room, `${checkpoint * 3}분 보스 ${profile.name} 등장. 생존 시간이 정지됩니다.`);
+  pushEvent(
+    room,
+    `${checkpoint * 3}분 보스 ${profile.name} 등장. 일반 적이 정리되고 생존 시간이 정지됩니다.${
+      survivingMiniBosses > 0 ? ` 생존 미니보스 ${survivingMiniBosses}마리는 전투에 남습니다.` : ""
+    }`
+  );
 }
 
 function finishSurvivalCheckpointBoss(room, now) {
@@ -3889,13 +4148,12 @@ function finishSurvivalCheckpointBoss(room, now) {
   survival.bossActive = false;
   survival.bossEnemyId = null;
   survival.checkpointIndex = checkpoint;
-  room.enemies = [];
   room.projectiles = [];
   room.hazards = [];
-  room.relicChests = [];
   room.pendingReinforcements = [];
 
   if (checkpoint >= SURVIVAL_BOSS_CHECKPOINTS.length) {
+    room.enemies = [];
     survival.finalBossDefeated = true;
     survival.executionSpawnAt = now + SURVIVAL_EXECUTION_SPAWN_DELAY_MS;
     preparePartyForExecutionBoss(room);
@@ -3907,6 +4165,8 @@ function finishSurvivalCheckpointBoss(room, now) {
     pushEvent(room, "9분 생존 성공. 그러나 전투는 아직 끝나지 않았습니다.");
     return;
   }
+
+  room.enemies = room.enemies.filter((enemy) => enemy.hp > 0 && enemy.miniBoss);
 
   room.floor = checkpoint + 1;
   healPartyAfterSurvivalBoss(room);
@@ -3987,7 +4247,7 @@ function spawnSurvivalExecutionBoss(room) {
     lane: 1,
     kind: "boss",
     resolvedKind: "boss",
-    traitId: waveTraits.boss_gate.id,
+    traitId: waveTraits.boss.id,
     modifierId: "safe_path",
     bossId: profile.id
   };
@@ -4269,17 +4529,17 @@ function getMiniBossIntroTuning(room) {
   };
 }
 
-function spawnMiniBoss(room) {
+function spawnMiniBoss(room, options = {}) {
   const profile = getChapterBossProfile(room.floor);
   const miniProfile = getMiniBossProfile(room.floor);
   const tuning = getMiniBossIntroTuning(room);
   const boss = spawnEnemy(room, "boss", {
     bossId: profile.id,
-    x: room.world.w / 2,
-    y: Math.max(180, room.world.h / 2 - 250),
+    x: Number.isFinite(options.x) ? options.x : room.world.w / 2,
+    y: Number.isFinite(options.y) ? options.y : Math.max(180, room.world.h / 2 - 250),
     scale: 0.62
   });
-  if (!boss) return;
+  if (!boss) return null;
 
   boss.label = miniProfile.name;
   boss.color = miniProfile.color;
@@ -4297,19 +4557,31 @@ function spawnMiniBoss(room) {
   boss.shotTimer = tuning.shotTimer;
   boss.attackTimer = tuning.attackTimer;
   boss.miniBoss = true;
+  if (options.survival) {
+    const stagger = Math.max(0, Math.floor(options.index || 0)) * 0.28;
+    boss.survivalMiniBoss = true;
+    boss.survivalSpawnMinute = Math.max(1, Math.floor(options.minute || 1));
+    boss.guaranteedRelicDrop = true;
+    boss.specialTimer += stagger;
+    boss.chargeTimer += stagger;
+    boss.shotTimer += stagger;
+  }
 
-  room.stageObjective = {
-    type: "miniboss",
-    label: "MINI BOSS",
-    text: miniProfile.text,
-    targetId: boss.id
-  };
+  if (!options.survival) {
+    room.stageObjective = {
+      type: "miniboss",
+      label: "MINI BOSS",
+      text: miniProfile.text,
+      targetId: boss.id
+    };
+  }
 
   addEffect(room, "warning", boss.x, boss.y, {
     color: miniProfile.color,
     radius: boss.radius + 74,
     style: "chapter_boss_spawn"
   });
+  return boss;
 }
 
 function preparePartyForMiniBoss(room) {
@@ -5422,6 +5694,7 @@ function canSpawnHostileProjectile(room) {
 }
 
 function spawnEnemy(room, type, options = {}) {
+  if (room.survival?.bossActive && type !== "boss" && !options.allowDuringSurvivalBoss) return null;
   const def = enemyDefs[type];
   if (!def) return;
   const random = () => nextRoomRandom(room);
@@ -5576,6 +5849,14 @@ function spawnEnemy(room, type, options = {}) {
     xp: Math.round(def.xp * xpScale * partyDifficulty.xpMul * (elite ? 2.05 : 1) * xpMul * bossXpMul * (1 + abyssDifficulty.depth * 0.06 + abyssDifficulty.ascension * 0.04))
   };
   room.enemies.push(enemy);
+  if (room.status !== "lobby") {
+    if (!Array.isArray(room.runDiscoveredMonsters)) room.runDiscoveredMonsters = [];
+    if (!room.runDiscoveredMonsters.includes(enemy.type)) room.runDiscoveredMonsters.push(enemy.type);
+    if (enemy.bossId) {
+      if (!Array.isArray(room.runDiscoveredBosses)) room.runDiscoveredBosses = [];
+      if (!room.runDiscoveredBosses.includes(enemy.bossId)) room.runDiscoveredBosses.push(enemy.bossId);
+    }
+  }
   return enemy;
 }
 
@@ -14779,6 +15060,7 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     if (owner) {
       const stats = owner.runStats || (owner.runStats = createEmptyRunStats());
       stats.kills += 1;
+      if (enemy.elite) stats.eliteKills += 1;
       if (enemy.type === "boss" || enemy.bossId) {
         stats.bossKills += 1;
         const bossId = String(enemy.bossId || "boss");
@@ -15487,8 +15769,48 @@ function getClearedStageCount(room, outcome) {
 function finishRun(room, outcome, reason) {
   roomManager.prepareRoomForGameover(room);
   room.result = buildRunResult(room, outcome, reason);
+  persistAccountRunResults(room, room.result);
   registerChallengeLeaderboardResult(room, room.result);
   pushEvent(room, outcome === "victory" ? "런 클리어. 결산을 확인하세요." : "런 실패. 결산을 확인하세요.");
+}
+
+function persistAccountRunResults(room, result) {
+  if (!result) return;
+  const enemies = [
+    ...(room.runDiscoveredMonsters || []).map((type) => ({ type })),
+    ...(room.runDiscoveredBosses || []).map((bossId) => ({ type: "boss", bossId })),
+  ];
+  for (const player of getHumanPlayers(room)) {
+    if (player.spectator || !player.accountId) continue;
+    const account = accountStore.getTrusted(player.accountId);
+    if (!account) continue;
+    const discoveries = progressionService.recordWorldDiscoveries(account.progress, {
+      selfId: player.id,
+      enemies,
+      players: [player],
+    });
+    const playerResult = (result.players || []).find((entry) => entry.id === player.id) || {};
+    const progress = progressionService.recordRunResult(discoveries.progress, {
+      ...result,
+      resultKey: `${room.code}:${room.runStartedAt || Date.now()}:${player.accountId}`,
+      chapter: result.chapter || room.chapter || room.floor || 0,
+      wave: result.wave || room.wave || 0,
+      classId: playerResult.classId || player.classId,
+      combatStats: playerResult.combatStats || {},
+      bossDefeats: playerResult.bossDefeats || room.runBossDefeats || [],
+      noDown: Boolean(playerResult.noDown),
+      weeklyBossId: result.weeklyBossId || room.weeklyBossId || "",
+      challengeRuleId: result.challengeRuleId || room.challengeRuleId || "",
+      unlockedAscensionLevel: result.unlockedAscensionLevel,
+    });
+    const session = accountStore.updateProgress(account.id, progress, "run-finished");
+    player.accountRevision = Number(session?.account?.revision || player.accountRevision || 0);
+    player.growthLoadout = getAuthoritativeGrowthLoadout(player, player.classId, {
+      ...(player.growthLoadout || {}),
+      ascensionLevel: player.growthLoadout?.ascensionLevel || 0,
+    });
+    sendAccountProgress(player, session, "run-finished", "런 보상이 서버 계정에 저장되었습니다.");
+  }
 }
 
 function getChallengeLeaderboardKey(mode, key) {
@@ -15564,6 +15886,9 @@ function buildRunResult(room, outcome, reason) {
       bossDefeats: room.runBossDefeats || []
     }))
   });
+  summary.unlockedAscensionLevel = outcome === "victory"
+    ? Math.min(MAX_ASCENSION_LEVEL, Math.max(0, Number(room.ascensionLevel || 0)) + 1)
+    : Math.max(0, Number(room.ascensionLevel || 0));
   if (room.survival?.active) {
     summary.survivalCompleted = Boolean(room.survival.finalBossDefeated);
     summary.survivalTimeSec = Math.round(room.survival.elapsed || 0);
@@ -15769,6 +16094,12 @@ function maybeDropRelicChest(room, enemy, ownerId = null) {
   if (room.status !== "combat" && room.status !== "advancement") return;
   if (enemy.type === "splinter") return;
   if (enemy.blockadeRunner || BLOCKADE_RUNNER_TYPES.includes(enemy.type)) return;
+  if (enemy.survivalCheckpoint) return;
+  if (enemy.survivalMiniBoss || enemy.guaranteedRelicDrop) {
+    room.killsSinceChest = 0;
+    spawnRelicChestForEnemy(room, enemy, { survivalMiniBoss: true });
+    return;
+  }
   const stageKind = getActiveStageKind(room);
   const rewardProfile = getStageRewardProfile(room, stageKind);
   const chestLimit = getStageChestLimit(room, stageKind);
@@ -15790,16 +16121,26 @@ function maybeDropRelicChest(room, enemy, ownerId = null) {
   room.killsSinceChest = drop.killsSinceChest;
   if (!drop.shouldDrop) return;
 
+  spawnRelicChestForEnemy(room, enemy);
+}
+
+function spawnRelicChestForEnemy(room, enemy, options = {}) {
   const chest = {
     id: nextChestId++,
     x: clamp(enemy.x, 44, room.world.w - 44),
     y: clamp(enemy.y, 44, room.world.h - 44),
     radius: 24,
+    survivalMiniBoss: Boolean(options.survivalMiniBoss),
     dead: false
   };
   room.relicChests.push(chest);
-  addEffect(room, "chest", chest.x, chest.y, { color: "#facc15", radius: 54 });
-  pushEvent(room, "유물 상자가 떨어졌습니다.");
+  addEffect(room, "chest", chest.x, chest.y, {
+    color: options.survivalMiniBoss ? "#fde047" : "#facc15",
+    radius: options.survivalMiniBoss ? 68 : 54,
+    style: options.survivalMiniBoss ? "miniboss_guaranteed_relic" : "relic_drop"
+  });
+  pushEvent(room, options.survivalMiniBoss ? "생존 미니보스가 확정 유물 상자를 떨어뜨렸습니다." : "유물 상자가 떨어졌습니다.");
+  return chest;
 }
 
 function enterRelicChoice(room, chest) {
@@ -16545,6 +16886,11 @@ function removeClientFromRoom(client, announce) {
       room.hostId = nextHostPlayer ? nextHostPlayer.id : null;
       if (room.hostId) {
         const host = room.players.get(room.hostId);
+        host.growthLoadout = getAuthoritativeGrowthLoadout(host, host.classId, {
+          ...(host.growthLoadout || {}),
+          ascensionLevel: room.ascensionLevel || 0,
+        });
+        if (room.status === "lobby") room.ascensionLevel = host.growthLoadout.ascensionLevel;
         pushEvent(room, `${host.name} 님이 새 방장이 되었습니다.`);
       }
     }
@@ -16599,7 +16945,7 @@ function nextRoomRandom(room) {
 }
 
 function createEmptyRunStats() {
-  return { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, turretKills: 0, bossKills: 0, downs: 0, bossDefeats: [] };
+  return { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, eliteKills: 0, turretKills: 0, bossKills: 0, downs: 0, bossDefeats: [] };
 }
 
 function round2(value) {

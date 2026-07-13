@@ -83,32 +83,61 @@
     { id: "rebound", name: "반향 룬", text: "고단계에서 벽 반사" },
     { id: "eclipse", name: "시즌 일식 룬", text: "화상·독 피해와 보스 피해 증가" },
   ];
-  const ACHIEVEMENTS = [
-    { id: "first_run", name: "첫 원정", text: "런 1회 완료", reward: { shards: 20, title: "초행자" }, test: (p) => p.statistics.runs >= 1 },
-    { id: "first_victory", name: "첫 돌파", text: "일반 런 승리", reward: { shards: 45, skin: "victory_trim" }, test: (p) => p.statistics.victories >= 1 },
-    { id: "abyss_3", name: "심연 탐사자", text: "심연 3층 도달", reward: { shards: 80, title: "심연 탐사자" }, test: (p) => p.records.highestAbyssDepth >= 3 },
-    { id: "ascension_5", name: "승천자", text: "승천 5 기록", reward: { shards: 100, title: "승천자" }, test: (p) => p.records.highestAscension >= 5 },
-    { id: "collector_12", name: "수집가", text: "장비 도감 12종 발견", reward: { shards: 70 }, test: (p) => p.collections.equipmentBases.length >= 12 },
-    { id: "legendary_item", name: "황금빛 전리품", text: "전설 장비 획득", reward: { stones: 25 }, test: (p) => p.inventory.items.some((item) => item.rarity === "legendary") },
-    { id: "enhance_10", name: "담금질", text: "장비 +10 강화", reward: { dust: 30 }, test: (p) => p.inventory.items.some((item) => item.enhance >= 10) },
-    { id: "rune_tier_4", name: "룬 연금술", text: "4단계 룬 제작", reward: { essence: 2 }, test: (p) => p.inventory.runes.some((rune) => rune.tier >= 4) },
-    { id: "grinder_25", name: "노련한 원정대", text: "런 25회 완료", reward: { shards: 160, title: "백전노장" }, test: (p) => p.statistics.runs >= 25 },
-    { id: "score_100k", name: "전장의 전설", text: "누적 점수 100,000", reward: { shards: 220, skin: "abyss_glow" }, test: (p) => p.statistics.totalScore >= 100000 },
-    { id: "ranger_poison_million", name: "맹독의 비", text: "궁수로 독 피해 1,000,000 누적", reward: { shards: 250, title: "맹독 추적자", perk: "quick_start" }, test: (p) => p.combatByClass.ranger.poisonDamage >= 1000000 },
-    { id: "warrior_no_down", name: "쓰러지지 않는 방패", text: "전사로 무다운 클리어", reward: { shards: 120, title: "불굴", perk: "reinforced_start" }, test: (p) => p.combatByClass.warrior.noDownWins >= 1 },
-    { id: "mage_ascension_5", name: "승천한 대마도사", text: "마법사로 승천 5 클리어", reward: { shards: 180, skin: "season_ember" }, test: (p) => integer(p.records.classBestAscension.mage) >= 5 },
-    { id: "engineer_turret_5000", name: "무인 전선", text: "기계공 터렛으로 5,000킬", reward: { shards: 280, title: "자동화 지휘관", perk: "supply_cache" }, test: (p) => p.combatByClass.engineer.turretKills >= 5000 },
+  const MONSTER_CATALOG = [
+    { id: "training_dummy", name: "훈련 표적", detail: "대기방 훈련용" },
+    { id: "slime", name: "슬라임", detail: "근접" },
+    { id: "bat", name: "박쥐", detail: "고속 근접" },
+    { id: "brute", name: "투사", detail: "중장 근접" },
+    { id: "guardian", name: "수호자", detail: "방어형" },
+    { id: "shaman", name: "주술사", detail: "회복 지원" },
+    { id: "spitter", name: "침 뱉는 괴물", detail: "원거리" },
+    { id: "bomber", name: "자폭병", detail: "폭발" },
+    { id: "charger", name: "돌진병", detail: "돌진" },
+    { id: "splitter", name: "분열체", detail: "분열" },
+    { id: "splinter", name: "파편체", detail: "군집" },
+    { id: "runner", name: "운반자", detail: "봉쇄전" },
+    { id: "runner_tank", name: "중장 운반자", detail: "봉쇄전" },
+    { id: "runner_fast", name: "신속 운반자", detail: "봉쇄전" },
+    { id: "stalker", name: "암살자", detail: "기습" },
+    { id: "mortar", name: "포격수", detail: "장거리 포격" },
+    { id: "sniper", name: "저격수", detail: "정밀 사격" },
+    { id: "boss", name: "문지기", detail: "보스 개체" },
   ];
-  const WEEKLY_RULES = {
-    venom_week: { name: "맹독 주간", text: "독 피해 +35%, 화상 피해 -28%" },
-    ember_week: { name: "화염 주간", text: "화상 피해 +35%, 독 피해 -28%" },
-    construct_week: { name: "자동화 주간", text: "설치물 피해 +25%, 지속시간 +15%" },
-  };
-  const START_PERKS = [
-    { id: "", name: "특전 없음", text: "기본 상태로 시작" },
-    { id: "supply_cache", name: "보급 상자", text: "런 시작 시 최대 체력 12% 보호막" },
-    { id: "reinforced_start", name: "강화 골격", text: "런 시작 최대 체력 +6%" },
-    { id: "quick_start", name: "선제 기동", text: "런 시작 이동 속도 +5%" },
+  const BOSS_CATALOG = [
+    { id: "blade_duelist", name: "검투 문지기", detail: "1장 준보스" },
+    { id: "plague_acolyte", name: "역병 의식술사", detail: "2장 준보스" },
+    { id: "void_hunter", name: "공허 추적자", detail: "3장 준보스" },
+    { id: "iron_warden", name: "철의 감시자", detail: "1장 보스" },
+    { id: "hive_prophet", name: "군체 예언자", detail: "2장 보스" },
+    { id: "void_regent", name: "공허 섭정", detail: "최종 보스" },
+  ];
+  const RELIC_CATALOG = [
+    { id: "power_core", name: "힘의 핵", detail: "공격력 증가" },
+    { id: "iron_plate", name: "강철 갑판", detail: "방어력 증가" },
+    { id: "swift_boots", name: "신속의 장화", detail: "이동 속도 증가" },
+    { id: "cooling_gear", name: "냉각 장치", detail: "쿨타임 감소" },
+    { id: "splitter_core", name: "분열 핵", detail: "투사체 추가" },
+    { id: "giant_lens", name: "거대 렌즈", detail: "범위 증가" },
+    { id: "sharp_eye", name: "예리한 눈", detail: "치명타 확률 증가" },
+    { id: "fatal_mark", name: "치명 표식", detail: "치명타 피해 증가" },
+    { id: "living_moss", name: "살아있는 이끼", detail: "체력 재생 증가" },
+    { id: "heartstone", name: "심장석", detail: "최대 체력 증가" },
+  ];
+  const ACHIEVEMENTS = [
+    { id: "first_run", name: "첫 원정", text: "런 1회 완료", target: 1, current: (p) => p.statistics.runs, reward: { shards: 20, title: "초행자" } },
+    { id: "first_victory", name: "첫 돌파", text: "런 1회 승리", target: 1, current: (p) => p.statistics.victories, reward: { shards: 45, skin: "victory_trim" } },
+    { id: "abyss_3", name: "심연 탐사자", text: "심연 3층 도달", target: 3, current: (p) => p.records.highestAbyssDepth, reward: { shards: 80, title: "심연 탐사자" } },
+    { id: "ascension_5", name: "승천자", text: "승천 5단계 해금", target: 5, current: (p) => p.records.highestAscension, reward: { shards: 100, title: "승천자" } },
+    { id: "collector_12", name: "수집가", text: "장비 도감 12종 발견", target: 12, current: (p) => p.collections.equipmentBases.length, reward: { shards: 70 } },
+    { id: "legendary_item", name: "황금빛 전리품", text: "전설 장비 획득", target: 1, current: (p) => Number(p.inventory.items.some((item) => item.rarity === "legendary")), reward: { stones: 25 } },
+    { id: "enhance_10", name: "담금질", text: "장비 +10 강화", target: 10, current: (p) => Math.max(0, ...p.inventory.items.map((item) => item.enhance)), reward: { dust: 30 } },
+    { id: "rune_tier_4", name: "룬 연금술", text: "4단계 룬 제작", target: 4, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { essence: 2 } },
+    { id: "grinder_25", name: "노련한 원정대", text: "런 25회 완료", target: 25, current: (p) => p.statistics.runs, reward: { shards: 160, title: "백전노장" } },
+    { id: "score_100k", name: "전장의 전설", text: "누적 점수 100,000", target: 100000, current: (p) => p.statistics.totalScore, reward: { shards: 220, skin: "abyss_glow" } },
+    { id: "ranger_poison_million", name: "맹독의 비", text: "궁수로 독 피해 1,000,000 누적", target: 1000000, current: (p) => p.combatByClass.ranger.poisonDamage, reward: { shards: 250, title: "맹독 추적자" } },
+    { id: "warrior_no_down", name: "쓰러지지 않는 방패", text: "전사로 무다운 클리어", target: 1, current: (p) => p.combatByClass.warrior.noDownWins, reward: { shards: 120, title: "불굴" } },
+    { id: "mage_ascension_5", name: "승천한 대마도사", text: "마법사로 승천 5 클리어", target: 5, current: (p) => integer(p.records.classBestAscension.mage), reward: { shards: 180, skin: "season_ember" } },
+    { id: "engineer_turret_5000", name: "무인 전선", text: "기계공 터렛으로 5,000킬", target: 5000, current: (p) => p.combatByClass.engineer.turretKills, reward: { shards: 280, title: "자동화 지휘관" } },
   ];
   const BOSS_RECIPES = [
     { id: "warden_bulwark", bossId: "iron_warden", materialName: "철갑 파편", amount: 3, shards: 70, label: "철의 감시자 방벽" },
@@ -121,12 +150,6 @@
     { level: 5, skin: "season_verdant", label: "스킨: 계절의 빛" },
     { level: 7, rune: "eclipse", label: "시즌 일식 룬 T2" },
     { level: 10, title: "심연의 계절", skin: "season_ember", label: "칭호·잿불 스킨" },
-  ];
-  const MODIFIERS = [
-    { id: "healing_drought", name: "메마른 심연", text: "회복량 40% 감소, 보상 증가" },
-    { id: "elite_hunt", name: "정예 사냥", text: "정예 출현과 적 체력 증가" },
-    { id: "enemy_haste", name: "가속 지대", text: "적 이동과 공격 압박 증가" },
-    { id: "glass_cannon", name: "유리 대포", text: "양측 피해 증가" },
   ];
   const CUSTOM_STAT_KEYS = ["itemsFound", "runesFound", "itemsSalvaged", "enhancements", "reforges", "crafts", "challengeCompletions"];
   const CUSTOM_CURRENCY_KEYS = ["enhancementStones", "reforgingDust", "bossEssence"];
@@ -152,7 +175,7 @@
   }
 
   function emptyCombatStats() {
-    return { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, turretKills: 0, bossKills: 0, noDownWins: 0 };
+    return { damage: 0, poisonDamage: 0, burnDamage: 0, kills: 0, eliteKills: 0, turretKills: 0, bossKills: 0, noDownWins: 0 };
   }
 
   function hashString(value) {
@@ -241,30 +264,40 @@
   function makeDaily(key) {
     const seed = hashString(`daily:${key}`);
     const goals = [
-      { type: "stages", label: "스테이지 6개 클리어", target: 6 },
-      { type: "score", label: "한 런 점수 3,000 달성", target: 3000 },
-      { type: "victory", label: "일반 엔딩 승리", target: 1 },
-      { type: "abyss", label: "심연 1층 진입", target: 1 },
+      { type: "eliteKills", label: "엘리트 몬스터 10마리 처치", target: 10 },
+      { type: "kills", label: "몬스터 100마리 처치", target: 100 },
+      { type: "bossKills", label: "보스 1마리 처치", target: 1 },
+      { type: "damage", label: "피해 30,000 누적", target: 30000 },
     ];
     const goal = goals[seed % goals.length];
-    return { key, seed, modifierId: MODIFIERS[seed % MODIFIERS.length].id, goalType: goal.type, goalLabel: goal.label, target: goal.target, progress: 0, completed: false, rewardClaimed: false };
+    return { missionVersion: 2, key, goalType: goal.type, goalLabel: goal.label, target: goal.target, progress: 0, completed: false, rewardClaimed: false };
   }
 
   function makeWeekly(key) {
     const seed = hashString(`weekly:${key}`);
-    const ruleIds = Object.keys(WEEKLY_RULES);
-    return { key, seed, modifierId: MODIFIERS[(seed + 1) % MODIFIERS.length].id, ruleId: ruleIds[seed % ruleIds.length], goalType: "victories", goalLabel: "회전 주간 보스 격파", target: 1, progress: 0, completed: false, rewardClaimed: false };
+    const goals = [
+      { type: "eliteKills", label: "엘리트 몬스터 60마리 처치", target: 60 },
+      { type: "kills", label: "몬스터 600마리 처치", target: 600 },
+      { type: "bossKills", label: "보스 6마리 처치", target: 6 },
+      { type: "victories", label: "원정 3회 승리", target: 3 },
+      { type: "stages", label: "스테이지 50개 클리어", target: 50 },
+    ];
+    const goal = goals[seed % goals.length];
+    return { missionVersion: 2, key, goalType: goal.type, goalLabel: goal.label, target: goal.target, progress: 0, completed: false, rewardClaimed: false };
   }
 
   function normalizeChallenges(source) {
     const period = getPeriodInfo();
-    const daily = source?.daily?.key === period.dailyKey ? { ...makeDaily(period.dailyKey), ...source.daily } : makeDaily(period.dailyKey);
-    const weekly = source?.weekly?.key === period.weeklyKey ? { ...makeWeekly(period.weeklyKey), ...source.weekly } : makeWeekly(period.weeklyKey);
+    const daily = source?.daily?.key === period.dailyKey && source.daily?.missionVersion === 2
+      ? { ...makeDaily(period.dailyKey), ...source.daily }
+      : makeDaily(period.dailyKey);
+    const weekly = source?.weekly?.key === period.weeklyKey && source.weekly?.missionVersion === 2
+      ? { ...makeWeekly(period.weeklyKey), ...source.weekly }
+      : makeWeekly(period.weeklyKey);
     const season = source?.season?.id === period.seasonId
       ? { id: period.seasonId, xp: integer(source.season.xp), level: Math.max(1, integer(source.season.level, 1)), claimedLevels: unique(source.season.claimedLevels) }
       : { id: period.seasonId, xp: 0, level: 1, claimedLevels: [] };
-    const activeMode = ["standard", "daily", "weekly"].includes(source?.activeMode) ? source.activeMode : "standard";
-    return { activeMode, daily, weekly, season };
+    return { daily, weekly, season };
   }
 
   function normalizeProgress(progress) {
@@ -299,8 +332,6 @@
     }
     const titles = unique(normalizedBase.titles);
     const skins = unique(normalizedBase.skins);
-    const unlockedPerks = unique(source.startPerks?.unlocked).filter((id) => START_PERKS.some((perk) => perk.id === id));
-    const selectedPerk = START_PERKS.some((perk) => perk.id === source.startPerks?.selected) && (source.startPerks?.selected === "" || unlockedPerks.includes(source.startPerks?.selected)) ? source.startPerks.selected : "";
     return {
       ...normalizedBase,
       version: SAVE_VERSION,
@@ -327,7 +358,6 @@
         selectedTitle: titles.includes(source.cosmetics?.selectedTitle) ? source.cosmetics.selectedTitle : "",
         selectedSkin: skins.includes(source.cosmetics?.selectedSkin) ? source.cosmetics.selectedSkin : "",
       },
-      startPerks: { unlocked: unlockedPerks, selected: selectedPerk },
       challenges: normalizeChallenges(source.challenges),
       lastRunRewards: source.lastRunRewards && typeof source.lastRunRewards === "object" ? clone(source.lastRunRewards) : null,
     };
@@ -484,7 +514,6 @@
     progress.currencies.bossEssence += integer(reward.essence);
     if (reward.title && !progress.titles.includes(reward.title)) progress.titles.push(reward.title);
     if (reward.skin && !progress.skins.includes(reward.skin)) progress.skins.push(reward.skin);
-    if (reward.perk && !progress.startPerks.unlocked.includes(reward.perk)) progress.startPerks.unlocked.push(reward.perk);
   }
 
   function grantSeasonRewards(progress, rewards) {
@@ -509,7 +538,7 @@
   function evaluateAchievements(progress) {
     const unlocked = [];
     for (const achievement of ACHIEVEMENTS) {
-      if (progress.achievements[achievement.id] || !achievement.test(progress)) continue;
+      if (progress.achievements[achievement.id] || integer(achievement.current(progress)) < achievement.target) continue;
       progress.achievements[achievement.id] = new Date().toISOString();
       applyAchievementReward(progress, achievement.reward);
       unlocked.push(achievement.id);
@@ -519,16 +548,9 @@
 
   function updateChallengeProgress(progress, result) {
     const rewards = [];
-    const mode = progress.challenges.activeMode;
     const daily = progress.challenges.daily;
-    if (mode === "daily" && !daily.completed) {
-      const values = {
-        stages: integer(result?.stagesCleared),
-        score: integer(result?.totalScore),
-        victory: result?.outcome === "victory" ? 1 : 0,
-        abyss: integer(result?.abyssDepth),
-      };
-      daily.progress = Math.max(daily.progress, values[daily.goalType] || 0);
+    if (!daily.completed) {
+      daily.progress = Math.min(daily.target, daily.progress + getMissionProgressGain(daily.goalType, result));
       daily.completed = daily.progress >= daily.target;
     }
     if (daily.completed && !daily.rewardClaimed) {
@@ -536,11 +558,11 @@
       progress.currencies.abyssShards += 70;
       progress.currencies.enhancementStones += 12;
       progress.statistics.challengeCompletions += 1;
-      rewards.push({ label: "일일 도전", shards: 70, stones: 12 });
+      rewards.push({ label: "일일 임무", shards: 70, stones: 12 });
     }
     const weekly = progress.challenges.weekly;
-    if (mode === "weekly" && result?.outcome === "victory" && !weekly.completed) {
-      weekly.progress += 1;
+    if (!weekly.completed) {
+      weekly.progress = Math.min(weekly.target, weekly.progress + getMissionProgressGain(weekly.goalType, result));
       weekly.completed = weekly.progress >= weekly.target;
     }
     if (weekly.completed && !weekly.rewardClaimed) {
@@ -548,7 +570,7 @@
       progress.currencies.abyssShards += 180;
       progress.currencies.bossEssence += 5;
       progress.statistics.challengeCompletions += 1;
-      rewards.push({ label: "주간 보스", shards: 180, essence: 5 });
+      rewards.push({ label: "주간 임무", shards: 180, essence: 5 });
     }
     const seasonGain = 20 + integer(result?.stagesCleared) * 3 + (result?.outcome === "victory" ? 35 : 0) + integer(result?.abyssDepth) * 8;
     progress.challenges.season.xp += seasonGain;
@@ -560,15 +582,20 @@
       rewards.push({ label: `시즌 Lv.${progress.challenges.season.level}`, shards: 25, dust: 4 });
     }
     grantSeasonRewards(progress, rewards);
-    if (mode === "daily") {
-      const key = daily.key;
-      progress.records.dailyBest[key] = Math.max(integer(progress.records.dailyBest[key]), integer(result?.totalScore));
-    }
-    if (mode === "weekly") {
-      const key = weekly.key;
-      progress.records.weeklyBest[key] = Math.max(integer(progress.records.weeklyBest[key]), integer(result?.totalScore));
-    }
     return rewards;
+  }
+
+  function getMissionProgressGain(goalType, result) {
+    const combat = result?.combatStats || {};
+    const gains = {
+      eliteKills: integer(combat.eliteKills),
+      kills: integer(combat.kills),
+      bossKills: integer(combat.bossKills),
+      damage: integer(combat.damage),
+      victories: result?.outcome === "victory" ? 1 : 0,
+      stages: integer(result?.stagesCleared),
+    };
+    return gains[goalType] || 0;
   }
 
   function recordRunResult(progress, result = {}) {
@@ -595,7 +622,7 @@
     const resultClassId = CLASS_IDS.includes(result?.classId) ? result.classId : "warrior";
     const classCombat = next.combatByClass[resultClassId];
     const combat = result?.combatStats || {};
-    for (const key of ["damage", "poisonDamage", "burnDamage", "kills", "turretKills", "bossKills"]) {
+    for (const key of ["damage", "poisonDamage", "burnDamage", "kills", "eliteKills", "turretKills", "bossKills"]) {
       classCombat[key] += integer(combat[key]);
     }
     if (result?.outcome === "victory" && result?.noDown) classCombat.noDownWins += 1;
@@ -722,11 +749,8 @@
   }
 
   function getActiveChallenge(progress) {
-    const next = normalizeProgress(progress);
-    const mode = next.challenges.activeMode;
-    if (mode === "standard") return { mode: "standard", key: "", seed: 0, modifierId: "", ruleId: "" };
-    const challenge = mode === "weekly" ? next.challenges.weekly : next.challenges.daily;
-    return { mode, key: challenge.key, seed: challenge.seed, modifierId: challenge.modifierId, ruleId: mode === "weekly" ? challenge.ruleId : "" };
+    normalizeProgress(progress);
+    return { mode: "standard", key: "", seed: 0, modifierId: "", ruleId: "" };
   }
 
   function getGrowthLoadout(progress, classId, ascensionLevel) {
@@ -738,7 +762,6 @@
       gearBonuses: calculateEquipmentBonuses(next, loadout.classId),
       challenge: getActiveChallenge(next),
       cosmetic: { title: next.cosmetics.selectedTitle, skin: next.cosmetics.selectedSkin },
-      startPerkId: next.startPerks.selected
     };
   }
 
@@ -822,11 +845,6 @@
     } else if (action === "select-skin") {
       const skin = String(payload.skin || "");
       if (!skin || next.skins.includes(skin)) { next.cosmetics.selectedSkin = skin; changed = true; affectsLoadout = true; }
-    } else if (action === "select-start-perk") {
-      const perkId = String(payload.perkId || "");
-      if (!perkId || next.startPerks.unlocked.includes(perkId)) { next.startPerks.selected = perkId; changed = true; affectsLoadout = true; }
-    } else if (action === "challenge-mode" && ["standard", "daily", "weekly"].includes(payload.mode)) {
-      next.challenges.activeMode = payload.mode; changed = true; affectsLoadout = true;
     }
     const achievements = changed ? evaluateAchievements(next) : [];
     return { progress: normalizeProgress(next), changed, affectsLoadout, message, achievements };
@@ -924,21 +942,57 @@
       <div class="meta-boss-recipes">${BOSS_RECIPES.map((recipe) => { const held = integer(progress.inventory.bossMaterials[recipe.bossId]); return `<article><div><strong>${escapeHtml(recipe.label)}</strong><span>${escapeHtml(recipe.materialName)} ${held}/${recipe.amount} · 파편 ${recipe.shards}</span></div><button type="button" data-progression-action="craft-boss" data-recipe-id="${recipe.id}" ${held < recipe.amount || progress.currencies.abyssShards < recipe.shards ? "disabled" : ""}>제작</button></article>`; }).join("")}</div>`;
   }
 
+  function renderCollectionCatalog(label, collectedIds, catalog, describe) {
+    const collected = new Set(collectedIds);
+    const found = catalog.filter((entry) => collected.has(entry.id)).length;
+    return `<details class="meta-collection-detail" ${found > 0 ? "open" : ""}>
+      <summary><span>${escapeHtml(label)}</span><strong>${found}/${catalog.length}</strong><i><b style="width:${catalog.length ? Math.min(100, found / catalog.length * 100) : 0}%"></b></i></summary>
+      <div class="meta-codex-list">${catalog.map((entry) => {
+        const discovered = collected.has(entry.id);
+        return `<article class="${discovered ? "discovered" : "locked"}"><span>${discovered ? "발견" : "미발견"}</span><div><strong>${escapeHtml(entry.name)}</strong><small>${escapeHtml(describe(entry))}</small></div></article>`;
+      }).join("")}</div>
+    </details>`;
+  }
+
+  function getCatalogDiscoveryCount(collectedIds, catalog) {
+    const collected = new Set(collectedIds);
+    return catalog.filter((entry) => collected.has(entry.id)).length;
+  }
+
   function renderArchiveTab(progress) {
-    const collectionRows = [["장비", progress.collections.equipmentBases.length, ITEM_BASES.length], ["룬", progress.collections.runeTypes.length, RUNES.length], ["몬스터", progress.collections.monsters.length, 18], ["보스", progress.collections.bosses.length, 6], ["유물", progress.collections.relics.length, 40]];
+    const collectionRows = [
+      ["장비", getCatalogDiscoveryCount(progress.collections.equipmentBases, ITEM_BASES), ITEM_BASES.length],
+      ["룬", getCatalogDiscoveryCount(progress.collections.runeTypes, RUNES), RUNES.length],
+      ["몬스터", getCatalogDiscoveryCount(progress.collections.monsters, MONSTER_CATALOG), MONSTER_CATALOG.length],
+      ["보스", getCatalogDiscoveryCount(progress.collections.bosses, BOSS_CATALOG), BOSS_CATALOG.length],
+      ["유물", getCatalogDiscoveryCount(progress.collections.relics, RELIC_CATALOG), RELIC_CATALOG.length],
+    ];
     const combatTotals = Object.values(progress.combatByClass).reduce((total, stats) => {
       for (const key of Object.keys(total)) total[key] += integer(stats[key]);
       return total;
     }, emptyCombatStats());
+    const collectionDetails = [
+      renderCollectionCatalog("장비 도감", progress.collections.equipmentBases, ITEM_BASES, (entry) => `${SLOT_LABELS[entry.slot]} · ${SET_LABELS[entry.setId] || entry.setId}`),
+      renderCollectionCatalog("룬 도감", progress.collections.runeTypes, RUNES, (entry) => entry.text),
+      renderCollectionCatalog("몬스터 도감", progress.collections.monsters, MONSTER_CATALOG, (entry) => entry.detail),
+      renderCollectionCatalog("보스 도감", progress.collections.bosses, BOSS_CATALOG, (entry) => entry.detail),
+      renderCollectionCatalog("유물 도감", progress.collections.relics, RELIC_CATALOG, (entry) => entry.detail),
+    ].join("");
     return `<div class="meta-collection-grid">${collectionRows.map(([label, current, total]) => `<article><span>${label}</span><strong>${current}/${total}</strong><i><b style="width:${Math.min(100, current / total * 100)}%"></b></i></article>`).join("")}</div>
-      <div class="meta-combat-records"><span><small>누적 피해</small><b>${combatTotals.damage.toLocaleString()}</b></span><span><small>독 피해</small><b>${combatTotals.poisonDamage.toLocaleString()}</b></span><span><small>화상 피해</small><b>${combatTotals.burnDamage.toLocaleString()}</b></span><span><small>터렛 처치</small><b>${combatTotals.turretKills.toLocaleString()}</b></span></div>
+      <div class="meta-section-head"><strong>수집 상세</strong><span>항목을 펼쳐 발견 목록 확인</span></div>
+      <div class="meta-collection-details">${collectionDetails}</div>
+      <div class="meta-combat-records"><span><small>누적 피해</small><b>${combatTotals.damage.toLocaleString()}</b></span><span><small>엘리트 처치</small><b>${combatTotals.eliteKills.toLocaleString()}</b></span><span><small>독 피해</small><b>${combatTotals.poisonDamage.toLocaleString()}</b></span><span><small>화상 피해</small><b>${combatTotals.burnDamage.toLocaleString()}</b></span><span><small>터렛 처치</small><b>${combatTotals.turretKills.toLocaleString()}</b></span></div>
       <div class="meta-section-head"><strong>업적 ${Object.keys(progress.achievements).length}/${ACHIEVEMENTS.length}</strong><span>보상은 달성 즉시 지급</span></div>
-      <div class="meta-achievement-list">${ACHIEVEMENTS.map((achievement) => { const done = Boolean(progress.achievements[achievement.id]); return `<article class="${done ? "done" : ""}"><span>${done ? "완료" : "진행"}</span><div><strong>${escapeHtml(achievement.name)}</strong><small>${escapeHtml(achievement.text)}</small></div><em>${escapeHtml(formatAchievementReward(achievement.reward))}</em></article>`; }).join("")}</div>
+      <div class="meta-achievement-list">${ACHIEVEMENTS.map((achievement) => {
+        const done = Boolean(progress.achievements[achievement.id]);
+        const current = Math.min(achievement.target, integer(achievement.current(progress)));
+        const ratio = done ? 1 : Math.min(1, current / Math.max(1, achievement.target));
+        const stage = done ? "완료" : current <= 0 ? "미시작" : `${Math.min(4, Math.floor(ratio * 4) + 1)}단계`;
+        return `<article class="${done ? "done" : ""}"><span>${stage}</span><div class="meta-achievement-main"><strong>${escapeHtml(achievement.name)}</strong><small>${escapeHtml(achievement.text)}</small><div class="meta-achievement-progress"><i><b style="width:${Math.round(ratio * 100)}%"></b><mark></mark><mark></mark><mark></mark></i><em>${current.toLocaleString()}/${achievement.target.toLocaleString()}</em></div></div><em>${escapeHtml(formatAchievementReward(achievement.reward))}</em></article>`;
+      }).join("")}</div>
       <div class="meta-unlock-row"><span>칭호 <b>${progress.titles.length}</b></span><span>스킨 <b>${progress.skins.length}</b></span><span>발견 유물 <b>${progress.collections.relics.length}</b></span><span>직업 승천 <b>${Object.values(progress.records.classBestAscension).filter((value) => Number(value) > 0).length}</b></span></div>
       <div class="meta-section-head"><strong>칭호·스킨</strong><span>선택 즉시 로비와 전투에 적용</span></div>
-      <div class="meta-cosmetic-pickers"><div><b>칭호</b>${["", ...progress.titles].map((title) => `<button type="button" class="${progress.cosmetics.selectedTitle === title ? "active" : ""}" data-progression-action="select-title" data-title="${escapeHtml(title)}">${escapeHtml(title || "없음")}</button>`).join("")}</div><div><b>스킨</b>${["", ...progress.skins].map((skin) => `<button type="button" class="${progress.cosmetics.selectedSkin === skin ? "active" : ""}" data-progression-action="select-skin" data-skin="${escapeHtml(skin)}">${escapeHtml(skin || "기본")}</button>`).join("")}</div></div>
-      <div class="meta-section-head"><strong>시작 특전</strong><span>업적으로 해금, 하나만 선택</span></div>
-      <div class="meta-perk-list">${START_PERKS.map((perk) => { const unlocked = !perk.id || progress.startPerks.unlocked.includes(perk.id); return `<button type="button" class="${progress.startPerks.selected === perk.id ? "active" : ""}" data-progression-action="select-start-perk" data-perk-id="${perk.id}" ${unlocked ? "" : "disabled"}><b>${escapeHtml(perk.name)}</b><small>${escapeHtml(unlocked ? perk.text : "업적 보상으로 해금")}</small></button>`; }).join("")}</div>`;
+      <div class="meta-cosmetic-pickers"><div><b>칭호</b>${["", ...progress.titles].map((title) => `<button type="button" class="${progress.cosmetics.selectedTitle === title ? "active" : ""}" data-progression-action="select-title" data-title="${escapeHtml(title)}">${escapeHtml(title || "없음")}</button>`).join("")}</div><div><b>스킨</b>${["", ...progress.skins].map((skin) => `<button type="button" class="${progress.cosmetics.selectedSkin === skin ? "active" : ""}" data-progression-action="select-skin" data-skin="${escapeHtml(skin)}">${escapeHtml(skin || "기본")}</button>`).join("")}</div></div>`;
   }
 
   function formatAchievementReward(reward) {
@@ -949,48 +1003,41 @@
     if (reward.essence) parts.push(`정수 ${reward.essence}`);
     if (reward.title) parts.push(`칭호: ${reward.title}`);
     if (reward.skin) parts.push("스킨");
-    if (reward.perk) parts.push("시작 특전");
     return parts.join(" · ");
   }
 
-  function renderChallengesTab(progress, leaderboards = []) {
+  function renderChallengesTab(progress) {
     const daily = progress.challenges.daily;
     const weekly = progress.challenges.weekly;
     const season = progress.challenges.season;
-    const dailyModifier = MODIFIERS.find((modifier) => modifier.id === daily.modifierId) || MODIFIERS[0];
-    const weeklyModifier = MODIFIERS.find((modifier) => modifier.id === weekly.modifierId) || MODIFIERS[0];
-    const weeklyRule = WEEKLY_RULES[weekly.ruleId] || WEEKLY_RULES.venom_week;
     const liveEvent = getLiveEvent();
-    const modes = [["standard", "일반"], ["daily", "일일"], ["weekly", "주간"]];
-    return `<div class="meta-mode-switch">${modes.map(([mode, label]) => `<button type="button" class="${progress.challenges.activeMode === mode ? "active" : ""}" data-progression-action="challenge-mode" data-mode="${mode}">${label}</button>`).join("")}</div>
-      <div class="meta-challenge-grid">
-        <article class="${daily.completed ? "done" : ""}"><span>DAILY · ${daily.key}</span><strong>${escapeHtml(dailyModifier.name)}</strong><p>${escapeHtml(dailyModifier.text)}</p><div><b>${escapeHtml(daily.goalLabel)}</b><em>${Math.min(daily.target, daily.progress)}/${daily.target}</em></div><i><b style="width:${Math.min(100, daily.progress / daily.target * 100)}%"></b></i><small>보상: 파편 70 · 강화석 12</small></article>
-        <article class="${weekly.completed ? "done" : ""}"><span>WEEKLY BOSS · ${weekly.key}</span><strong>${escapeHtml(weeklyModifier.name)} · ${escapeHtml(weeklyRule.name)}</strong><p>${escapeHtml(weeklyModifier.text)} · ${escapeHtml(weeklyRule.text)}</p><div><b>${escapeHtml(weekly.goalLabel)}</b><em>${Math.min(weekly.target, weekly.progress)}/${weekly.target}</em></div><i><b style="width:${Math.min(100, weekly.progress / weekly.target * 100)}%"></b></i><small>보상: 파편 180 · 보스 정수 5</small></article>
+    return `<div class="meta-mission-intro"><strong>개인 임무</strong><span>모드를 선택할 필요 없이 모든 일반·승천 원정에서 자동 누적됩니다.</span></div>
+      <div class="meta-challenge-grid personal-missions">
+        <article class="${daily.completed ? "done" : ""}"><span>DAILY MISSION · ${daily.key}</span><strong>${escapeHtml(daily.goalLabel)}</strong><p>${daily.completed ? "오늘의 개인 임무를 완료했습니다." : "내 전투 기록만 반영되며 파티원의 처치는 합산되지 않습니다."}</p><div><b>${daily.completed ? "완료" : "진행 중"}</b><em>${Math.min(daily.target, daily.progress).toLocaleString()}/${daily.target.toLocaleString()}</em></div><i><b style="width:${Math.min(100, daily.progress / daily.target * 100)}%"></b></i><small>보상: 파편 70 · 강화석 12</small></article>
+        <article class="${weekly.completed ? "done" : ""}"><span>WEEKLY MISSION · ${weekly.key}</span><strong>${escapeHtml(weekly.goalLabel)}</strong><p>${weekly.completed ? "이번 주 개인 임무를 완료했습니다." : "일주일 동안 여러 원정에 걸쳐 진행도를 누적할 수 있습니다."}</p><div><b>${weekly.completed ? "완료" : "진행 중"}</b><em>${Math.min(weekly.target, weekly.progress).toLocaleString()}/${weekly.target.toLocaleString()}</em></div><i><b style="width:${Math.min(100, weekly.progress / weekly.target * 100)}%"></b></i><small>보상: 파편 180 · 보스 정수 5</small></article>
       </div>
       <div class="meta-season"><div><span>SEASON ${season.id}</span><strong>시즌 레벨 ${season.level}</strong></div><i><b style="width:${Math.min(100, season.xp / (season.level * 100) * 100)}%"></b></i><em>${season.xp}/${season.level * 100} XP · 레벨마다 파편/재련 가루 지급</em></div>
       <div class="meta-season-rewards">${SEASON_REWARDS.map((reward) => `<span class="${season.claimedLevels.includes(String(reward.level)) ? "claimed" : season.level >= reward.level ? "ready" : ""}"><b>Lv.${reward.level}</b>${escapeHtml(reward.label)}</span>`).join("")}</div>
       <div class="meta-live-event ${liveEvent.active ? "active" : ""}"><span>${liveEvent.active ? "LIVE EVENT" : "NEXT EVENT"}</span><div><strong>${escapeHtml(liveEvent.name)}</strong><small>${escapeHtml(liveEvent.text)}</small></div><b>${liveEvent.active ? "x2" : "WEEKEND"}</b></div>
-      <div class="meta-section-head"><strong>고정 시드 랭킹</strong><span>현재 선택한 도전의 서버 상위 기록</span></div>
-      <div class="meta-leaderboard">${leaderboards.length ? leaderboards.map((row, index) => `<div><b>${index + 1}</b><span>${escapeHtml((row.names || []).join(" · ") || "원정대")}</span><em>${integer(row.score).toLocaleString()}점 · ${integer(row.stagesCleared)}방 · ${integer(row.durationSec)}초</em></div>`).join("") : `<p class="meta-empty">이 서버에서 아직 등록된 기록이 없습니다.</p>`}</div>
-      <p class="meta-challenge-note">선택한 모드는 다음 런에 적용됩니다. 일일 고정 시드 최고점 ${integer(progress.records.dailyBest[daily.key]).toLocaleString()} · 주간 최고점 ${integer(progress.records.weeklyBest[weekly.key]).toLocaleString()}</p>`;
+      <p class="meta-challenge-note">일일 임무는 날짜가 바뀌면, 주간 임무는 매주 월요일에 개인별로 갱신됩니다.</p>`;
   }
 
   function renderProgressionPanel(progress, options = {}) {
     const next = normalizeProgress(progress);
     const classId = CLASS_IDS.includes(options.classId) ? options.classId : "warrior";
     const tab = ["gear", "forge", "archive", "challenges"].includes(options.activeTab) ? options.activeTab : "gear";
-    const labels = { gear: "장비·룬", forge: "제작·강화", archive: "도감·업적", challenges: "도전" };
+    const labels = { gear: "장비·룬", forge: "제작·강화", archive: "도감·업적", challenges: "개인 임무" };
     const body = tab === "forge" ? renderForgeTab(next, classId) : tab === "archive" ? renderArchiveTab(next) : tab === "challenges" ? renderChallengesTab(next, options.leaderboards || []) : renderGearTab(next, classId);
     const chrome = options.embedded
       ? ""
-      : `<div class="meta-panel-head"><div><strong>원정대 보관소</strong><span>파밍 · 제작 · 수집 · 반복 도전</span></div><div><small>강화석 ${next.currencies.enhancementStones}</small><small>가루 ${next.currencies.reforgingDust}</small><small>정수 ${next.currencies.bossEssence}</small></div></div><div class="meta-tabs">${Object.entries(labels).map(([id, label]) => `<button type="button" class="${tab === id ? "active" : ""}" data-progression-action="tab" data-tab="${id}">${label}</button>`).join("")}</div>`;
+      : `<div class="meta-panel-head"><div><strong>원정대 보관소</strong><span>파밍 · 제작 · 수집 · 반복 임무</span></div><div><small>강화석 ${next.currencies.enhancementStones}</small><small>가루 ${next.currencies.reforgingDust}</small><small>정수 ${next.currencies.bossEssence}</small></div></div><div class="meta-tabs">${Object.entries(labels).map(([id, label]) => `<button type="button" class="${tab === id ? "active" : ""}" data-progression-action="tab" data-tab="${id}">${label}</button>`).join("")}</div>`;
     return `<section class="meta-progression-panel${options.embedded ? " embedded" : ""}" aria-label="장기 성장 콘텐츠">${chrome}<div class="meta-tab-body">${body}</div></section>`;
   }
 
   function getProgressionRenderKey(progress, classId, tab) {
     const next = normalizeProgress(progress);
     const loadout = next.equipment[classId] || emptyLoadout();
-    return [tab, classId, next.inventory.items.map((item) => `${item.id}:${item.enhance}:${item.rerolls}:${item.lockedAffixIndex}`).join(","), next.inventory.runes.map((rune) => `${rune.id}:${rune.tier}`).join(","), JSON.stringify(next.inventory.bossMaterials), JSON.stringify(loadout), JSON.stringify(next.currencies), JSON.stringify(next.cosmetics), JSON.stringify(next.startPerks), JSON.stringify(next.combatByClass), Object.keys(next.achievements).length, next.challenges.activeMode, next.challenges.daily.progress, next.challenges.weekly.progress, next.challenges.season.level].join("|");
+    return [tab, classId, next.inventory.items.map((item) => `${item.id}:${item.enhance}:${item.rerolls}:${item.lockedAffixIndex}`).join(","), next.inventory.runes.map((rune) => `${rune.id}:${rune.tier}`).join(","), JSON.stringify(next.inventory.bossMaterials), JSON.stringify(loadout), JSON.stringify(next.currencies), JSON.stringify(next.cosmetics), JSON.stringify(next.collections), JSON.stringify(next.combatByClass), Object.keys(next.achievements).length, next.challenges.daily.progress, next.challenges.weekly.progress, next.challenges.season.level].join("|");
   }
 
   function renderRunLootSummary(progress, resultKey) {
@@ -998,7 +1045,7 @@
     if (!rewards || (resultKey && rewards.resultKey !== resultKey)) return "";
     const itemRows = (rewards.items || []).map((item) => `<span class="${item.rarity}"><b>${escapeHtml(rarityById(item.rarity).label)}</b>${escapeHtml(item.name)}${item.enhance ? ` +${item.enhance}` : ""}</span>`).join("");
     const runeRows = (rewards.runes || []).map((rune) => `<span><b>룬 T${rune.tier}</b>${escapeHtml(rune.name)}</span>`).join("");
-    const challengeRows = (rewards.challengeRewards || []).map((reward) => `<span><b>도전 완료</b>${escapeHtml(reward.label)}</span>`).join("");
+    const challengeRows = (rewards.challengeRewards || []).map((reward) => `<span><b>임무 완료</b>${escapeHtml(reward.label)}</span>`).join("");
     const materialRows = (rewards.bossMaterials || []).map((bossId) => `<span><b>보스 재료</b>${escapeHtml(BOSS_RECIPES.find((recipe) => recipe.bossId === bossId)?.materialName || bossId)} +1</span>`).join("");
     return `<section class="result-loot-panel"><div><strong>파밍 보상</strong><small>강화석 +${rewards.enhancementStones || 0} · 가루 +${rewards.reforgingDust || 0} · 정수 +${rewards.bossEssence || 0}${rewards.eventMultiplier > 1 ? " · 이벤트 x2" : ""}</small></div><div class="result-loot-list">${itemRows}${runeRows}${materialRows}${challengeRows}</div></section>`;
   }
@@ -1011,8 +1058,10 @@
     ITEM_SLOTS,
     ITEM_BASES,
     RUNES,
+    MONSTER_CATALOG,
+    BOSS_CATALOG,
+    RELIC_CATALOG,
     ACHIEVEMENTS,
-    MODIFIERS,
     defaultProgress: normalizeProgress(base.defaultProgress),
     normalizeProgress,
     migrateProgress: normalizeProgress,

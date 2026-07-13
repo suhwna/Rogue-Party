@@ -545,6 +545,7 @@ export interface RunResultPlayerLike {
     readonly poisonDamage?: number;
     readonly burnDamage?: number;
     readonly kills?: number;
+    readonly eliteKills?: number;
     readonly turretKills?: number;
     readonly bossKills?: number;
     readonly downs?: number;
@@ -570,7 +571,7 @@ export interface RunResultPlayerView {
   readonly uniqueRelicCount: number;
   readonly downed: boolean;
   readonly noDown: boolean;
-  readonly combatStats: { readonly damage: number; readonly poisonDamage: number; readonly burnDamage: number; readonly kills: number; readonly turretKills: number; readonly bossKills: number; readonly downs: number };
+  readonly combatStats: { readonly damage: number; readonly poisonDamage: number; readonly burnDamage: number; readonly kills: number; readonly eliteKills: number; readonly turretKills: number; readonly bossKills: number; readonly downs: number };
   readonly bossDefeats: readonly string[];
 }
 
@@ -1032,6 +1033,7 @@ export function runResultPlayerView(
       poisonDamage: Math.round(player.runStats?.poisonDamage || 0),
       burnDamage: Math.round(player.runStats?.burnDamage || 0),
       kills: player.runStats?.kills || 0,
+      eliteKills: player.runStats?.eliteKills || 0,
       turretKills: player.runStats?.turretKills || 0,
       bossKills: player.runStats?.bossKills || 0,
       downs: player.runStats?.downs || 0,

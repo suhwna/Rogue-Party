@@ -139,10 +139,6 @@ export function normalizeProgress(progress: unknown): UserProgress {
       selectedTitle: String(input.cosmetics?.selectedTitle || "").slice(0, 24),
       selectedSkin: String(input.cosmetics?.selectedSkin || "").slice(0, 32),
     },
-    startPerks: {
-      unlocked: uniqueStrings(input.startPerks?.unlocked),
-      selected: String(input.startPerks?.selected || "").slice(0, 32),
-    },
     challenges: normalizeChallenges(input.challenges),
     lastRunRewards:
       input.lastRunRewards && typeof input.lastRunRewards === "object"
@@ -214,7 +210,15 @@ export function recordRunResult(progress: unknown, result: RunResultRecord): Use
   next.statistics.totalAccountXp += earnedAccountXp;
   next.currencies.abyssShards += earnedShards;
   next.records.highestAbyssDepth = Math.max(next.records.highestAbyssDepth, abyssDepth);
-  next.records.highestAscension = Math.max(next.records.highestAscension, ascensionLevel);
+  if (outcome === "victory") {
+    const unlockedAscensionLevel = clampedWholeNumber(
+      result.unlockedAscensionLevel,
+      Math.min(MAX_ASCENSION_LEVEL, ascensionLevel + 1),
+      0,
+      MAX_ASCENSION_LEVEL,
+    );
+    next.records.highestAscension = Math.max(next.records.highestAscension, unlockedAscensionLevel);
+  }
   if (resultKey) next.records.lastRunKey = resultKey;
   applyAccountXp(next, earnedAccountXp);
 
@@ -328,6 +332,7 @@ function normalizeCombatByClass(value: unknown): Record<string, CombatProgress> 
       poisonDamage: wholeNumber(stats.poisonDamage, 0),
       burnDamage: wholeNumber(stats.burnDamage, 0),
       kills: wholeNumber(stats.kills, 0),
+      eliteKills: wholeNumber(stats.eliteKills, 0),
       turretKills: wholeNumber(stats.turretKills, 0),
       bossKills: wholeNumber(stats.bossKills, 0),
       noDownWins: wholeNumber(stats.noDownWins, 0),
@@ -366,10 +371,8 @@ function normalizeCollections(value: unknown): UserProgress["collections"] {
 function normalizeChallenges(value: unknown): UserProgress["challenges"] {
   const source = value && typeof value === "object" ? (value as Partial<UserProgress["challenges"]>) : {};
   const normalizeChallenge = (entry: Partial<ChallengeProgress> | undefined, goalType: string): ChallengeProgress => ({
+    missionVersion: 2,
     key: String(entry?.key || "").slice(0, 24),
-    seed: wholeNumber(entry?.seed, 0),
-    modifierId: String(entry?.modifierId || "").slice(0, 32),
-    ruleId: String(entry?.ruleId || "").slice(0, 32),
     goalType: String(entry?.goalType || goalType).slice(0, 24),
     goalLabel: String(entry?.goalLabel || "").slice(0, 80),
     target: Math.max(1, wholeNumber(entry?.target, 1)),
@@ -377,11 +380,9 @@ function normalizeChallenges(value: unknown): UserProgress["challenges"] {
     completed: Boolean(entry?.completed),
     rewardClaimed: Boolean(entry?.rewardClaimed),
   });
-  const activeMode = source.activeMode === "daily" || source.activeMode === "weekly" ? source.activeMode : "standard";
   return {
-    activeMode,
-    daily: normalizeChallenge(source.daily, "stages"),
-    weekly: normalizeChallenge(source.weekly, "victories"),
+    daily: normalizeChallenge(source.daily, "eliteKills"),
+    weekly: normalizeChallenge(source.weekly, "eliteKills"),
     season: {
       id: String(source.season?.id || "").slice(0, 24),
       xp: wholeNumber(source.season?.xp, 0),

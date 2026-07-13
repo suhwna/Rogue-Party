@@ -5,15 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Rogue Party</title>
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/ui-benchmark.css" />
   </head>
   <body>
     <main class="shell">
       <section class="stage" aria-label="Game screen">
         <canvas id="game" width="1280" height="720"></canvas>
         <div class="top-hud" aria-label="Run info">
-          <span class="top-stat">ROOM <strong id="roomCode">----</strong></span>
-          <span class="top-stat">STAGE <strong id="wave">-</strong></span>
-          <button id="settingsButton" class="hud-icon-button" type="button" aria-label="Open settings">OPT</button>
+          <span class="top-stat room-top-stat"><span>ROOM</span><strong id="roomCode">----</strong></span>
+          <span class="top-stat stage-top-stat"><span>STAGE</span><strong id="wave">-</strong></span>
+          <button id="settingsButton" class="hud-icon-button" type="button" aria-label="설정 열기" title="설정">⚙</button>
           <span id="connection" class="connection-state">OFFLINE</span>
         </div>
         <section id="runContext" class="run-context hidden" aria-label="Current objective" aria-live="polite">
@@ -51,7 +52,7 @@
               <button type="button" data-lobby-view="gear" aria-selected="false"><span>03</span><strong>장비</strong><small>세트 · 룬</small></button>
               <button type="button" data-lobby-view="forge" aria-selected="false"><span>04</span><strong>대장간</strong><small>강화 · 제작</small></button>
               <button type="button" data-lobby-view="archive" aria-selected="false"><span>05</span><strong>기록</strong><small>도감 · 업적</small></button>
-              <button type="button" data-lobby-view="challenges" aria-selected="false"><span>06</span><strong>도전</strong><small>일일 · 시즌</small></button>
+              <button type="button" data-lobby-view="challenges" aria-selected="false"><span>06</span><strong>개인 임무</strong><small>일일 · 주간</small></button>
               <button type="button" data-lobby-view="training" aria-selected="false"><span>07</span><strong>훈련 설정</strong><small>스킬 · 유물</small></button>
             </nav>
 
@@ -158,21 +159,37 @@
         <div class="main-menu-layout">
           <form id="joinForm" class="room-screen join-panel" aria-label="Room entry">
             <div class="room-screen-head">
-              <div>
-                <span id="roomModeLabel" class="front-kicker" aria-hidden="true"></span>
-                <h2 id="roomScreenTitle">방 입장</h2>
+              <div class="room-product-lockup">
+                <span class="front-kicker">ROGUE PARTY · CO-OP SURVIVAL</span>
+                <h1>Rogue Party</h1>
+                <div class="room-title-copy">
+                  <h2 id="roomScreenTitle">원정 집결소</h2>
+                  <p>원정대를 만들거나 열린 방에 합류하세요.</p>
+                </div>
               </div>
-              <button id="refreshRooms" class="ghost-button" type="button">새로고침</button>
+              <button id="refreshRooms" class="ghost-button room-refresh-button" type="button" aria-label="열린 방 새로고침" title="열린 방 새로고침"><span aria-hidden="true">↻</span><b>새로고침</b></button>
+            </div>
+
+            <div class="account-strip" aria-live="polite">
+              <div>
+                <span>ACCOUNT SAVE</span>
+                <strong id="accountStatusLabel">계정 동기화 중</strong>
+              </div>
+              <div class="account-strip-actions">
+                <small id="accountIdLabel">연결 준비</small>
+                <button id="accountQuickCopyButton" type="button">복구 키</button>
+                <button id="accountManageButton" type="button">계정 관리</button>
+              </div>
             </div>
 
             <div class="room-fields">
               <label>
-                CALLSIGN
+                <span>플레이어 이름</span>
                 <input id="nameInput" maxlength="16" autocomplete="off" value="Player" />
               </label>
 
               <label>
-                ROOM CODE
+                <span>방 코드</span>
                 <input id="roomInput" maxlength="8" autocomplete="off" value="TAVERN" />
               </label>
             </div>
@@ -180,13 +197,16 @@
             <div class="quick-room-actions">
               <button id="menuCreateButton" class="menu-action primary-action" type="button">
                 <strong>방 생성</strong>
+                <span>새 원정대 구성</span>
               </button>
               <button id="roomSubmitButton" class="menu-action" type="button">
                 <strong>코드 입장</strong>
+                <span>입력한 방에 합류</span>
               </button>
             </div>
 
             <div class="room-browser">
+              <div class="room-browser-head"><span>OPEN PARTIES</span><strong>열린 원정대</strong></div>
               <div id="roomList" class="room-list"></div>
             </div>
           </form>
@@ -197,10 +217,11 @@
     <div id="choiceOverlay" class="overlay choice hidden">
       <div class="modal choice-modal">
         <div class="modal-heading">
-          <span class="brand-mark">UP</span>
+          <span class="brand-mark">R</span>
           <div>
-            <h2>Relic Chest</h2>
-            <p id="choiceSubtitle">Pick one before the timer ends</p>
+            <p class="result-kicker">RELIC CACHE</p>
+            <h2>렐릭 선택</h2>
+            <p id="choiceSubtitle">시간 안에 하나를 선택하세요.</p>
           </div>
         </div>
         <div id="choiceRewardSummary" class="reward-summary hidden"></div>
@@ -211,10 +232,11 @@
     <div id="skillOverlay" class="overlay choice hidden">
       <div class="modal choice-modal">
         <div class="modal-heading">
-          <span class="brand-mark">LV</span>
+          <span class="brand-mark">S</span>
           <div>
-            <h2 id="skillChoiceTitle">Skill Upgrade</h2>
-            <p id="skillChoiceSubtitle">Choose one upgrade when you level up</p>
+            <p class="result-kicker">SKILL EVOLUTION</p>
+            <h2 id="skillChoiceTitle">스킬 강화</h2>
+            <p id="skillChoiceSubtitle">이번 레벨에 적용할 강화를 선택하세요.</p>
           </div>
         </div>
         <div id="skillChoices" class="choices"></div>
@@ -269,13 +291,13 @@
           <span class="brand-mark">OP</span>
           <div>
             <p class="result-kicker">OPTIONS</p>
-            <h2>Settings</h2>
+            <h2>설정</h2>
             <p>그래픽 품질과 조작 키를 조정합니다.</p>
           </div>
         </div>
         <section class="settings-section">
           <div class="settings-section-head">
-            <strong>Graphics Quality</strong>
+            <strong>그래픽 품질</strong>
             <span>즉시 렌더러에 반영됩니다.</span>
           </div>
           <div class="settings-segment" id="settingsQualityGroup">
@@ -286,7 +308,7 @@
         </section>
         <section class="settings-section">
           <div class="settings-section-head">
-            <strong>Language</strong>
+            <strong>언어</strong>
             <span>현재는 UI 저장값만 유지합니다.</span>
           </div>
           <select id="settingsLanguage" class="settings-select" aria-label="Language">
@@ -296,14 +318,33 @@
         </section>
         <section class="settings-section">
           <div class="settings-section-head">
-            <strong>Key Bindings</strong>
+            <strong>키 설정</strong>
             <span>버튼을 누른 뒤 새 키를 입력하세요.</span>
           </div>
           <div id="settingsKeyList" class="settings-key-list"></div>
         </section>
+        <section id="accountSettingsSection" class="settings-section account-settings-section">
+          <div class="settings-section-head">
+            <strong>서버 계정</strong>
+            <span id="settingsAccountSync">동기화 확인 중</span>
+          </div>
+          <div class="account-settings-status">
+            <span>ACCOUNT ID</span>
+            <strong id="settingsAccountId">-</strong>
+          </div>
+          <div class="account-settings-actions">
+            <button id="accountCopyRecoveryButton" class="ghost-button" type="button">복구 키 복사</button>
+            <button id="accountNewGuestButton" class="ghost-button" type="button">새 게스트 계정</button>
+          </div>
+          <div class="account-recovery-row">
+            <input id="accountRecoveryInput" type="text" autocomplete="off" placeholder="RP-계정ID.복구키" aria-label="Account recovery key" />
+            <button id="accountRecoverButton" type="button">계정 복구</button>
+          </div>
+          <p id="accountSettingsMessage" class="account-settings-message">진행도는 서버에 저장되고 브라우저에는 캐시만 유지됩니다.</p>
+        </section>
         <div class="settings-actions">
-          <button id="settingsResetButton" class="ghost-button" type="button">Reset</button>
-          <button id="settingsCloseButton" class="primary" type="button">Done</button>
+          <button id="settingsResetButton" class="ghost-button" type="button">초기화</button>
+          <button id="settingsCloseButton" class="primary" type="button">완료</button>
         </div>
       </div>
     </div>
@@ -311,6 +352,7 @@
     <script src="/client-runtime.js"></script>
     <script src="/client-save.js"></script>
     <script src="/client-progression.js"></script>
+    <script src="/client-account.js"></script>
     <script src="/client-input.js"></script>
     <script src="/client-network.js"></script>
     <script src="/client-hud.js"></script>

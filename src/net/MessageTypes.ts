@@ -14,11 +14,44 @@ export interface GrowthLoadoutMessage {
     readonly ruleId?: string;
   };
   readonly cosmetic?: { readonly title?: string; readonly skin?: string };
-  readonly startPerkId?: string;
+}
+
+export interface AccountSummaryMessage {
+  readonly id: string;
+  readonly displayName?: string;
+  readonly revision: number;
+  readonly createdAt?: number;
+  readonly updatedAt?: number;
+}
+
+export interface AccountProgressActionMessage {
+  readonly action: string;
+  readonly classId?: string;
+  readonly nodeId?: string;
+  readonly itemId?: string;
+  readonly slot?: string;
+  readonly affixIndex?: number;
+  readonly runeId?: string;
+  readonly runeSlot?: number;
+  readonly runeType?: string;
+  readonly tier?: number;
+  readonly recipeId?: string;
+  readonly title?: string;
+  readonly skin?: string;
+  readonly perkId?: string;
+  readonly mode?: "standard" | "daily" | "weekly";
 }
 
 export type ClientMessage =
-  | { type: "join"; room: string; name: string; classId?: string; growthLoadout?: GrowthLoadoutMessage }
+  | {
+      type: "join";
+      room: string;
+      name: string;
+      classId?: string;
+      growthLoadout?: GrowthLoadoutMessage;
+      accountId?: string;
+      accountToken?: string;
+    }
   | {
       type: "input";
       mx: number;
@@ -32,6 +65,7 @@ export type ClientMessage =
   | { type: "start" }
   | { type: "changeClass"; classId: string; growthLoadout?: GrowthLoadoutMessage }
   | { type: "setGrowthLoadout"; growthLoadout?: GrowthLoadoutMessage }
+  | { type: "accountProgressAction"; actionPayload: AccountProgressActionMessage }
   | { type: "toggleReady" }
   | { type: "toggleSpectator" }
   | { type: "addBot" }
@@ -44,6 +78,13 @@ export type ClientMessage =
 
 export type ServerMessage =
   | { type: "state"; [key: string]: unknown }
-  | { type: "joined"; id: string; room: string }
+  | { type: "joined"; id: string; room: string; account?: AccountSummaryMessage | null; progress?: Record<string, unknown> | null }
+  | {
+      type: "accountProgress";
+      account: AccountSummaryMessage;
+      progress: Record<string, unknown>;
+      reason: string;
+      message?: string;
+    }
   | { type: "error"; message: string }
   | { type: "pong"; t: number; serverTime: number };

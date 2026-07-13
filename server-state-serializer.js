@@ -397,6 +397,7 @@ function runResultPlayerView(player, options = {}) {
       poisonDamage: Math.round(player.runStats?.poisonDamage || 0),
       burnDamage: Math.round(player.runStats?.burnDamage || 0),
       kills: player.runStats?.kills || 0,
+      eliteKills: player.runStats?.eliteKills || 0,
       turretKills: player.runStats?.turretKills || 0,
       bossKills: player.runStats?.bossKills || 0,
       downs: player.runStats?.downs || 0

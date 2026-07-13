@@ -1,5 +1,7 @@
 const vm = require("node:vm");
 const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
 
 const ORIGIN = process.env.SMOKE_ORIGIN || "http://localhost:5173";
 const WS_ORIGIN = ORIGIN.replace(/^http/, "ws");
@@ -206,9 +208,28 @@ function checkSurvivalModeContract() {
   if (
     !serverSource.includes("SURVIVAL_DURATION_SEC = 9 * 60") ||
     !serverSource.includes("SURVIVAL_BOSS_CHECKPOINTS") ||
+    !serverSource.includes("SURVIVAL_MINIBOSS_SCHEDULE") ||
+    !serverSource.includes("{ minute: 1, count: 1 }") ||
+    !serverSource.includes("{ minute: 2, count: 1 }") ||
+    !serverSource.includes("{ minute: 4, count: 2 }") ||
+    !serverSource.includes("{ minute: 5, count: 2 }") ||
+    !serverSource.includes("{ minute: 7, count: 3 }") ||
+    !serverSource.includes("{ minute: 8, count: 3 }") ||
     !serverSource.includes("function startSurvivalMode") ||
     !serverSource.includes("function updateSurvivalMode") ||
+    !serverSource.includes("32 + minute * 5 + (players - 1) * 9") ||
+    !serverSource.includes("force ? 5 + players") ||
+    !serverSource.includes("2 + Math.floor(survival.elapsed / 120)") ||
+    !serverSource.includes("0.92 - elapsedRatio * 0.52") ||
+    !serverSource.includes("function spawnScheduledSurvivalMiniBosses") ||
+    !serverSource.includes("function clearSurvivalRegularEnemiesForBoss") ||
+    !serverSource.includes("boss.survivalMiniBoss = true") ||
+    !serverSource.includes("boss.guaranteedRelicDrop = true") ||
+    !serverSource.includes('room.survival?.bossActive && type !== "boss"') ||
+    !serverSource.includes("spawnRelicChestForEnemy(room, enemy, { survivalMiniBoss: true })") ||
     !serverSource.includes("function spawnSurvivalCheckpointBoss") ||
+    !serverSource.includes("room.waveTrait = waveTraits.boss") ||
+    !serverSource.includes("traitId: waveTraits.boss.id") ||
     !serverSource.includes("function spawnSurvivalExecutionBoss") ||
     !serverSource.includes('boss.bossId = "fate_executioner"') ||
     !hudSource.includes("9:00") ||
@@ -232,14 +253,21 @@ function checkLongTermProgressionContract() {
     "room.ascensionLevel || 0) >= 5",
     "turretKillDurationBonus",
     "stats.poisonDamage",
-    "weeklyBossId"
+    "weeklyBossId",
+    "persistAccountRunResults",
+    "accountProgressAction",
+    "getAuthoritativeGrowthLoadout"
   ];
   const requiredProgression = [
     "BOSS_RECIPES",
     "SET_BONUSES",
     "SEASON_REWARDS",
     "combatByClass",
-    "startPerks",
+    "MONSTER_CATALOG",
+    "BOSS_CATALOG",
+    "RELIC_CATALOG",
+    "personal-missions",
+    "getMissionProgressGain",
     "bossMaterials",
     "dashFollowupMul",
     "burnDamageMul"
@@ -248,6 +276,97 @@ function checkLongTermProgressionContract() {
     throw new Error("long-term progression detail contract failed");
   }
   console.log("long-term progression contract ok");
+}
+
+function checkServerAccountStoreContract() {
+  const progression = require("./server-progression-service");
+  const { createAccountStore } = require("./server-account-store");
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "rogue-account-smoke-"));
+  try {
+    const ascensionResult = {
+      resultKey: "party-ascension-9",
+      outcome: "victory",
+      ascensionLevel: 9,
+      unlockedAscensionLevel: 10,
+      stagesCleared: 1,
+      highestLevel: 1,
+      classId: "warrior",
+    };
+    const hostUnlock = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 9 } }, ascensionResult);
+    const memberUnlock = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 0 } }, ascensionResult);
+    if (hostUnlock.records.highestAscension !== 10 || memberUnlock.records.highestAscension !== 10) {
+      throw new Error("party ascension catch-up unlock failed");
+    }
+    const store = createAccountStore({ progression, dataDir });
+    const created = store.createGuest({
+      displayName: "Account Smoke",
+      progress: {
+        ...progression.getDefaultProgress(),
+        currencies: { abyssShards: 125 },
+      },
+    });
+    const recoveryKey = `${created.account.id}.${created.recoveryCode}`;
+    if (
+      !created.account.id.startsWith("RP-") ||
+      !created.sessionToken ||
+      created.progress.currencies.abyssShards !== 125 ||
+      !store.authenticate(created.account.id, created.sessionToken)
+    ) {
+      throw new Error("server account creation contract failed");
+    }
+    const action = progression.performAction(created.progress, {
+      action: "spend-mastery",
+      classId: "warrior",
+      nodeId: "attack",
+    });
+    const saved = store.updateProgress(created.account.id, action.progress, "smoke-action");
+    const runProgress = progression.recordRunResult(saved.progress, {
+      resultKey: "account-store-run-1",
+      outcome: "victory",
+      chapter: 1,
+      wave: 3,
+      stagesCleared: 3,
+      highestLevel: 4,
+      totalScore: 900,
+      totalRelics: 2,
+      durationSec: 60,
+      classId: "warrior",
+      combatStats: { damage: 5000, kills: 20 },
+      noDown: true,
+    });
+    store.updateProgress(created.account.id, runProgress, "smoke-run");
+    const reloaded = createAccountStore({ progression, dataDir });
+    const restored = reloaded.getSession(created.account.id, created.sessionToken);
+    if (
+      !saved ||
+      saved.account.revision <= created.account.revision ||
+      restored?.progress?.mastery?.warrior?.nodes?.attack !== 1 ||
+      restored?.progress?.statistics?.runs !== 1 ||
+      restored?.progress?.records?.highestAscension !== 1 ||
+      restored?.progress?.records?.lastRunKey !== "account-store-run-1"
+    ) {
+      throw new Error("server account persistence contract failed");
+    }
+    const recovered = reloaded.recover(recoveryKey);
+    if (
+      !recovered?.sessionToken ||
+      reloaded.authenticate(created.account.id, created.sessionToken) ||
+      !reloaded.authenticate(created.account.id, recovered.sessionToken)
+    ) {
+      throw new Error("server account recovery contract failed");
+    }
+    const persistedText = fs.readFileSync(path.join(dataDir, "accounts.json"), "utf8");
+    if (
+      !fs.existsSync(store.backupPath) ||
+      persistedText.includes(created.sessionToken) ||
+      persistedText.includes(created.recoveryCode)
+    ) {
+      throw new Error("server account secret hashing contract failed");
+    }
+  } finally {
+    fs.rmSync(dataDir, { recursive: true, force: true });
+  }
+  console.log("server account store contract ok");
 }
 
 async function checkHttp() {
@@ -262,37 +381,71 @@ async function checkHttp() {
   }
   if (
     !html.includes("전투 준비실") ||
-    !html.includes("방 입장") ||
+    !html.includes("원정 집결소") ||
     !html.includes("menuCreateButton") ||
     !html.includes("roomList") ||
     !html.includes("settingsOverlay") ||
-    !html.includes("Graphics Quality") ||
+    !html.includes("그래픽 품질") ||
+    !html.includes("/ui-benchmark.css") ||
     !html.includes("lobbyWorkspaceNav") ||
     !html.includes("lobbyArenaToggle") ||
     !html.includes("lobbyArenaDock") ||
+    !html.includes("accountStatusLabel") ||
+    !html.includes("accountRecoveryInput") ||
+    !html.includes("/client-account.js") ||
     !html.includes('data-lobby-view="challenges"') ||
     !html.includes("runContext") ||
     !html.includes("result-report-layout")
   ) {
     throw new Error("Phase 10 UI shell 확인 실패");
   }
+  const guestResponse = await fetch(`${ORIGIN}/api/account/guest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "HTTP Account", localProgress: { currencies: { abyssShards: 37 } } }),
+  });
+  const guestSession = await guestResponse.json();
+  if (
+    guestResponse.status !== 201 ||
+    !guestSession.account?.id ||
+    !guestSession.sessionToken ||
+    !guestSession.recoveryCode ||
+    guestSession.progress?.currencies?.abyssShards !== 37
+  ) {
+    throw new Error("account guest API contract failed");
+  }
+  const accountSessionResponse = await fetch(`${ORIGIN}/api/account/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountId: guestSession.account.id, sessionToken: guestSession.sessionToken }),
+  });
+  const accountSession = await accountSessionResponse.json();
+  if (!accountSessionResponse.ok || accountSession.account?.id !== guestSession.account.id) {
+    throw new Error("account session API contract failed");
+  }
   const styleResponse = await fetch(`${ORIGIN}/styles.css`);
   const styleSource = await styleResponse.text();
+  const uiStyleResponse = await fetch(`${ORIGIN}/ui-benchmark.css`);
+  const uiStyleSource = await uiStyleResponse.text();
   if (
     !styleResponse.ok ||
-    !styleSource.includes("--pixel-shadow") ||
-    !styleSource.includes(".lobby-panel::before") ||
-    !styleSource.includes(".title-badges") ||
-    !styleSource.includes(".choice-action-row") ||
     !styleSource.includes(".map-choice-top") ||
     !styleSource.includes(".settings-modal") ||
     !styleSource.includes(".settings-key-button") ||
-    !styleSource.includes("--neon-bg") ||
     !styleSource.includes(".lobby-workspace-nav") ||
     !styleSource.includes(".lobby-panel.arena-focus") ||
     !styleSource.includes(".lobby-arena-skill-list") ||
-    !styleSource.includes(".run-context") ||
-    !styleSource.includes(".result-player-metrics")
+    !styleSource.includes(".account-strip") ||
+    !styleSource.includes(".account-recovery-row") ||
+    !styleSource.includes(".result-player-metrics") ||
+    !uiStyleResponse.ok ||
+    !uiStyleSource.includes("--rp-gold") ||
+    !uiStyleSource.includes(".room-product-lockup") ||
+    !uiStyleSource.includes(".run-context") ||
+    !uiStyleSource.includes(".bottom-hud") ||
+    !uiStyleSource.includes(".choice-button") ||
+    !uiStyleSource.includes(".lobby-test-skill-groups") ||
+    !uiStyleSource.includes("@media (max-width: 720px)")
   ) {
     throw new Error("Phase 10 UI style 확인 실패");
   }
@@ -865,6 +1018,9 @@ async function checkHttp() {
     !clientSource.includes("renderLobbyWorkspaceChrome") ||
     !clientSource.includes("renderLobbyArenaMode") ||
     !clientSource.includes("requestLobbyClassChange") ||
+    !clientSource.includes("bootstrapServerAccount") ||
+    !clientSource.includes("accountProgressAction") ||
+    !clientSource.includes("applyServerProgress") ||
     !clientSource.includes("renderRunContextHud") ||
     !clientSource.includes("sendClientMessage") ||
     !clientSource.includes("startHeartbeat") ||
@@ -885,6 +1041,16 @@ async function checkHttp() {
     !clientRuntimeSource.includes("createDiagnostics")
   ) {
     throw new Error("client runtime bridge check failed");
+  }
+  const clientAccountResponse = await fetch(`${ORIGIN}/client-account.js`);
+  const clientAccountSource = await clientAccountResponse.text();
+  if (
+    !clientAccountResponse.ok ||
+    !clientAccountSource.includes("RogueAccountManager") ||
+    !clientAccountSource.includes("/api/account/session") ||
+    !clientAccountSource.includes("getRecoveryKey")
+  ) {
+    throw new Error("client account bridge check failed");
   }
   const clientSaveResponse = await fetch(`${ORIGIN}/client-save.js`);
   const clientSaveSource = await clientSaveResponse.text();
@@ -1019,7 +1185,8 @@ async function checkClientSaveRuntimeContract() {
     !clientProgressionSource.includes("ranger_poison_million") ||
     !clientProgressionSource.includes("turretKillDurationBonus") ||
     !clientProgressionSource.includes("SEASON_REWARDS") ||
-    !clientProgressionSource.includes("meta-leaderboard")
+    !clientProgressionSource.includes("meta-codex-list") ||
+    !clientProgressionSource.includes("personal-missions")
   ) {
     throw new Error("detailed progression content contract missing");
   }
@@ -1038,10 +1205,11 @@ async function checkClientSaveRuntimeContract() {
     totalScore: 1234,
     totalRelics: 6,
     durationSec: 91,
+    stagesCleared: 100,
     abyssDepth: 2,
     ascensionLevel: 3,
     classId: "mage",
-    combatStats: { damage: 12345, poisonDamage: 220, burnDamage: 3300, kills: 41, turretKills: 0, bossKills: 1 },
+    combatStats: { damage: 1000000, poisonDamage: 220, burnDamage: 3300, kills: 1000, eliteKills: 100, turretKills: 0, bossKills: 10 },
     bossDefeats: ["hive_prophet"],
     noDown: true
   });
@@ -1054,13 +1222,16 @@ async function checkClientSaveRuntimeContract() {
     result.currencies.abyssShards <= 0 ||
     result.account.xp <= 0 ||
     result.records.highestAbyssDepth !== 2 ||
-    result.records.highestAscension !== 3 ||
+    result.records.highestAscension !== 4 ||
     result.records.classBestAscension.mage !== 3 ||
     result.inventory.items.length === 0 ||
     result.inventory.runes.length === 0 ||
     result.currencies.enhancementStones <= 0 ||
     result.inventory.bossMaterials.hive_prophet !== 1 ||
     result.combatByClass.mage.burnDamage !== 3300 ||
+    result.combatByClass.mage.eliteKills !== 100 ||
+    !result.challenges.daily.completed ||
+    !result.challenges.weekly.completed ||
     result.combatByClass.mage.noDownWins !== 1
   ) {
     throw new Error("client save runtime result recording failed");
@@ -1110,7 +1281,7 @@ async function checkClientSaveRuntimeContract() {
     !growthLoadout.gearBonuses ||
     !growthLoadout.challenge ||
     !growthLoadout.cosmetic ||
-    typeof growthLoadout.startPerkId !== "string"
+    Object.prototype.hasOwnProperty.call(growthLoadout, "startPerkId")
   ) {
     throw new Error("client save runtime growth loadout failed");
   }
@@ -1124,13 +1295,29 @@ async function checkClientSaveRuntimeContract() {
   if (!equipped.changed || !equipped.affectsLoadout) {
     throw new Error("client progression equipment action failed");
   }
-  const challenge = manager.performProgressionAction(equipped.progress, {
-    action: "challenge-mode",
+  if (manager.getActiveChallenge(equipped.progress).mode !== "standard" || Object.prototype.hasOwnProperty.call(equipped.progress, "startPerks")) {
+    throw new Error("client personal mission migration failed");
+  }
+
+  const sharedUnlock = manager.recordRunResult(manager.defaultProgress, {
+    outcome: "victory",
+    resultKey: "shared-ascension-unlock",
+    ascensionLevel: 9,
+    unlockedAscensionLevel: 10,
+    stagesCleared: 1,
+    highestLevel: 1,
     classId: "warrior",
-    mode: "daily"
   });
-  if (!challenge.changed || manager.getActiveChallenge(challenge.progress).mode !== "daily") {
-    throw new Error("client progression challenge action failed");
+  const failedUnlock = manager.recordRunResult(manager.defaultProgress, {
+    outcome: "defeat",
+    resultKey: "failed-ascension-unlock",
+    ascensionLevel: 9,
+    stagesCleared: 1,
+    highestLevel: 1,
+    classId: "warrior",
+  });
+  if (sharedUnlock.records.highestAscension !== 10 || failedUnlock.records.highestAscension !== 0) {
+    throw new Error("client sequential ascension unlock failed");
   }
 
   const exported = manager.exportUserProgress(result);
@@ -1306,7 +1493,6 @@ function checkWebSocket() {
         turretKillDurationBonus: 0.8
       },
       cosmetic: { title: "스모크 칭호", skin: "season_ember" },
-      startPerkId: "quick_start",
       challenge: {
         mode: "daily",
         key: "SMOKE-DAILY",
@@ -1403,8 +1589,9 @@ function checkWebSocket() {
               self.growth.accountLevel !== 12 ||
               self.growth.gearBonuses?.wallBounceBonus !== 1 ||
               self.growth.gearBonuses?.dashFollowupMul !== 1.35 ||
-              self.growth.challenge?.modifierId !== "glass_cannon" ||
-              self.growth.startPerkId !== "quick_start")
+              self.growth.challenge?.mode !== "standard" ||
+              self.growth.challenge?.modifierId !== "" ||
+              Object.prototype.hasOwnProperty.call(self.growth, "startPerkId"))
           ) {
             reject(new Error("permanent equipment growth was not applied in lobby"));
             socket.close();
@@ -1462,8 +1649,8 @@ function checkWebSocket() {
         return;
       }
       if (
-        message.room.challengeMode !== "daily" ||
-        message.room.challengeModifierId !== "glass_cannon" ||
+        message.room.challengeMode !== "standard" ||
+        message.room.challengeModifierId !== "" ||
         !Array.isArray(message.room.challengeLeaderboard) ||
         !self.growth?.applied ||
         self.growth.gearBonuses?.wallBounceBonus !== 1
@@ -1713,6 +1900,11 @@ function checkAllPlayerSurvivalStart() {
             finish(new Error("survival room state is invalid"));
             return;
           }
+          const initialEnemies = (message.enemies || []).filter((enemy) => enemy.hp > 0 && enemy.type !== "training_dummy");
+          if (initialEnemies.length < 7) {
+            finish(new Error(`survival opening density is too low: ${initialEnemies.length}`));
+            return;
+          }
           combatSeen.add(index);
           if (combatSeen.size === 2) finish();
         }
@@ -1883,12 +2075,18 @@ function checkSpectatorBots() {
   });
 }
 
-function checkWeeklyProgressionState() {
+async function checkAccountProgressionWebSocket() {
+  const guestResponse = await fetch(`${ORIGIN}/api/account/guest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName: "WS Account", localProgress: { currencies: { abyssShards: 100 } } }),
+  });
+  const guest = await guestResponse.json();
+  if (!guestResponse.ok) throw new Error("account WebSocket setup failed");
   return new Promise((resolve, reject) => {
     const socket = new WebSocket(`${WS_ORIGIN}/ws`);
-    const room = `WEEK${Date.now().toString(36).slice(-4).toUpperCase()}`;
-    const timer = setTimeout(() => reject(new Error("weekly progression state timeout")), 5000);
-    let started = false;
+    const room = `A${Date.now().toString(36).slice(-6).toUpperCase()}`;
+    const timer = setTimeout(() => finish(new Error("account progression WebSocket timeout")), 5000);
     let finished = false;
     const finish = (error) => {
       if (finished) return;
@@ -1897,13 +2095,82 @@ function checkWeeklyProgressionState() {
       socket.close();
       if (error) reject(error);
       else {
-        console.log("weekly progression state ok");
+        console.log("account progression ws ok");
         resolve();
       }
     };
     socket.addEventListener("open", () => socket.send(JSON.stringify({
       type: "join",
-      name: "주간검증",
+      name: "WS Account",
+      room,
+      classId: "warrior",
+      intent: "create",
+      accountId: guest.account.id,
+      accountToken: guest.sessionToken,
+    })));
+    socket.addEventListener("message", async (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "joined") {
+        if (message.account?.id !== guest.account.id || !message.progress) {
+          finish(new Error("account join payload contract failed"));
+          return;
+        }
+        socket.send(JSON.stringify({
+          type: "accountProgressAction",
+          actionPayload: { action: "spend-mastery", classId: "warrior", nodeId: "attack" },
+        }));
+        return;
+      }
+      if (message.type !== "accountProgress" || message.reason !== "action-applied") return;
+      if (
+        message.progress?.mastery?.warrior?.nodes?.attack !== 1 ||
+        !message.progress?.challenges?.daily ||
+        Object.prototype.hasOwnProperty.call(message.progress, "startPerks")
+      ) {
+        finish(new Error("server authoritative progression action failed"));
+        return;
+      }
+      const sessionResponse = await fetch(`${ORIGIN}/api/account/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accountId: guest.account.id, sessionToken: guest.sessionToken }),
+      });
+      const session = await sessionResponse.json();
+      if (!sessionResponse.ok || session.progress?.mastery?.warrior?.nodes?.attack !== 1) {
+        finish(new Error("account progression persistence failed"));
+        return;
+      }
+      finish();
+    });
+    socket.addEventListener("error", () => finish(new Error("account progression WebSocket failed")));
+  });
+}
+
+function checkHostAscensionSelection() {
+  return new Promise((resolve, reject) => {
+    const hostSocket = new WebSocket(`${WS_ORIGIN}/ws`);
+    let memberSocket = null;
+    const room = `ASC${Date.now().toString(36).slice(-5).toUpperCase()}`;
+    const timer = setTimeout(() => finish(new Error("host ascension selection timeout")), 5000);
+    let finished = false;
+    let memberStarted = false;
+    let attemptedOverride = false;
+    let postAttemptStates = 0;
+    const finish = (error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      hostSocket.close();
+      memberSocket?.close();
+      if (error) reject(error);
+      else {
+        console.log("host ascension selection ok");
+        resolve();
+      }
+    };
+    hostSocket.addEventListener("open", () => hostSocket.send(JSON.stringify({
+      type: "join",
+      name: "승천방장",
       room,
       classId: "engineer",
       intent: "create",
@@ -1913,42 +2180,61 @@ function checkWeeklyProgressionState() {
         ascensionLevel: 5,
         nodes: { attack: 0, survival: 0, speed: 0, special: 0 },
         gearBonuses: { dashFollowupMul: 1.35, burnDamageMul: 1.2, turretKillDurationBonus: 0.8 },
-        cosmetic: { title: "주간왕", skin: "season_ember" },
-        startPerkId: "supply_cache",
+        cosmetic: { title: "승천장", skin: "season_ember" },
         challenge: { mode: "weekly", key: "SMOKE-WEEK", seed: 73, modifierId: "elite_hunt", ruleId: "venom_week" }
       }
     })));
-    socket.addEventListener("message", (event) => {
+    hostSocket.addEventListener("message", (event) => {
       const message = JSON.parse(event.data);
       if (message.type !== "state") return;
       const self = message.players.find((player) => player.id === message.selfId);
-      if (message.room.status === "lobby") {
-        if (!self.ready) socket.send(JSON.stringify({ type: "toggleReady" }));
-        else if (!started && message.room.canStart) {
-          started = true;
-          socket.send(JSON.stringify({ type: "start" }));
-        }
-        return;
-      }
-      if (!started || message.room.status !== "combat") return;
+      if (message.room.status !== "lobby") return;
       if (
-        message.room.challengeMode !== "weekly" ||
-        message.room.challengeRuleId !== "venom_week" ||
-        typeof message.room.weeklyBossId !== "string" ||
-        !message.room.weeklyBossId ||
-        !message.room.survival?.active ||
-        !Array.isArray(message.room.mapWalls) ||
-        message.room.mapWalls.length < 4 ||
-        self.title !== "주간왕" ||
-        self.color !== "#fb923c" ||
-        self.growth?.startPerkId !== "supply_cache"
+        message.room.ascensionLevel !== 5 ||
+        message.room.challengeMode !== "standard" ||
+        self?.growth?.challenge?.mode !== "standard" ||
+        Object.prototype.hasOwnProperty.call(self?.growth || {}, "startPerkId")
       ) {
-        finish(new Error("weekly progression state is incomplete"));
+        finish(new Error("host ascension or personal mission sanitization failed"));
         return;
       }
-      finish();
+      if (!memberStarted) {
+        memberStarted = true;
+        memberSocket = new WebSocket(`${WS_ORIGIN}/ws`);
+        memberSocket.addEventListener("open", () => memberSocket.send(JSON.stringify({
+          type: "join",
+          name: "승천대원",
+          room,
+          classId: "warrior",
+          intent: "join",
+          growthLoadout: { version: 3, classId: "warrior", ascensionLevel: 0, nodes: {} },
+        })));
+        memberSocket.addEventListener("message", (memberEvent) => {
+          const memberMessage = JSON.parse(memberEvent.data);
+          if (memberMessage.type !== "state" || memberMessage.room.status !== "lobby") return;
+          const memberSelf = memberMessage.players.find((player) => player.id === memberMessage.selfId);
+          if (!attemptedOverride && memberMessage.room.playerCount === 2) {
+            attemptedOverride = true;
+            memberSocket.send(JSON.stringify({
+              type: "setGrowthLoadout",
+              growthLoadout: { version: 3, classId: "warrior", ascensionLevel: 9, nodes: {} },
+            }));
+            return;
+          }
+          if (!attemptedOverride) return;
+          postAttemptStates += 1;
+          if (postAttemptStates < 2) return;
+          if (memberMessage.room.ascensionLevel !== 5 || memberSelf?.growth?.ascensionLevel !== 0) {
+            finish(new Error("non-host changed the room ascension"));
+            return;
+          }
+          finish();
+        });
+        memberSocket.addEventListener("error", () => finish(new Error("member ascension WebSocket failed")));
+        return;
+      }
     });
-    socket.addEventListener("error", () => finish(new Error("weekly progression WebSocket failed")));
+    hostSocket.addEventListener("error", () => finish(new Error("host ascension WebSocket failed")));
   });
 }
 
@@ -1960,11 +2246,13 @@ Promise.resolve()
   .then(checkWarriorUpgradeContract)
   .then(checkSurvivalModeContract)
   .then(checkLongTermProgressionContract)
+  .then(checkServerAccountStoreContract)
   .then(checkHttp)
   .then(checkClientSaveRuntimeContract)
   .then(checkClientUiControllerRuntimeContract)
   .then(checkWebSocket)
-  .then(checkWeeklyProgressionState)
+  .then(checkAccountProgressionWebSocket)
+  .then(checkHostAscensionSelection)
   .then(checkRoomListVisibility)
   .then(checkCodeJoinRequiresExistingRoom)
   .then(checkAllPlayerSurvivalStart)

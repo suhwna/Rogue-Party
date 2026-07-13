@@ -83,6 +83,18 @@ const settingsResetButton = document.querySelector("#settingsResetButton");
 const settingsQualityGroup = document.querySelector("#settingsQualityGroup");
 const settingsLanguage = document.querySelector("#settingsLanguage");
 const settingsKeyList = document.querySelector("#settingsKeyList");
+const accountStatusLabel = document.querySelector("#accountStatusLabel");
+const accountIdLabel = document.querySelector("#accountIdLabel");
+const accountQuickCopyButton = document.querySelector("#accountQuickCopyButton");
+const accountManageButton = document.querySelector("#accountManageButton");
+const settingsAccountSync = document.querySelector("#settingsAccountSync");
+const settingsAccountId = document.querySelector("#settingsAccountId");
+const accountCopyRecoveryButton = document.querySelector("#accountCopyRecoveryButton");
+const accountNewGuestButton = document.querySelector("#accountNewGuestButton");
+const accountRecoveryInput = document.querySelector("#accountRecoveryInput");
+const accountRecoverButton = document.querySelector("#accountRecoverButton");
+const accountSettingsMessage = document.querySelector("#accountSettingsMessage");
+const accountSettingsSection = document.querySelector("#accountSettingsSection");
 const runContext = document.querySelector("#runContext");
 const runPhaseKicker = document.querySelector("#runPhaseKicker");
 const runObjectiveTitle = document.querySelector("#runObjectiveTitle");
@@ -136,6 +148,10 @@ let lastJoinPayload = null;
 let lastPongAt = 0;
 let suppressNextReconnect = false;
 let keyCaptureAction = "";
+let accountSession = null;
+let accountBootstrapPromise = null;
+let accountServerManaged = false;
+let accountSyncState = "loading";
 const LOBBY_TEST_PENDING_TTL = 1800;
 const lobbyTestPending = {
   classId: "",
@@ -145,6 +161,7 @@ const lobbyTestPending = {
 
 const clientRuntime = window.RogueClientRuntime || {};
 const saveBridge = window.RogueSaveManager || {};
+const accountBridge = window.RogueAccountManager || {};
 const networkBridge = window.RogueNetworkBridge || {};
 const hudBridge = window.RogueHudController || {};
 const choiceBridge = window.RogueChoiceController || {};
@@ -194,7 +211,7 @@ const LOBBY_VIEW_META = Object.freeze({
   gear: { kicker: "ARSENAL", title: "장비와 룬" },
   forge: { kicker: "FORGE", title: "대장간" },
   archive: { kicker: "RECORDS", title: "원정 기록" },
-  challenges: { kicker: "OPERATIONS", title: "도전 작전" },
+  challenges: { kicker: "MISSIONS", title: "개인 임무" },
   training: { kicker: "TRAINING", title: "훈련 설정" }
 });
 const masteryNodeDefs = Object.freeze(
@@ -640,7 +657,7 @@ lobbyClassDetail?.addEventListener("click", (event) => {
     }
     if (saveBridge.performProgressionAction) {
       const classId = getSelf()?.classId || selectedClass;
-      const result = saveBridge.performProgressionAction(userProgress, {
+      const actionPayload = {
         action,
         classId,
         itemId: progressionButton.dataset.itemId,
@@ -650,12 +667,16 @@ lobbyClassDetail?.addEventListener("click", (event) => {
         runeSlot: progressionButton.dataset.runeSlot,
         runeType: progressionButton.dataset.runeType,
         tier: progressionButton.dataset.tier,
-        mode: progressionButton.dataset.mode,
         recipeId: progressionButton.dataset.recipeId,
         title: progressionButton.dataset.title,
         skin: progressionButton.dataset.skin,
-        perkId: progressionButton.dataset.perkId,
-      });
+      };
+      if (accountServerManaged) {
+        sendClientMessage({ type: "accountProgressAction", actionPayload });
+        flashLobbyTestControl(progressionButton);
+        return;
+      }
+      const result = saveBridge.performProgressionAction(userProgress, actionPayload);
       userProgress = result.progress || userProgress;
       saveUserProgress();
       renderedLobbyClassDetailKey = "";
@@ -673,10 +694,12 @@ lobbyClassDetail?.addEventListener("click", (event) => {
 
   const ascensionButton = event.target.closest("[data-ascension-delta]");
   if (ascensionButton) {
+    if (state?.selfId !== state?.room?.hostId) return;
+    const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
     selectedAscensionLevel = clamp(
       selectedAscensionLevel + Number(ascensionButton.dataset.ascensionDelta || 0),
       0,
-      MAX_ASCENSION_LEVEL,
+      unlockedAscension,
     );
     renderedLobbyClassDetailKey = "";
     renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
@@ -759,6 +782,10 @@ settingsButton?.addEventListener("click", () => {
   openSettings();
 });
 
+accountManageButton?.addEventListener("click", () => {
+  openSettings(true);
+});
+
 settingsCloseButton?.addEventListener("click", () => {
   closeSettings();
 });
@@ -790,6 +817,56 @@ settingsResetButton?.addEventListener("click", () => {
   keyCaptureAction = "";
   resetUserSettings();
   renderSettingsPanel();
+});
+
+accountCopyRecoveryButton?.addEventListener("click", copyAccountRecoveryKey);
+accountQuickCopyButton?.addEventListener("click", copyAccountRecoveryKey);
+
+async function copyAccountRecoveryKey() {
+  const recoveryKey = accountBridge.getRecoveryKey?.(accountSession) || "";
+  if (!recoveryKey) {
+    setAccountSettingsMessage("이 브라우저에 복구 키가 없습니다. 기존 복구 키로 계정을 먼저 복원해 주세요.", true);
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(recoveryKey);
+    setAccountSettingsMessage("복구 키를 복사했습니다. 브라우저 밖의 안전한 곳에 보관하세요.");
+    showAccountCopyFeedback();
+  } catch {
+    if (accountRecoveryInput) {
+      accountRecoveryInput.value = recoveryKey;
+      accountRecoveryInput.select();
+    }
+    setAccountSettingsMessage("복구 키를 입력란에 표시했습니다. 안전한 곳에 보관하세요.");
+    showAccountCopyFeedback();
+  }
+}
+
+function showAccountCopyFeedback() {
+  if (accountStatusLabel) accountStatusLabel.textContent = "복구 키 준비 완료";
+  window.setTimeout(() => renderAccountStatus(), 1800);
+}
+
+accountRecoverButton?.addEventListener("click", async () => {
+  const recoveryKey = accountRecoveryInput?.value.trim() || "";
+  if (!recoveryKey) {
+    setAccountSettingsMessage("복구 키를 입력해 주세요.", true);
+    return;
+  }
+  await runAccountOperation(async () => {
+    const session = await accountBridge.recover(recoveryKey);
+    applyServerAccountSession(session, "복구된 서버 진행도를 불러왔습니다.");
+    if (accountRecoveryInput) accountRecoveryInput.value = "";
+  });
+});
+
+accountNewGuestButton?.addEventListener("click", async () => {
+  if (accountSession?.ok) return;
+  await runAccountOperation(async () => {
+    accountBridge.clearCredentials?.();
+    const session = await accountBridge.createGuest(userProgress, nameInput?.value || "Player");
+    applyServerAccountSession(session, "새 서버 계정을 만들고 로컬 진행도를 이전했습니다.");
+  });
 });
 
 window.addEventListener("keydown", (event) => {
@@ -847,6 +924,7 @@ if (inputManager) {
   });
 }
 
+accountBootstrapPromise = bootstrapServerAccount();
 loadRooms();
 roomListRefreshTimer = window.setInterval(() => {
   if (!joinOverlay.classList.contains("hidden")) loadRooms();
@@ -995,7 +1073,15 @@ function resetToRoomEntry(message = "") {
   if (message) setConnectionLabel(message);
 }
 
-function connect(options = {}) {
+async function connect(options = {}) {
+  if (accountBootstrapPromise) await accountBootstrapPromise;
+  const accountCredentials = accountBridge.getJoinCredentials?.(accountSession) || null;
+  if (!accountServerManaged || !accountCredentials) {
+    setConnectionLabel("ACCOUNT REQUIRED");
+    setAccountSettingsMessage("서버 계정을 복구하거나 새 게스트 계정을 만든 뒤 입장해 주세요.", true);
+    renderAccountStatus();
+    return;
+  }
   const payload = options.payload || null;
   const playerName = payload?.name || (nameInput?.value || "Player").trim().slice(0, 16) || "Player";
   const roomCode = normalizeRoomCode(payload?.room || roomInput?.value || "");
@@ -1019,6 +1105,7 @@ function connect(options = {}) {
     room: roomCode,
     classId: payload?.classId || selectedClass,
     growthLoadout: payload?.growthLoadout || getSelectedGrowthLoadout(payload?.classId || selectedClass),
+    ...accountCredentials,
     intent
   };
 
@@ -1037,6 +1124,8 @@ function connect(options = {}) {
       room: joinPayload.room,
       classId: joinPayload.classId,
       growthLoadout: joinPayload.growthLoadout || getSelectedGrowthLoadout(joinPayload.classId || selectedClass),
+      accountId: joinPayload.accountId,
+      accountToken: joinPayload.accountToken,
       intent: joinPayload.intent || "join"
     });
   });
@@ -1057,12 +1146,25 @@ function connect(options = {}) {
     }
     if (message.type === "joined") {
       selfId = message.id;
+      if (message.account && accountSession) {
+        accountSession.account = { ...(accountSession.account || {}), ...message.account };
+      }
+      if (message.progress) applyServerProgress(message.progress, message.account);
       if (lastJoinPayload) lastJoinPayload.intent = "join";
       joinOverlay.classList.add("hidden");
       setConnectionLabel("ONLINE");
       clientDiagnostics.socket = "online";
       resetReconnectAttempts();
       startHeartbeat();
+      return;
+    }
+
+    if (message.type === "accountProgress") {
+      if (message.progress) applyServerProgress(message.progress, message.account);
+      accountSyncState = "synced";
+      accountServerManaged = true;
+      if (message.message) setAccountSettingsMessage(message.message, message.reason === "action-rejected");
+      renderAccountStatus();
       return;
     }
 
@@ -1183,6 +1285,110 @@ function resetUserSettings() {
   return structuredCloneSafe(userSettings);
 }
 
+async function bootstrapServerAccount() {
+  accountSyncState = "loading";
+  renderAccountStatus();
+  if (!accountBridge.bootstrap) {
+    accountSyncState = "local-only";
+    renderAccountStatus();
+    return false;
+  }
+  try {
+    const session = await accountBridge.bootstrap(userProgress, nameInput?.value || "Player");
+    if (!session?.ok) {
+      accountSession = session || null;
+      accountServerManaged = false;
+      accountSyncState = session?.needsRecovery ? "recovery" : "error";
+      setAccountSettingsMessage(session?.error || "계정 세션을 복원하지 못했습니다.", true);
+      renderAccountStatus();
+      return false;
+    }
+    applyServerAccountSession(
+      session,
+      session.created ? "서버 계정을 만들고 기존 로컬 진행도를 이전했습니다." : "서버 진행도와 동기화했습니다.",
+    );
+    return true;
+  } catch (error) {
+    accountServerManaged = false;
+    accountSyncState = "error";
+    setAccountSettingsMessage(error?.message || "계정 서버에 연결하지 못했습니다.", true);
+    renderAccountStatus();
+    return false;
+  }
+}
+
+function applyServerAccountSession(session, message = "서버 진행도와 동기화했습니다.") {
+  accountSession = session;
+  accountServerManaged = Boolean(session?.ok && session?.account?.id && session?.sessionToken);
+  accountSyncState = accountServerManaged ? "synced" : "error";
+  if (session?.progress) applyServerProgress(session.progress, session.account);
+  setAccountSettingsMessage(message);
+  renderAccountStatus();
+}
+
+function applyServerProgress(progress, account = null) {
+  userProgress = normalizeProgress(progress);
+  saveUserProgress();
+  if (accountSession && account) {
+    accountSession.account = { ...(accountSession.account || {}), ...account };
+  }
+  const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0) || 0, 0, MAX_ASCENSION_LEVEL);
+  selectedAscensionLevel = state
+    ? clamp(Number(selectedAscensionLevel || 0), 0, unlockedAscension)
+    : unlockedAscension;
+  renderedLobbyClassDetailKey = "";
+  if (state?.room?.status === "lobby") {
+    renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+  }
+  renderAccountStatus();
+}
+
+async function runAccountOperation(operation) {
+  accountSyncState = "loading";
+  renderAccountStatus();
+  try {
+    await operation();
+  } catch (error) {
+    accountServerManaged = false;
+    accountSyncState = error?.status === 401 ? "recovery" : "error";
+    setAccountSettingsMessage(error?.message || "계정 요청을 처리하지 못했습니다.", true);
+    renderAccountStatus();
+  }
+}
+
+function renderAccountStatus() {
+  const labels = {
+    loading: "계정 동기화 중",
+    synced: "서버 저장 활성",
+    recovery: "계정 복구 필요",
+    error: "계정 서버 연결 실패",
+    "local-only": "로컬 캐시 모드",
+  };
+  const accountId = accountSession?.account?.id || accountSession?.credentials?.accountId || "-";
+  if (accountStatusLabel) accountStatusLabel.textContent = labels[accountSyncState] || labels.error;
+  if (accountIdLabel) accountIdLabel.textContent = accountId === "-" ? "연결 대기" : accountId;
+  if (settingsAccountSync) settingsAccountSync.textContent = labels[accountSyncState] || labels.error;
+  if (settingsAccountId) settingsAccountId.textContent = accountId;
+  const busy = accountSyncState === "loading";
+  const ready = Boolean(accountServerManaged && accountSession?.ok);
+  if (menuCreateButton) menuCreateButton.disabled = !ready;
+  if (roomSubmitButton) roomSubmitButton.disabled = !ready;
+  if (accountCopyRecoveryButton) {
+    accountCopyRecoveryButton.disabled = busy || !(accountBridge.getRecoveryKey?.(accountSession));
+  }
+  if (accountQuickCopyButton) {
+    accountQuickCopyButton.disabled = busy || !(accountBridge.getRecoveryKey?.(accountSession));
+  }
+  if (accountNewGuestButton) accountNewGuestButton.disabled = busy || ready;
+  if (accountRecoverButton) accountRecoverButton.disabled = busy;
+}
+
+function setAccountSettingsMessage(message, error = false) {
+  if (!accountSettingsMessage) return;
+  accountSettingsMessage.textContent = message;
+  accountSettingsMessage.classList.toggle("error", Boolean(error));
+}
+
 function loadUserProgress() {
   if (saveBridge.loadUserProgress) return saveBridge.loadUserProgress();
   return saveBridge.defaultProgress ? structuredCloneSafe(saveBridge.defaultProgress) : {
@@ -1261,7 +1467,10 @@ function recordUserRunResult(result = {}) {
 }
 
 function getSelectedAscensionLevel() {
-  return clamp(Math.floor(Number(selectedAscensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
+  const roomAscension = clamp(Math.floor(Number(state?.room?.ascensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
+  if (state?.room?.status === "lobby" && state?.selfId && state.selfId !== state.room.hostId) return roomAscension;
+  const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
+  return clamp(Math.floor(Number(selectedAscensionLevel || 0)), 0, unlockedAscension);
 }
 
 function getSelectedGrowthLoadout(classId = selectedClass) {
@@ -1291,6 +1500,15 @@ function sendGrowthLoadout(classId = selectedClass) {
 }
 
 function spendMasteryNode(classId = selectedClass, nodeId = "attack") {
+  if (accountServerManaged) {
+    const sent = sendClientMessage({
+      type: "accountProgressAction",
+      actionPayload: { action: "spend-mastery", classId, nodeId },
+    });
+    const button = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(nodeId)}"]`);
+    if (sent) flashLobbyTestControl(button || lobbyClassDetail);
+    return sent;
+  }
   if (!saveBridge.spendMasteryPoint) return false;
   const result = saveBridge.spendMasteryPoint(userProgress, classId, nodeId);
   userProgress = result.progress || userProgress;
@@ -1317,7 +1535,7 @@ function getGrowthRenderKey(classId) {
   const progressionKey = saveBridge.getProgressionRenderKey
     ? saveBridge.getProgressionRenderKey(userProgress, classId, selectedProgressionTab)
     : "";
-  return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|${nodeKey}|${progressionKey}`;
+  return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|H${state?.room?.hostId || ""}|${nodeKey}|${progressionKey}`;
 }
 
 function renderGrowthMasteryPanel(self, classId) {
@@ -1330,7 +1548,8 @@ function renderGrowthMasteryPanel(self, classId) {
   const accountXp = Number(progress.account?.xp || 0);
   const xpToNext = saveBridge.getAccountXpToNext ? saveBridge.getAccountXpToNext(accountLevel) : 100 + accountLevel * 40;
   const xpPct = clamp01(accountXp / Math.max(1, xpToNext));
-  const maxReachedAscension = Number(progress.records?.highestAscension || 0);
+  const maxReachedAscension = clamp(Number(progress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
+  const isHost = Boolean(state?.selfId && state.selfId === state?.room?.hostId);
   const nodeRows = masteryNodeDefs
     .map((node) => {
       const level = Number(loadout.nodes?.[node.id] || 0);
@@ -1389,12 +1608,12 @@ function renderGrowthMasteryPanel(self, classId) {
       <div class="growth-ascension">
         <div>
           <strong>승천 ${getSelectedAscensionLevel()}</strong>
-          <span>최고 기록 ${maxReachedAscension} · 높을수록 적이 강해지고 보상이 증가</span>
+          <span>해금 ${maxReachedAscension}단계 · 클리어 시 참가자 모두 ${Math.min(MAX_ASCENSION_LEVEL, getSelectedAscensionLevel() + 1)}단계 해금</span>
         </div>
-        <div class="growth-ascension-controls">
-          <button type="button" data-ascension-delta="-1" ${getSelectedAscensionLevel() <= 0 ? "disabled" : ""}>-</button>
-          <button type="button" data-ascension-delta="1" ${getSelectedAscensionLevel() >= MAX_ASCENSION_LEVEL ? "disabled" : ""}>+</button>
-        </div>
+        ${isHost ? `<div class="growth-ascension-controls" aria-label="승천 단계 선택">
+          <button type="button" data-ascension-delta="-1" aria-label="승천 단계 내리기" ${getSelectedAscensionLevel() <= 0 ? "disabled" : ""}>-</button>
+          <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${getSelectedAscensionLevel() >= maxReachedAscension ? "disabled" : ""}>+</button>
+        </div>` : `<small class="growth-ascension-host-only">방장만 변경 가능</small>`}
       </div>
     </section>
   `;
@@ -1474,10 +1693,13 @@ function matchesActionKey(code, action, fallbacks = []) {
   return code === configured || fallbacks.includes(code);
 }
 
-function openSettings() {
+function openSettings(focusAccount = false) {
   keyCaptureAction = "";
   renderSettingsPanel();
   settingsOverlay?.classList.remove("hidden");
+  if (focusAccount) {
+    window.setTimeout(() => accountSettingsSection?.scrollIntoView({ block: "center" }), 0);
+  }
 }
 
 function closeSettings() {
@@ -1510,6 +1732,7 @@ function renderSettingsPanel() {
       })
       .join("");
   }
+  renderAccountStatus();
 }
 
 function formatKeyCode(code) {
@@ -1830,8 +2053,8 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
   const classMeta = classDescriptions[safeClassId] || classDescriptions.warrior;
   const viewMeta = LOBBY_VIEW_META[selectedLobbyView] || LOBBY_VIEW_META.loadout;
   const progress = normalizeProgress(userProgress);
-  const challenge = saveBridge.getActiveChallenge ? saveBridge.getActiveChallenge(progress) : { mode: "standard" };
-  const modeLabels = { standard: "일반 원정", daily: "일일 도전", weekly: "주간 도전" };
+  const dailyMission = progress.challenges?.daily || { progress: 0, target: 1 };
+  const weeklyMission = progress.challenges?.weekly || { progress: 0, target: 1 };
   const inventoryCount = Number(progress.inventory?.items?.length || 0) + Number(progress.inventory?.runes?.length || 0);
   const equipped = progress.equipment?.[safeClassId] || {};
   const equippedCount = [equipped.weapon, equipped.armor, equipped.charm, equipped.core, ...(equipped.runes || [])].filter(Boolean).length;
@@ -1848,7 +2071,7 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
   const classViews = new Set(["loadout", "growth", "gear", "forge", "training"]);
   const subtitles = {
     archive: `계정 Lv.${Number(progress.account?.level || 1)} · 원정과 수집 기록`,
-    challenges: `${modeLabels[challenge.mode] || modeLabels.standard} · 반복 작전 관리`
+    challenges: "일일·주간 개인 임무 · 모든 원정에서 자동 누적"
   };
   if (lobbyWorkspaceSubtitle) {
     lobbyWorkspaceSubtitle.textContent = self?.spectator
@@ -1865,7 +2088,7 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
     gear: [["장착", `${equippedCount}/7`], ["보관", inventoryCount]],
     forge: [["강화석", Number(progress.currencies?.enhancementStones || 0).toLocaleString()], ["재련 가루", Number(progress.currencies?.reforgingDust || 0).toLocaleString()]],
     archive: [["최고 심연", Number(progress.records?.highestAbyssDepth || 0)], ["업적", Object.keys(progress.achievements || {}).length]],
-    challenges: [["작전", modeLabels[challenge.mode] || modeLabels.standard], ["시즌", `Lv.${Number(progress.challenges?.season?.level || 1)}`]],
+    challenges: [["일일", `${Math.min(Number(dailyMission.progress || 0), Number(dailyMission.target || 1))}/${Number(dailyMission.target || 1)}`], ["주간", `${Math.min(Number(weeklyMission.progress || 0), Number(weeklyMission.target || 1))}/${Number(weeklyMission.target || 1)}`]],
     training: [["직업", classMeta.label], ["모드", "로비 테스트"]]
   };
   lobbyWorkspaceMetrics.innerHTML = (metricsByView[selectedLobbyView] || metricsByView.loadout)
@@ -1945,6 +2168,7 @@ function renderLobbyClassDetail(classId, self = null) {
 }
 
 function recordProgressDiscoveries(nextState) {
+  if (accountServerManaged) return;
   if (!saveBridge.recordWorldDiscoveries) return;
   const result = saveBridge.recordWorldDiscoveries(userProgress, { ...nextState, selfId });
   if (!result.changed) return;
@@ -2441,7 +2665,7 @@ function renderChoices(choices) {
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
             <span>${escapeHtml(choice.text)}</span>
-            <span class="choice-action-row"><span>유물 선택</span><i>CLICK</i></span>
+            <span class="choice-action-row"><span>유물 선택</span><i aria-hidden="true">›</i></span>
           </span>
         </button>
       `;
@@ -2584,7 +2808,7 @@ function renderSkillChoices(choices) {
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
             <span>${escapeHtml(choice.text)}</span>
-            <span class="choice-action-row"><span>강화 선택</span><i>CLICK</i></span>
+            <span class="choice-action-row"><span>강화 선택</span><i aria-hidden="true">›</i></span>
           </span>
         </button>
       `;
@@ -3040,6 +3264,7 @@ function renderResult(nextState) {
     ["계정 XP", `+${rewards.earnedAccountXp || 0}`],
     ["심연", `${rewards.abyssDepth || 0}층`],
     ["승천", `${rewards.ascensionLevel || 0}`],
+    ...(victory ? [["승천 해금", `${Number(result.unlockedAscensionLevel ?? Math.min(MAX_ASCENSION_LEVEL, Number(rewards.ascensionLevel || 0) + 1))}단계`]] : []),
     ["최고 레벨", `${result.highestLevel || 1}`],
     ["점수", `${result.totalScore || 0}`],
     ["유물", formatRelicCount({ relicCount: result.totalRelics, relicMaxCount: result.totalRelicMax })],
@@ -3094,6 +3319,7 @@ function renderResult(nextState) {
           <div class="result-player-metrics">
             <span><small>피해</small><b>${formatCompactNumber(stats.damage)}</b></span>
             <span><small>처치</small><b>${Number(stats.kills || 0).toLocaleString()}</b></span>
+            <span><small>엘리트</small><b>${Number(stats.eliteKills || 0).toLocaleString()}</b></span>
             <span><small>상태 피해</small><b>${formatCompactNumber(statusDamage)}</b></span>
             <span><small>보스</small><b>${Number(stats.bossKills || 0).toLocaleString()}</b></span>
           </div>
@@ -3146,6 +3372,7 @@ function createFallbackResult(nextState) {
 }
 
 function recordDisplayedResult(result, nextState) {
+  if (accountServerManaged) return;
   const resultKey = getResultSaveKey(result, nextState);
   if (!resultKey || resultKey === lastRecordedResultKey) return;
   lastRecordedResultKey = resultKey;

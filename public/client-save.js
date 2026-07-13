@@ -503,7 +503,15 @@
       xp: next.account.xp + earnedAccountXp,
     });
     next.records.highestAbyssDepth = Math.max(next.records.highestAbyssDepth, rewards.abyssDepth);
-    next.records.highestAscension = Math.max(next.records.highestAscension, rewards.ascensionLevel);
+    if (outcome === "victory") {
+      const unlockedAscensionLevel = normalizeInteger(
+        result?.unlockedAscensionLevel,
+        Math.min(MAX_ASCENSION_LEVEL, rewards.ascensionLevel + 1),
+        0,
+        MAX_ASCENSION_LEVEL,
+      );
+      next.records.highestAscension = Math.max(next.records.highestAscension, unlockedAscensionLevel);
+    }
     next.records.lastRunKey = resultKey || `${Date.now()}:${outcome}:${chapter}:${stage}:${totalScore}`;
 
     if (
