@@ -57,18 +57,27 @@ const XP_ASSIST_SHARE = 0.34;
 const ADVANCEMENT_LEVELS = Array.from({ length: MAX_PLAYER_LEVEL - 1 }, (_, index) => index + 2);
 const SKILL_SLOTS = ["q", "e", "r", "f"];
 const STARTING_CLASSES = new Set(["warrior", "ranger", "mage", "engineer"]);
-const GROWTH_NODE_IDS = ["damage", "maxHp", "regen", "moveSpeed", "cooldown", "critDamage", "area"];
+const GROWTH_NODE_IDS = ["damage", "maxHp", "regen", "moveSpeed", "attackSpeed", "cooldown", "critDamage", "area"];
 const LEGACY_GROWTH_NODE_IDS = Object.freeze({
   damage: "attack",
   maxHp: "survival",
   regen: "survival",
   moveSpeed: "speed",
+  attackSpeed: "",
   cooldown: "speed",
   critDamage: "attack",
   area: "special"
 });
 const MAX_GROWTH_NODE_LEVEL = 9999;
-const MAX_ASCENSION_LEVEL = 25;
+const MAX_ASCENSION_LEVEL = 5;
+const ASCENSION_DIFFICULTY_PROFILES = Object.freeze([
+  Object.freeze({ hpMul: 1, damageMul: 1, speedMul: 1, spawnMul: 1, cadenceMul: 1, eliteBonus: 0, rewardMul: 1 }),
+  Object.freeze({ hpMul: 1.5, damageMul: 1.15, speedMul: 1.04, spawnMul: 1.12, cadenceMul: 0.94, eliteBonus: 0.06, rewardMul: 1.5 }),
+  Object.freeze({ hpMul: 2, damageMul: 1.28, speedMul: 1.08, spawnMul: 1.24, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
+  Object.freeze({ hpMul: 2.6, damageMul: 1.42, speedMul: 1.12, spawnMul: 1.38, cadenceMul: 0.82, eliteBonus: 0.2, rewardMul: 2.75 }),
+  Object.freeze({ hpMul: 3.3, damageMul: 1.58, speedMul: 1.17, spawnMul: 1.52, cadenceMul: 0.75, eliteBonus: 0.3, rewardMul: 3.75 }),
+  Object.freeze({ hpMul: 4.2, damageMul: 1.78, speedMul: 1.23, spawnMul: 1.68, cadenceMul: 0.68, eliteBonus: 0.42, rewardMul: 5 }),
+]);
 const ACCOUNT_PROGRESS_ACTIONS = new Set([
   "spend-mastery",
   "equip-item",
@@ -117,16 +126,18 @@ const STAGE_CLEAR_HEAL_RATIO = 0.15;
 const STAGE_CLEAR_REVIVE_RATIO = 0.35;
 const SURVIVAL_DURATION_SEC = 9 * 60;
 const SURVIVAL_BOSS_CHECKPOINTS = Object.freeze([3 * 60, 6 * 60, 9 * 60]);
+const CHAPTER_BOSS_HEALTH_MUL = 4;
+const MINIBOSS_HEALTH_MUL = 3;
 const SURVIVAL_MINIBOSS_SCHEDULE = Object.freeze([
   { minute: 1, count: 1 },
   { minute: 2, count: 1 },
-  { minute: 4, count: 2 },
-  { minute: 5, count: 2 },
-  { minute: 7, count: 3 },
-  { minute: 8, count: 3 }
+  { minute: 4, count: 1 },
+  { minute: 5, count: 1 },
+  { minute: 7, count: 1 },
+  { minute: 8, count: 1 }
 ]);
 const SURVIVAL_EXECUTION_SPAWN_DELAY_MS = 2800;
-const SURVIVAL_EXECUTION_BOSS_HP_MUL = 28;
+const SURVIVAL_EXECUTION_BOSS_HP_MUL = 40;
 const SURVIVAL_BOSS_INTRO_DELAY_MS = 2400;
 const SURVIVAL_BOSS_DISSOLVE_START_MS = 220;
 const SURVIVAL_BOSS_DISSOLVE_END_LEAD_MS = 620;
@@ -347,14 +358,14 @@ const CHAPTER_BOSSES = {
     modifierId: "safe_path",
     pattern: "charge",
     patternTags: ["charge_lane", "shockwave", "blade_beam"],
-    signaturePatterns: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break", "iron_sweeping_arc", "iron_fortress_gap", "iron_furnace_refuge"],
+    signaturePatterns: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break", "iron_sweeping_arc", "iron_fortress_gap", "iron_furnace_refuge", "iron_anvil_corridor", "iron_rotor_barrage"],
     phasePatterns: {
       1: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break"],
-      2: ["iron_ground_break", "iron_sweeping_arc", "iron_furnace_refuge", "iron_cross_shock", "iron_beam_fan"],
-      3: ["iron_furnace_refuge", "iron_fortress_gap", "iron_sweeping_arc", "iron_ground_break", "iron_cross_shock", "iron_beam_fan"]
+      2: ["iron_ground_break", "iron_anvil_corridor", "iron_sweeping_arc", "iron_furnace_refuge", "iron_cross_shock", "iron_beam_fan"],
+      3: ["iron_rotor_barrage", "iron_furnace_refuge", "iron_fortress_gap", "iron_anvil_corridor", "iron_sweeping_arc", "iron_ground_break", "iron_cross_shock", "iron_beam_fan"]
     },
     phaseTitles: ["Armored Guard", "Broken Plating", "Overheated Core"],
-    telegraph: { primary: 0.98, special: 1.16, phase: 1.55 },
+    telegraph: { primary: 0.92, special: 1.08, phase: 1.48 },
     patternMix: { basic: 0.55, special: 0.34, punish: 0.11 },
     escorts: ["guardian", "charger"]
   },
@@ -373,14 +384,14 @@ const CHAPTER_BOSSES = {
     modifierId: "safe_path",
     pattern: "summon",
     patternTags: ["summon", "acid_pool", "barrier_rite"],
-    signaturePatterns: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross", "hive_safe_bloom", "hive_venom_fan", "hive_spore_maelstrom"],
+    signaturePatterns: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross", "hive_safe_bloom", "hive_venom_fan", "hive_spore_maelstrom", "hive_quarantine", "hive_creeping_orbit"],
     phasePatterns: {
       1: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross"],
-      2: ["hive_safe_bloom", "hive_spore_maelstrom", "hive_acid_ring", "hive_venom_fan", "hive_bloom_adds"],
-      3: ["hive_spore_maelstrom", "hive_venom_fan", "hive_safe_bloom", "hive_ritual_cross", "hive_acid_ring", "hive_bloom_adds"]
+      2: ["hive_safe_bloom", "hive_quarantine", "hive_spore_maelstrom", "hive_acid_ring", "hive_venom_fan", "hive_bloom_adds"],
+      3: ["hive_creeping_orbit", "hive_spore_maelstrom", "hive_quarantine", "hive_venom_fan", "hive_safe_bloom", "hive_ritual_cross", "hive_acid_ring", "hive_bloom_adds"]
     },
     phaseTitles: ["Quiet Chant", "Blooming Rite", "Hungering Hive"],
-    telegraph: { primary: 1.02, special: 1.2, phase: 1.65 },
+    telegraph: { primary: 0.95, special: 1.11, phase: 1.56 },
     patternMix: { basic: 0.52, special: 0.35, punish: 0.13 },
     escorts: ["shaman", "splitter", "spitter"]
   },
@@ -399,14 +410,14 @@ const CHAPTER_BOSSES = {
     modifierId: "safe_path",
     pattern: "void",
     patternTags: ["void_beam", "prediction_snipe", "blast_grid"],
-    signaturePatterns: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring", "void_mirror_volley", "void_collapse", "void_final_eclipse"],
+    signaturePatterns: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring", "void_mirror_volley", "void_collapse", "void_final_eclipse", "void_gravity_clock", "void_starless_trial"],
     phasePatterns: {
       1: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring"],
-      2: ["void_mirror_volley", "void_cross_laser", "void_final_eclipse", "void_reposition_snipe", "void_collapse"],
-      3: ["void_final_eclipse", "void_collapse", "void_mirror_volley", "void_orb_ring", "void_cross_laser", "void_reposition_snipe"]
+      2: ["void_mirror_volley", "void_gravity_clock", "void_cross_laser", "void_final_eclipse", "void_reposition_snipe", "void_collapse"],
+      3: ["void_starless_trial", "void_final_eclipse", "void_gravity_clock", "void_collapse", "void_mirror_volley", "void_orb_ring", "void_cross_laser", "void_reposition_snipe"]
     },
     phaseTitles: ["Distant Crown", "Fractured Orbit", "Regent Unbound"],
-    telegraph: { primary: 0.92, special: 1.08, phase: 1.7 },
+    telegraph: { primary: 0.86, special: 1, phase: 1.6 },
     patternMix: { basic: 0.48, special: 0.38, punish: 0.14 },
     escorts: ["mortar", "sniper", "stalker"]
   }
@@ -443,13 +454,13 @@ const MINI_BOSSES = {
     pattern: "duelist",
     role: "melee duel miniboss",
     patternTags: ["cleave", "short_charge"],
-    signaturePatterns: ["duelist_cross", "duelist_charge", "duelist_cleave", "duelist_blade_fan", "duelist_guard_break"],
+    signaturePatterns: ["duelist_cross", "duelist_charge", "duelist_cleave", "duelist_blade_fan", "duelist_guard_break", "duelist_pinwheel", "duelist_pincer"],
     phasePatterns: {
       1: ["duelist_cleave", "duelist_charge", "duelist_cross"],
-      2: ["duelist_blade_fan", "duelist_charge", "duelist_guard_break", "duelist_cleave", "duelist_cross"]
+      2: ["duelist_pinwheel", "duelist_blade_fan", "duelist_pincer", "duelist_charge", "duelist_guard_break", "duelist_cleave", "duelist_cross"]
     },
     phaseTitles: ["검투 자세", "해방된 연격"],
-    telegraph: { primary: 0.82, special: 1.14, phase: 1.2 },
+    telegraph: { primary: 0.76, special: 1.05, phase: 1.14 },
     patternMix: { basic: 0.76, special: 0.2, punish: 0.04 },
     hpMul: 0.54,
     damageMul: 0.78,
@@ -463,13 +474,13 @@ const MINI_BOSSES = {
     pattern: "plague",
     role: "poison space control miniboss",
     patternTags: ["poison_pool", "spit", "ritual_burst"],
-    signaturePatterns: ["plague_pool", "plague_spit_ring", "plague_barrier_burst", "plague_safe_bloom", "plague_venom_fan"],
+    signaturePatterns: ["plague_pool", "plague_spit_ring", "plague_barrier_burst", "plague_safe_bloom", "plague_venom_fan", "plague_spore_clock", "plague_quarantine"],
     phasePatterns: {
       1: ["plague_pool", "plague_spit_ring", "plague_barrier_burst"],
-      2: ["plague_safe_bloom", "plague_venom_fan", "plague_pool", "plague_barrier_burst", "plague_spit_ring"]
+      2: ["plague_spore_clock", "plague_safe_bloom", "plague_quarantine", "plague_venom_fan", "plague_pool", "plague_barrier_burst", "plague_spit_ring"]
     },
     phaseTitles: ["잠복 감염", "번지는 역병"],
-    telegraph: { primary: 0.9, special: 1.2, phase: 1.25 },
+    telegraph: { primary: 0.83, special: 1.1, phase: 1.18 },
     patternMix: { basic: 0.74, special: 0.22, punish: 0.04 },
     hpMul: 0.82,
     damageMul: 0.86,
@@ -483,13 +494,13 @@ const MINI_BOSSES = {
     pattern: "hunter",
     role: "shadow pursuit miniboss",
     patternTags: ["shadow_stab", "shuriken", "blink"],
-    signaturePatterns: ["hunter_shadow_stab", "hunter_shuriken_fan", "hunter_snipe", "hunter_crossfire", "hunter_marked_blast"],
+    signaturePatterns: ["hunter_shadow_stab", "hunter_shuriken_fan", "hunter_snipe", "hunter_crossfire", "hunter_marked_blast", "hunter_blink_ring", "hunter_ricochet"],
     phasePatterns: {
       1: ["hunter_shadow_stab", "hunter_shuriken_fan", "hunter_snipe"],
-      2: ["hunter_crossfire", "hunter_shadow_stab", "hunter_marked_blast", "hunter_shuriken_fan", "hunter_snipe"]
+      2: ["hunter_blink_ring", "hunter_crossfire", "hunter_ricochet", "hunter_shadow_stab", "hunter_marked_blast", "hunter_shuriken_fan", "hunter_snipe"]
     },
     phaseTitles: ["그림자 추적", "공허의 사냥"],
-    telegraph: { primary: 0.86, special: 1.18, phase: 1.28 },
+    telegraph: { primary: 0.79, special: 1.08, phase: 1.2 },
     patternMix: { basic: 0.72, special: 0.24, punish: 0.04 },
     hpMul: 0.86,
     damageMul: 0.92,
@@ -1206,7 +1217,7 @@ const skillUpgrades = {
       ],
       "minLevel": 7,
       "name": "자동 기뢰 살포",
-      "text": "패시브: 일정 시간마다 캐릭터 주변 무작위 위치에 지뢰를 자동 설치합니다. 설치 주기는 쿨타임 감소의 영향을 받습니다."
+      "text": "패시브: 일정 시간마다 캐릭터 주변 무작위 위치에 지뢰를 자동 설치합니다. 설치 주기는 스킬 가속의 영향을 받습니다."
     },
     {
       "id": "engineer_drone",
@@ -1653,13 +1664,23 @@ const relics = [
   {
     id: "cooling_gear",
     name: "냉각 장치",
-    text: "기본 공격과 스킬의 쿨타임이 10% 감소합니다.",
-    target: "공용 · 쿨타임",
+    text: "스킬 가속이 10 증가합니다.",
+    target: "공용 · 스킬 가속",
     maxLevel: 5,
     icon: "쿨",
     apply(player) {
-      player.cooldownMul *= 0.9;
-      player.skillCooldownMul *= 0.9;
+      player.skillHaste = Math.min(500, (player.skillHaste || 0) + 10);
+    }
+  },
+  {
+    id: "rapid_loader",
+    name: "속사 장치",
+    text: "공격 속도가 10 증가합니다.",
+    target: "공용 · 공격 속도",
+    maxLevel: 5,
+    icon: "속",
+    apply(player) {
+      player.attackSpeed = Math.min(500, (player.attackSpeed || 0) + 10);
     }
   },
   {
@@ -1776,6 +1797,7 @@ const relicIcons = {
   iron_plate: "방",
   swift_boots: "속",
   cooling_gear: "쿨",
+  rapid_loader: "속",
   splitter_core: "분",
   giant_lens: "대",
   sharp_eye: "확",
@@ -2229,6 +2251,15 @@ async function handleAccountRequest(req, res, url) {
     sendJson(res, 200, session);
     return;
   }
+  if (url.pathname === "/api/account/reset") {
+    const session = accountStore.resetProgress(body.accountId, body.sessionToken);
+    if (!session) {
+      sendJson(res, 401, { error: "계정 세션을 확인하지 못했습니다." });
+      return;
+    }
+    sendJson(res, 200, session);
+    return;
+  }
   sendJson(res, 404, { error: "계정 API를 찾을 수 없습니다." });
 }
 
@@ -2647,15 +2678,10 @@ function getAuthoritativeGrowthLoadout(player, classId, requestedLoadout = null)
   const safeClassId = sanitizeStartingClass(classId);
   const account = player?.accountId ? accountStore.getTrusted(player.accountId) : null;
   if (!account) return sanitizeGrowthLoadout(requestedLoadout, safeClassId);
-  const unlockedAscension = clamp(
-    Math.floor(Number(account.progress?.records?.highestAscension || 0)),
-    0,
-    MAX_ASCENSION_LEVEL,
-  );
   const requestedAscension = clamp(
     Math.floor(Number(requestedLoadout?.ascensionLevel || 0)),
     0,
-    unlockedAscension,
+    MAX_ASCENSION_LEVEL,
   );
   return sanitizeGrowthLoadout(
     progressionService.getGrowthLoadout(account.progress, safeClassId, requestedAscension),
@@ -2898,12 +2924,17 @@ function sanitizeCosmeticLoadout(source) {
 
 function sanitizeGearBonuses(source) {
   const bonuses = source && typeof source === "object" ? source : {};
+  const legacyCooldownMul = clampNumber(bonuses.skillCooldownMul || 1, 0.1, 1);
+  const legacySkillHaste = Math.max(0, (100 / legacyCooldownMul) - 100);
   return {
+    attackBonus: clampNumber(bonuses.attackBonus || 0, 0, 80),
+    maxHpBonus: clampNumber(bonuses.maxHpBonus || 0, 0, 500),
     damageMul: clampNumber(bonuses.damageMul || 1, 1, 1.6),
     maxHpMul: clampNumber(bonuses.maxHpMul || 1, 1, 1.5),
     regenBonus: clampNumber(bonuses.regenBonus || 0, 0, 2.5),
     speedMul: clampNumber(bonuses.speedMul || 1, 1, 1.25),
-    skillCooldownMul: clampNumber(bonuses.skillCooldownMul || 1, 0.74, 1),
+    attackSpeed: clampNumber(bonuses.attackSpeed || 0, 0, 500),
+    skillHaste: clampNumber(bonuses.skillHaste ?? legacySkillHaste, 0, 500),
     armorBonus: clampNumber(bonuses.armorBonus || 0, 0, 6),
     critChanceBonus: clampNumber(bonuses.critChanceBonus || 0, 0, 0.22),
     critDamageMul: clampNumber(bonuses.critDamageMul || 1, 1, 1.6),
@@ -2954,6 +2985,7 @@ function calculateGrowthBonuses(classId, nodes = {}) {
   const maxHp = growthCurve(nodes.maxHp);
   const regen = growthCurve(nodes.regen);
   const moveSpeed = growthCurve(nodes.moveSpeed);
+  const attackSpeed = growthCurve(nodes.attackSpeed);
   const cooldown = growthCurve(nodes.cooldown);
   const critDamage = growthCurve(nodes.critDamage);
   const area = growthCurve(nodes.area);
@@ -2962,7 +2994,8 @@ function calculateGrowthBonuses(classId, nodes = {}) {
     maxHpMul: 1 + Math.min(0.58, maxHp * 0.027),
     regenBonus: Math.min(2.5, regen * 0.08),
     speedMul: 1 + Math.min(0.26, moveSpeed * 0.014),
-    skillCooldownMul: 1 - Math.min(0.28, cooldown * 0.016),
+    attackSpeed: Math.min(40, attackSpeed * 2),
+    skillHaste: Math.min(28, cooldown * 1.6),
     armorBonus: 0,
     critChanceBonus: 0,
     critDamageMul: 1 + Math.min(0.45, critDamage * 0.018),
@@ -2981,7 +3014,8 @@ function calculateGrowthBonuses(classId, nodes = {}) {
     maxHpMul: roundBonus(bonuses.maxHpMul),
     regenBonus: roundBonus(bonuses.regenBonus),
     speedMul: roundBonus(bonuses.speedMul),
-    skillCooldownMul: roundBonus(Math.max(0.62, bonuses.skillCooldownMul)),
+    attackSpeed: roundBonus(Math.min(500, bonuses.attackSpeed)),
+    skillHaste: roundBonus(Math.min(500, bonuses.skillHaste)),
     armorBonus: roundBonus(bonuses.armorBonus),
     critChanceBonus: roundBonus(bonuses.critChanceBonus),
     critDamageMul: roundBonus(bonuses.critDamageMul),
@@ -3004,7 +3038,7 @@ function calculateAccountLevelBonuses(accountLevel) {
     maxHpMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
     regenBonus: roundBonus(Math.min(2, gainedLevels * 0.04)),
     speedMul: roundBonus(1 + Math.min(0.15, gainedLevels * 0.003)),
-    skillCooldownMul: roundBonus(1 - Math.min(0.2, gainedLevels * 0.003)),
+    skillHaste: roundBonus(Math.min(20, gainedLevels * 0.3)),
     armorBonus: roundBonus(Math.min(6, gainedLevels * 0.12)),
     critChanceBonus: roundBonus(Math.min(0.15, gainedLevels * 0.003)),
     critDamageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
@@ -3026,12 +3060,15 @@ function applyPlayerGrowthBonuses(player, room) {
   const gear = sanitizeGearBonuses(loadout.gearBonuses);
   player.growthLoadout = loadout;
   player.damageMul *= accountBonuses.damageMul * bonuses.damageMul;
+  const classBaseDamage = Math.max(1, Number(classes[player.classId]?.damage || 1));
+  player.damageMul *= (classBaseDamage + gear.attackBonus) / classBaseDamage;
   player.damageMul *= gear.damageMul;
-  player.maxHp = Math.max(1, Math.round(player.maxHp * accountBonuses.maxHpMul * bonuses.maxHpMul * gear.maxHpMul));
+  player.maxHp = Math.max(1, Math.round((player.maxHp + gear.maxHpBonus) * accountBonuses.maxHpMul * bonuses.maxHpMul * gear.maxHpMul));
   player.hp = player.maxHp;
   player.regen += accountBonuses.regenBonus + bonuses.regenBonus + gear.regenBonus;
   player.speedMul *= accountBonuses.speedMul * bonuses.speedMul * gear.speedMul;
-  player.skillCooldownMul *= accountBonuses.skillCooldownMul * bonuses.skillCooldownMul * gear.skillCooldownMul;
+  player.attackSpeed = Math.min(500, (player.attackSpeed || 0) + bonuses.attackSpeed + gear.attackSpeed);
+  player.skillHaste = Math.min(500, (player.skillHaste || 0) + accountBonuses.skillHaste + bonuses.skillHaste + gear.skillHaste);
   player.armor = clamp((player.armor || 0) + accountBonuses.armorBonus + bonuses.armorBonus + gear.armorBonus, 0, 18);
   player.crit = clamp((player.crit || 0) + accountBonuses.critChanceBonus + bonuses.critChanceBonus + gear.critChanceBonus, 0, 0.85);
   player.critDamageMul *= accountBonuses.critDamageMul * bonuses.critDamageMul * gear.critDamageMul;
@@ -3133,8 +3170,8 @@ function getRoomAscensionLevel(room) {
 
 function getAbyssDifficulty(room) {
   const depth = Math.max(0, Math.floor(Number(room.abyssDepth || 0)));
-  const ascension = Math.max(0, Math.floor(Number(room.ascensionLevel || 0)));
-  const overcap = Math.max(0, ascension - 5);
+  const ascension = clamp(Math.floor(Number(room.ascensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
+  const profile = ASCENSION_DIFFICULTY_PROFILES[ascension] || ASCENSION_DIFFICULTY_PROFILES[0];
   const modifierId = room.challengeModifierId || "";
   const modifier = {
     spawnMul: modifierId === "elite_hunt" ? 1.08 : modifierId === "enemy_haste" ? 1.1 : 1,
@@ -3147,13 +3184,14 @@ function getAbyssDifficulty(room) {
   return {
     depth,
     ascension,
-    spawnMul: (1 + depth * 0.1 + ascension * 0.07 + overcap * 0.025) * modifier.spawnMul,
-    hpMul: (1 + depth * 0.16) * (1 + ascension * 0.18 + overcap * 0.06) * modifier.hpMul,
-    damageMul: (1 + depth * 0.09 + ascension * 0.06 + overcap * 0.012) * modifier.damageMul,
-    speedMul: (1 + Math.min(0.45, depth * 0.012 + ascension * 0.025 + overcap * 0.006)) * modifier.speedMul,
-    threatMul: (1 + depth * 0.08 + ascension * 0.09 + overcap * 0.03) * modifier.threatMul,
-    eliteBonus: Math.min(0.55, depth * 0.012 + ascension * 0.035 + overcap * 0.006 + modifier.eliteBonus),
-    rewardMul: (1 + ascension * 0.1) * (modifierId ? 1.15 : 1)
+    spawnMul: (1 + depth * 0.1) * profile.spawnMul * modifier.spawnMul,
+    hpMul: (1 + depth * 0.16) * profile.hpMul * modifier.hpMul,
+    damageMul: (1 + depth * 0.09) * profile.damageMul * modifier.damageMul,
+    speedMul: (1 + Math.min(0.24, depth * 0.012)) * profile.speedMul * modifier.speedMul,
+    cadenceMul: profile.cadenceMul,
+    threatMul: (1 + depth * 0.08) * (1 + ascension * 0.16) * modifier.threatMul,
+    eliteBonus: Math.min(0.55, depth * 0.012 + profile.eliteBonus + modifier.eliteBonus),
+    rewardMul: profile.rewardMul * (modifierId ? 1.15 : 1)
   };
 }
 
@@ -3167,7 +3205,7 @@ function calculateRunRewardSummary(result) {
   const progressReward = Math.floor(stagesCleared * 5 + highestLevel * 2 + totalRelics * 3 + Math.sqrt(totalScore) * 0.42);
   const victoryReward = result?.outcome === "victory" ? 45 : 0;
   const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
-  const ascensionMultiplier = 1 + ascensionLevel * 0.1;
+  const ascensionMultiplier = ASCENSION_DIFFICULTY_PROFILES[ascensionLevel]?.rewardMul || 1;
   const challengeMultiplier = result?.challengeModifierId ? 1.15 : 1;
   return {
     earnedShards: Math.max(3, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier * challengeMultiplier * 1.45)),
@@ -3269,7 +3307,8 @@ function createPlayer(id, name, classId, room) {
     damageMul: 1,
     speedMul: 1,
     cooldownMul: 1,
-    skillCooldownMul: 1,
+    attackSpeed: 0,
+    skillHaste: 0,
     rangeMul: 1,
     areaMul: 1,
     projectileSpeedMul: 1,
@@ -3442,7 +3481,8 @@ function resetPlayerForRun(player, room) {
   player.damageMul = 1;
   player.speedMul = 1;
   player.cooldownMul = 1;
-  player.skillCooldownMul = 1;
+  player.attackSpeed = 0;
+  player.skillHaste = 0;
   player.rangeMul = 1;
   player.areaMul = 1;
   player.projectileSpeedMul = 1;
@@ -3912,6 +3952,9 @@ function createTrainingDummy(room, index, anchor) {
     tauntTimer: 0,
     tauntTargetId: null,
     dummyReturnCooldown: 0,
+    trainingDamageTotal: 0,
+    trainingDamageSamples: [],
+    trainingLastHitAt: 0,
     xp: 0
   };
 }
@@ -4041,23 +4084,27 @@ function spawnSurvivalEnemies(room, now, force = false) {
   const players = Math.max(1, getActivePlayers(room).length);
   const solo = players === 1;
   const alive = room.enemies.filter((enemy) => enemy.hp > 0 && !enemy.trainingDummy).length;
-  const maxAlive = Math.round((solo ? 26 + minute * 3.6 : 32 + minute * 5) + (players - 1) * 9);
-  const batchTarget = force
+  const ascensionDifficulty = getAbyssDifficulty(room);
+  const baseMaxAlive = (solo ? 26 + minute * 3.6 : 32 + minute * 5) + (players - 1) * 9;
+  const maxAlive = Math.round(baseMaxAlive * ascensionDifficulty.spawnMul);
+  const baseBatchTarget = force
     ? solo
       ? 4
       : 5 + players
     : solo
       ? 2 + Math.floor(survival.elapsed / 180)
       : 2 + Math.floor(survival.elapsed / 120) + (players >= 3 ? 1 : 0);
+  const batchTarget = Math.ceil(baseBatchTarget * Math.min(1.5, 0.75 + ascensionDifficulty.spawnMul * 0.25));
   const batchSize = Math.min(maxAlive - alive, batchTarget);
-  const interval = solo ? 1.02 - elapsedRatio * 0.46 : 0.92 - elapsedRatio * 0.52;
+  const baseInterval = solo ? 1.02 - elapsedRatio * 0.46 : 0.92 - elapsedRatio * 0.52;
+  const interval = baseInterval / Math.min(1.35, ascensionDifficulty.spawnMul);
   survival.nextSpawnAt = now + Math.round(Math.max(0.4, interval) * 1000);
   if (batchSize <= 0) return;
 
   const rawEliteChance = survival.elapsed < 180
-    ? 0
-    : 0.035 + ((survival.elapsed - 180) / 360) * 0.2 + getAbyssDifficulty(room).eliteBonus;
-  const eliteChance = Math.min(solo ? 0.18 : 0.28, rawEliteChance * (solo ? 0.65 : 1));
+    ? ascensionDifficulty.eliteBonus * 0.5
+    : 0.035 + ((survival.elapsed - 180) / 360) * 0.2 + ascensionDifficulty.eliteBonus;
+  const eliteChance = Math.min(solo ? 0.48 : 0.58, rawEliteChance * (solo ? 0.8 : 1));
   for (let index = 0; index < batchSize; index += 1) {
     const type = pickEnemyType(room.wave, () => nextRoomRandom(room));
     const elite = nextRoomRandom(room) < eliteChance && alive + index >= 6;
@@ -4078,9 +4125,7 @@ function spawnScheduledSurvivalMiniBosses(room) {
 }
 
 function spawnSurvivalMiniBossWave(room, minute, count) {
-  const scheduledCount = Math.max(1, Math.floor(count || 1));
-  const solo = getActivePlayers(room).length === 1;
-  const total = solo ? Math.max(1, Math.ceil(scheduledCount * 0.5)) : scheduledCount;
+  const total = 1;
   const centerX = room.world.w * 0.5;
   const centerY = room.world.h * 0.5;
   const ring = Math.min(330, Math.max(220, Math.min(room.world.w, room.world.h) * 0.28));
@@ -4581,7 +4626,7 @@ function spawnChapterBoss(room) {
   if (!boss) return;
 
   const tuning = getChapterBossOpeningTuning(room);
-  boss.maxHp = Math.max(tuning.minHp, Math.round(boss.maxHp * tuning.hpMul));
+  boss.maxHp = Math.max(tuning.minHp * CHAPTER_BOSS_HEALTH_MUL, Math.round(boss.maxHp * tuning.hpMul * CHAPTER_BOSS_HEALTH_MUL));
   boss.hp = boss.maxHp;
   boss.damage = Math.max(1, Math.round(boss.damage * tuning.damageMul));
   boss.bossPhase = 1;
@@ -4711,7 +4756,7 @@ function spawnMiniBoss(room, options = {}) {
   boss.color = miniProfile.color;
   boss.miniPattern = miniProfile.pattern;
   boss.patternMix = miniProfile.patternMix || boss.patternMix || null;
-  boss.maxHp = Math.max(tuning.minHp, Math.round(boss.maxHp * miniProfile.hpMul * tuning.hpMul));
+  boss.maxHp = Math.max(tuning.minHp * MINIBOSS_HEALTH_MUL, Math.round(boss.maxHp * miniProfile.hpMul * tuning.hpMul * MINIBOSS_HEALTH_MUL));
   boss.hp = boss.maxHp;
   boss.damage = Math.max(tuning.minDamage, Math.round(boss.damage * miniProfile.damageMul * tuning.damageMul));
   boss.radius = Math.max(36, Math.round(boss.radius * 0.76));
@@ -5776,10 +5821,12 @@ function spawnEnemy(room, type, options = {}) {
     1 + Math.max(0, room.wave - 1) * 0.05 + (chapter - 1) * 0.09 + (depth - 1) * 0.026 + (nodeKind === "boss" ? 0.1 : nodeKind === "elite" ? 0.055 : 0);
   const speedScale = 1 + Math.min(0.36, Math.max(0, room.wave - 1) * 0.009 + (chapter - 1) * 0.018 + (depth - 1) * 0.007);
   const stageDifficulty = getStageDifficulty(room);
+  const abyssDifficulty = getAbyssDifficulty(room);
   const cadenceMul =
     Math.max(0.72, 1 - Math.max(0, room.wave - 1) * 0.003 - (chapter - 1) * 0.009 - (depth - 1) * 0.0015 - (nodeKind === "boss" ? 0.02 : 0)) *
     stageDifficulty.cadenceMul *
-    chapterDifficulty.cadenceMul;
+    chapterDifficulty.cadenceMul *
+    abyssDifficulty.cadenceMul;
   const partyDifficulty = getPartyDifficulty(room);
   const elite = Boolean(options.elite);
   const affix = options.affix || (elite ? pickEliteAffix(type, random) : "");
@@ -5798,7 +5845,6 @@ function spawnEnemy(room, type, options = {}) {
   const bossSpeedMul = bossProfile ? bossProfile.speedMul : 1;
   const bossRadiusMul = bossProfile ? bossProfile.radiusMul : 1;
   const bossXpMul = bossProfile ? bossProfile.xpMul : 1;
-  const abyssDifficulty = getAbyssDifficulty(room);
   const maxHp = Math.round(
     def.hp *
       waveScale *
@@ -5828,6 +5874,9 @@ function spawnEnemy(room, type, options = {}) {
     phaseTransitionTimer: 0,
     phaseTransitionTimerMax: 0,
     phaseAuraColor: "",
+    lethalCastTimer: 0,
+    lethalCastTimerMax: 0,
+    lethalCastLabel: "",
     x,
     y,
     hp: maxHp,
@@ -6010,10 +6059,17 @@ function updateBotCombatInput(room, bot, dt, now, lobbyMode) {
     return;
   }
 
+  const lethalSafeZone = !lobbyMode ? findBotLethalSafeZone(room, bot) : null;
+  if (lethalSafeZone) {
+    moveBotToLethalSafeZone(room, bot, lethalSafeZone, now);
+    return;
+  }
+
   const target = findBotPriorityTarget(room, bot, lobbyMode);
   const avoidance = getBotAvoidanceVector(room, bot);
-  let moveX = avoidance.x * 1.35;
-  let moveY = avoidance.y * 1.35;
+  const survivalWeight = bot.classId === "warrior" ? 1.05 : 1.55;
+  let moveX = avoidance.x * survivalWeight;
+  let moveY = avoidance.y * survivalWeight;
   let aimX = bot.input.aimX;
   let aimY = bot.input.aimY;
   let attacking = false;
@@ -6074,11 +6130,52 @@ function updateBotCombatInput(room, bot, dt, now, lobbyMode) {
   bot.input.attacking = attacking;
 }
 
+function findBotLethalSafeZone(room, bot) {
+  const judgment = (room.hazards || []).find((hazard) =>
+    !hazard.dead && hazard.type === "boss_field_judgment" && (hazard.armTime || 0) > 0
+  );
+  if (!judgment) return null;
+  let best = null;
+  let bestDistance = Infinity;
+  for (const zone of room.hazards || []) {
+    if (zone.dead || zone.type !== "boss_safe_zone" || zone.mechanicId !== judgment.mechanicId) continue;
+    const current = distance(bot, zone);
+    if (current < bestDistance) {
+      best = zone;
+      bestDistance = current;
+    }
+  }
+  return best ? { zone: best, distance: bestDistance, timeLeft: judgment.armTime || 0 } : null;
+}
+
+function moveBotToLethalSafeZone(room, bot, safeZone, now) {
+  const brain = ensureBotBrain(bot);
+  const dx = safeZone.zone.x - bot.x;
+  const dy = safeZone.zone.y - bot.y;
+  const dist = Math.hypot(dx, dy) || 1;
+  const safeInside = dist <= Math.max(24, safeZone.zone.radius * 0.58);
+  bot.input.mx = safeInside ? 0 : clamp(dx / dist, -1, 1);
+  bot.input.my = safeInside ? 0 : clamp(dy / dist, -1, 1);
+  bot.input.aimX = safeZone.zone.x;
+  bot.input.aimY = safeZone.zone.y;
+  bot.input.attacking = false;
+  if (!safeInside && safeZone.timeLeft < 1.15 && now >= brain.nextDashAt && canUseDash(bot)) {
+    bot.input.dashSeq += 1;
+    brain.nextDashAt = now + 420;
+  }
+}
+
 function findBotPriorityTarget(room, bot, lobbyMode = false) {
   const chest = findNearestBotChest(room, bot);
   const enemy = findNearestBotEnemy(room, bot, lobbyMode);
   const xp = findNearestBotXp(room, bot);
+  const healthPotion = !lobbyMode ? findNearestBotHealthPotion(room, bot) : null;
   const stageKind = getActiveStageKind(room);
+  const hpRatio = bot.hp / Math.max(1, bot.maxHp);
+
+  if (healthPotion && (hpRatio <= 0.35 || (hpRatio <= 0.62 && healthPotion.distance < 720))) {
+    return { kind: "health_potion", entity: healthPotion.entity, distance: healthPotion.distance };
+  }
 
   if (chest && (stageKind === "reward" || !enemy || enemy.distance > 260 || chest.distance < 110)) {
     return { kind: "chest", entity: chest.entity, distance: chest.distance };
@@ -6118,6 +6215,20 @@ function findNearestBotXp(room, bot) {
     const current = distance(bot, orb);
     if (current < bestDistance) {
       best = orb;
+      bestDistance = current;
+    }
+  }
+  return best ? { entity: best, distance: bestDistance } : null;
+}
+
+function findNearestBotHealthPotion(room, bot) {
+  let best = null;
+  let bestDistance = Infinity;
+  for (const pickup of room.fieldPickups || []) {
+    if (pickup.dead || pickup.type !== "health_potion") continue;
+    const current = distance(bot, pickup);
+    if (current < bestDistance) {
+      best = pickup;
       bestDistance = current;
     }
   }
@@ -6183,6 +6294,14 @@ function getBotAvoidanceVector(room, bot) {
 
   for (const hazard of room.hazards || []) {
     if (!hazard.hostile || hazard.dead) continue;
+    if (hazard.type === "boss_field_judgment") continue;
+    if (hazard.type === "boss_beam" || (hazard.length && hazard.width)) {
+      const beam = getBotBeamAvoidance(bot, hazard);
+      x += beam.x;
+      y += beam.y;
+      forceDash = forceDash || beam.forceDash;
+      continue;
+    }
     const dist = getDistanceToHazard(bot, hazard);
     const dangerRadius = (hazard.radius || hazard.width || 70) + 84;
     if (dist > dangerRadius) continue;
@@ -6209,15 +6328,112 @@ function getBotAvoidanceVector(room, bot) {
     if (dist < 58 + (projectile.radius || 0)) forceDash = true;
   }
 
+  const pressure = getBotArenaPressureVector(room, bot);
+  x += pressure.x;
+  y += pressure.y;
+  forceDash = forceDash || pressure.forceDash;
+
   return { x, y, forceDash };
+}
+
+function getBotBeamAvoidance(bot, hazard) {
+  const angle = hazard.angle || 0;
+  const length = hazard.length || hazard.radius || 800;
+  const startX = hazard.x;
+  const startY = hazard.y;
+  const endX = startX + Math.cos(angle) * length;
+  const endY = startY + Math.sin(angle) * length;
+  const nearest = nearestPointOnSegment(bot.x, bot.y, startX, startY, endX, endY);
+  let dx = bot.x - nearest.x;
+  let dy = bot.y - nearest.y;
+  let dist = Math.hypot(dx, dy);
+  const dangerRadius = (hazard.width || 34) + getPlayerCollisionRadius(bot) + 62;
+  if (dist > dangerRadius) return { x: 0, y: 0, forceDash: false };
+  if (dist < 1) {
+    const side = ensureBotBrain(bot).strafeDir || 1;
+    const canonicalAngle = ((angle % Math.PI) + Math.PI) % Math.PI;
+    dx = -Math.sin(canonicalAngle) * side;
+    dy = Math.cos(canonicalAngle) * side;
+    dist = 1;
+  }
+  const timeLeft = Number.isFinite(hazard.armTime) ? hazard.armTime : 0;
+  const urgency = timeLeft <= 0.48 ? 3.4 : timeLeft <= 0.85 ? 2.5 : 1.75;
+  const weight = (1 - dist / dangerRadius) * urgency;
+  return {
+    x: (dx / dist) * weight,
+    y: (dy / dist) * weight,
+    forceDash: timeLeft <= 0.48 && dist < dangerRadius * 0.78
+  };
+}
+
+function nearestPointOnSegment(px, py, ax, ay, bx, by) {
+  const abx = bx - ax;
+  const aby = by - ay;
+  const lengthSq = abx * abx + aby * aby || 1;
+  const t = clamp(((px - ax) * abx + (py - ay) * aby) / lengthSq, 0, 1);
+  return { x: ax + abx * t, y: ay + aby * t };
+}
+
+function getBotArenaPressureVector(room, bot) {
+  const ranged = bot.classId !== "warrior" && bot.classId !== "martialist" && bot.classId !== "assassin";
+  const edgeMargin = ranged ? 230 : 145;
+  let x = 0;
+  let y = 0;
+  let edgeAxes = 0;
+  if (bot.x < edgeMargin) {
+    x += (edgeMargin - bot.x) / edgeMargin;
+    edgeAxes += 1;
+  } else if (bot.x > room.world.w - edgeMargin) {
+    x -= (bot.x - (room.world.w - edgeMargin)) / edgeMargin;
+    edgeAxes += 1;
+  }
+  if (bot.y < edgeMargin) {
+    y += (edgeMargin - bot.y) / edgeMargin;
+    edgeAxes += 1;
+  } else if (bot.y > room.world.h - edgeMargin) {
+    y -= (bot.y - (room.world.h - edgeMargin)) / edgeMargin;
+    edgeAxes += 1;
+  }
+
+  let crowdX = 0;
+  let crowdY = 0;
+  let crowdCount = 0;
+  const crowdRadius = ranged ? 340 : 245;
+  for (const enemy of room.enemies || []) {
+    if (enemy.hp <= 0) continue;
+    const dx = bot.x - enemy.x;
+    const dy = bot.y - enemy.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    if (dist > crowdRadius) continue;
+    const weight = 1 - dist / crowdRadius;
+    crowdX += (dx / dist) * weight;
+    crowdY += (dy / dist) * weight;
+    crowdCount += 1;
+  }
+  const crowdThreshold = ranged ? 4 : 7;
+  if (crowdCount >= crowdThreshold) {
+    const crowdLength = Math.hypot(crowdX, crowdY) || 1;
+    x += (crowdX / crowdLength) * (ranged ? 1.4 : 0.75);
+    y += (crowdY / crowdLength) * (ranged ? 1.4 : 0.75);
+    const centerDx = room.world.w * 0.5 - bot.x;
+    const centerDy = room.world.h * 0.5 - bot.y;
+    const centerLength = Math.hypot(centerDx, centerDy) || 1;
+    x += (centerDx / centerLength) * (edgeAxes > 0 ? 1.5 : 0.45);
+    y += (centerDy / centerLength) * (edgeAxes > 0 ? 1.5 : 0.45);
+  }
+  return {
+    x,
+    y,
+    forceDash: ranged && crowdCount >= 6 && edgeAxes > 0
+  };
 }
 
 function getDistanceToHazard(point, hazard) {
   if (hazard.length && hazard.width) {
     const angle = hazard.angle || 0;
-    const dx = Math.cos(angle) * hazard.length * 0.5;
-    const dy = Math.sin(angle) * hazard.length * 0.5;
-    return distanceToSegment(point, hazard.x - dx, hazard.y - dy, hazard.x + dx, hazard.y + dy) - hazard.width * 0.5;
+    const endX = hazard.x + Math.cos(angle) * hazard.length;
+    const endY = hazard.y + Math.sin(angle) * hazard.length;
+    return distanceToSegment(point, hazard.x, hazard.y, endX, endY) - hazard.width;
   }
   return distance(point, hazard);
 }
@@ -7532,7 +7748,7 @@ function performAttack(room, player, now) {
       vx: aim.x * projectileSpeed,
       vy: aim.y * projectileSpeed,
       distanceLeft: getPlayerProjectileTravelDistance(room, projectileRadius),
-      damage: def.damage * getEngineerMechaAttackDamageMul(player),
+      damage: def.damage * getEngineerMechaAttackDamageMul(player) * 1.1,
       radius: projectileRadius,
       pierce: 0,
       splash: 0,
@@ -7914,7 +8130,7 @@ function performSkill(room, player, slot, now) {
       });
       for (const enemy of room.enemies) {
         if (distance(player, enemy) <= radius + enemy.radius) {
-          const dealt = dealDamage(room, enemy, def.damage * 2.35, player.id, { knockback: 175 });
+          const dealt = dealDamage(room, enemy, def.damage * 2.55, player.id, { knockback: 175 });
           if (dealt > 0) addMeleeImpact(room, enemy, "spin_impact", 1.08);
         }
       }
@@ -8041,7 +8257,7 @@ function performSkill(room, player, slot, now) {
         contactRadius,
         gatherRadius,
         damageMul:
-          2.32 *
+          2.48 *
           (hasUpgrade(player, "warrior_colossus") ? 1.1 : 1),
         knockback: 520 * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
         pushScale: 3.65 * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
@@ -8082,7 +8298,7 @@ function performSkill(room, player, slot, now) {
         const dot = (dx / dist) * aim.x + (dy / dist) * aim.y;
         if (dist <= reach + enemy.radius && dot > -0.25) {
           const bossExecutionBonus = hasExecution && (enemy.type === "boss" || enemy.bossId) ? 1.35 : 1;
-          const dealt = dealDamage(room, enemy, def.damage * 3.35 * bossExecutionBonus, player.id, {
+          const dealt = dealDamage(room, enemy, def.damage * 3.7 * bossExecutionBonus, player.id, {
             knockback: 220
           });
           const executionReady = dealt > 0 && hasExecution && canWarriorCleaveExecute(enemy);
@@ -8326,7 +8542,7 @@ function performSkill(room, player, slot, now) {
       const splitCore = hasUpgrade(player, "mage_storm_core");
       const gearSplit = Boolean(player.mageStarSplit || player.arcanistPiercingFragments);
       const piercingFragments = Boolean(player.arcanistPiercingFragments);
-      const bolts = 12 + getProjectileCountBonus(player);
+      const bolts = 10 + getProjectileCountBonus(player);
       for (let i = 0; i < bolts; i += 1) {
         const angle = (Math.PI * 2 * i) / bolts;
         const lane = i - (bolts - 1) / 2;
@@ -8339,10 +8555,10 @@ function performSkill(room, player, slot, now) {
           vx: Math.cos(angle) * (homingStar ? 520 : 470),
           vy: Math.sin(angle) * (homingStar ? 520 : 470),
           distanceLeft: getPlayerProjectileTravelDistance(room, 14 * player.areaMul),
-          damage: def.damage * (homingStar ? 1.3 : 1.22),
+          damage: def.damage * (homingStar ? 1.2 : 1.14),
           radius: 14 * player.areaMul,
           pierce: 1,
-          splash: 108 * player.areaMul + player.splashBonus,
+          splash: 96 * player.areaMul + player.splashBonus,
           poison: false,
           slow: 0,
           chain: 0,
@@ -8355,7 +8571,7 @@ function performSkill(room, player, slot, now) {
           splitOnHit: splitCore || gearSplit,
           splitDepth: 0,
           splitShardCount: (splitCore ? 3 : 2) + (piercingFragments ? 2 : 0),
-          splitDamageMul: splitCore ? (piercingFragments ? 0.25 : 0.32) : 0.22,
+          splitDamageMul: splitCore ? (piercingFragments ? 0.16 : 0.2) : 0.15,
           splitShardPierce: piercingFragments ? 1 : 0,
           style: "star_orb",
           hostile: false,
@@ -8417,9 +8633,9 @@ function performSkill(room, player, slot, now) {
         armTimeMax: impactDelay,
         damage:
           def.damage *
-          5.15 *
-          (hasUpgrade(player, "mage_wildfire") ? 1.15 : 1) *
-          (hasUpgrade(player, "mage_apocalypse") ? 1.18 : 1),
+          4.6 *
+          (hasUpgrade(player, "mage_wildfire") ? 1.1 : 1) *
+          (hasUpgrade(player, "mage_apocalypse") ? 1.12 : 1),
         growth: hasUpgrade(player, "mage_meteor_growth"),
         wildfire: hasUpgrade(player, "mage_wildfire") || hasUpgrade(player, "mage_apocalypse"),
         apocalypse: hasUpgrade(player, "mage_apocalypse"),
@@ -9477,8 +9693,13 @@ function getEngineerMechaMoveMultiplier(player) {
 }
 
 function getAttackCooldownMultiplier(player) {
-  if (!isEngineerMechaActive(player)) return 1;
-  return ENGINEER_MECHA_ATTACK_COOLDOWN_MUL;
+  const classMul = isEngineerMechaActive(player) ? ENGINEER_MECHA_ATTACK_COOLDOWN_MUL : 1;
+  return classMul * getAttackSpeedCooldownMultiplier(player);
+}
+
+function getAttackSpeedCooldownMultiplier(player) {
+  const attackSpeed = clamp(Number(player?.attackSpeed) || 0, 0, 500);
+  return 100 / (100 + attackSpeed);
 }
 
 function getEngineerMechaLaserAreaMul(player) {
@@ -10083,6 +10304,7 @@ function pointInTriangle(point, a, b, c) {
 
 function deployEngineerTurret(room, player, x, y, def, mini = false) {
   const armTime = mini ? 0.38 : 0.46;
+  const fireRateMul = getEngineerFireRateMul(player);
   room.hazards.push({
     id: nextHazardId++,
     type: "engineer_turret",
@@ -10092,11 +10314,12 @@ function deployEngineerTurret(room, player, x, y, def, mini = false) {
     radius: mini ? 17 : 23,
     timer: (mini ? 12 : 17.5) * getEngineerDurationMul(player),
     fireTimer: 0,
-    fireRate: (mini ? 0.64 : 0.5) * getEngineerFireRateMul(player),
-    missileTimer: hasUpgrade(player, "engineer_turret_missile") ? (mini ? 1.65 : 1.35) : 999,
+    fireRate: (mini ? 0.64 : 0.5) * fireRateMul,
+    missileTimer: hasUpgrade(player, "engineer_turret_missile") ? (mini ? 1.65 : 1.35) * fireRateMul : 999,
+    missileAttackSpeedMul: fireRateMul,
     armTime,
     armTimeMax: armTime,
-    damage: def.damage * (mini ? 0.68 : 1.02),
+    damage: def.damage * (mini ? 0.72 : 1.1),
     range: (hasUpgrade(player, "engineer_rail_turret") ? 560 : 440) * player.rangeMul,
     rail: hasUpgrade(player, "engineer_rail_turret"),
     missileModule: hasUpgrade(player, "engineer_turret_missile"),
@@ -10169,7 +10392,7 @@ function consumeEngineerMineCharge(player) {
 }
 
 function getEngineerAutoMineCooldown(player) {
-  return 7.5 * (player.skillCooldownMul || 1);
+  return 7.5 * skillSystem.getSkillCooldownMultiplier(player);
 }
 
 function updateEngineerAutoMine(room, player, dt) {
@@ -10185,7 +10408,8 @@ function updateEngineerAutoMine(room, player, dt) {
     player.engineerAutoMineInitialized = true;
     return;
   }
-  if (room.status !== "combat" || player.hp <= 0) return;
+  const activeInTraining = room.status === "lobby" && room.enemies.some((enemy) => enemy.trainingDummy);
+  if ((room.status !== "combat" && !activeInTraining) || player.hp <= 0) return;
   player.engineerAutoMineTimer = Math.max(0, (player.engineerAutoMineTimer || 0) - dt);
   if (player.engineerAutoMineTimer > 0) return;
   const angle = nextRoomRandom(room) * Math.PI * 2;
@@ -10263,7 +10487,9 @@ function getEngineerDurationMul(player) {
 }
 
 function getEngineerFireRateMul(player) {
-  return (hasUpgrade(player, "engineer_calibration") ? 0.86 : 1) * (player.droneCooldownMul || 1);
+  return (hasUpgrade(player, "engineer_calibration") ? 0.86 : 1) *
+    (player.droneCooldownMul || 1) *
+    getAttackSpeedCooldownMultiplier(player);
 }
 
 function overclockEngineerDeployables(room, player, def) {
@@ -10349,10 +10575,11 @@ function updateEngineerTurret(room, hazard, dt) {
       damage: hazard.damage * 1.45 * (hazard.overclockTimer > 0 ? 1.18 : 1),
       radius: 15,
       pierce: 0,
-      splash: 140,
+      splash: 140 * (owner.areaMul || 1),
       poison: false,
       slow: 0,
       chain: 0,
+      skillTag: "engineer_turret_missile",
       style: "engineer_missile",
       hostile: false,
       dead: false
@@ -10364,7 +10591,10 @@ function updateEngineerTurret(room, hazard, dt) {
       style: "engineer_missile_launch",
       duration: 0.34
     });
-    hazard.missileTimer = (hazard.rail ? 1.25 : 1.55) * (hazard.overclockTimer > 0 ? 0.72 : 1);
+    hazard.missileTimer = Math.max(
+      0.32,
+      (hazard.rail ? 1.25 : 1.55) * (hazard.missileAttackSpeedMul || 1) * (hazard.overclockTimer > 0 ? 0.72 : 1),
+    );
   }
   if (!hazard.rail) {
     addEffect(room, "shot", hazard.x, hazard.y, {
@@ -10451,10 +10681,11 @@ function updateEngineerDrone(room, hazard, dt) {
           damage: hazard.damage * 1.45 * (hazard.overclockTimer > 0 ? 1.22 : 1),
           radius: 12,
           pierce: 0,
-          splash: 120,
+          splash: 120 * (owner.areaMul || 1),
           poison: false,
           slow: 0,
           chain: 0,
+          skillTag: "engineer_drone_missile",
           style: "drone_missile",
           hostile: false,
           dead: false
@@ -10893,7 +11124,8 @@ function updateProjectiles(room, dt) {
         const explosiveArrow = Boolean(projectile.explosiveArrow);
         addEffect(room, missileSplash || explosiveArrow ? "explosion" : "arcane", enemy.x, enemy.y, {
           color: missileSplash || explosiveArrow ? "#f97316" : splashColor,
-          radius: Math.min(150, projectile.splash),
+          radius: projectile.splash,
+          rangeRadius: projectile.splash,
           style: missileSplash
             ? "engineer_missile_explosion"
             : explosiveArrow
@@ -11401,7 +11633,7 @@ function updateHazards(room, dt) {
             radius: hazard.radius * (hazard.apocalypse ? 1.02 : 0.92),
             timer: hazard.apocalypse ? 6.2 : 5.2,
             tick: 0.12,
-            damage: Math.max(1, getPlayerAttackDamage(firePoolOwner, "mage") * 0.16),
+            damage: Math.max(1, getPlayerAttackDamage(firePoolOwner, "mage") * 0.13),
             burnTime: hazard.apocalypse ? 4.1 : 3.4,
             hostile: false,
             dead: false
@@ -11418,9 +11650,18 @@ function updateHazards(room, dt) {
         for (const enemy of room.enemies) {
           if (enemy.hp <= 0 || distance(hazard, enemy) > hazard.radius + enemy.radius) continue;
           const dealt = dealDamage(room, enemy, hazard.damage, hazard.ownerId, { silent: true, element: "burn" });
+          if (dealt > 0) {
+            addEffect(room, "damage", enemy.x, enemy.y - enemy.radius, {
+              value: Math.max(1, Math.round(dealt)),
+              color: "#fb923c",
+              radius: enemy.radius + 8,
+              style: "fire_pool_tick",
+              targetId: enemy.id
+            });
+          }
           applyBurnToEnemy(room, enemy, hazard.ownerId, dealt, {
             duration: hazard.burnTime || ENEMY_BURN_DURATION,
-            totalDamageRatio: 0.35
+            totalDamageRatio: 0.25
           });
         }
         hazard.tick = 0.5;
@@ -11682,6 +11923,10 @@ function updateEnemies(room, dt, now) {
       continue;
     }
     enemy.bossArrivalStasisUntil = 0;
+
+    // Phase gates must advance before crowd control can short-circuit boss AI.
+    // Otherwise repeated knockback or freeze can leave the boss locked at a gate forever.
+    if (startPendingBossPhaseTransition(room, enemy)) continue;
 
     if (updateEnemyKnockback(room, enemy, dt)) {
       continue;
@@ -12473,8 +12718,26 @@ function getMiniBossPhaseTransition(enemy) {
   };
 }
 
+function startPendingBossPhaseTransition(room, enemy, preferredTarget = null) {
+  if (enemy.type !== "boss" || enemy.trainingDummy || (enemy.phaseTransitionTimer || 0) > 0) return false;
+  const transition = enemy.miniBoss ? getMiniBossPhaseTransition(enemy) : getBossPhaseTransition(enemy);
+  if (!transition) return false;
+  const target = preferredTarget && preferredTarget.hp > 0 && !preferredTarget.spectator
+    ? preferredTarget
+    : getEnemyTarget(room, enemy);
+  if (!target) return false;
+  const profile = enemy.miniBoss ? getMiniBossProfile(room.floor) : getBossProfileById(enemy.bossId) || getChapterBossProfile(room.floor);
+  applyBossPhaseTransition(room, enemy, profile, target, transition);
+  return true;
+}
+
 function updateBossEnemy(room, enemy, target, dist, dt) {
   const profile = enemy.miniBoss ? getMiniBossProfile(room.floor) : getBossProfileById(enemy.bossId) || getChapterBossProfile(room.floor);
+  if ((enemy.lethalCastTimer || 0) > 0) {
+    enemy.windup = null;
+    enemy.chargeMove = null;
+    return true;
+  }
   if ((enemy.phaseTransitionTimer || 0) > 0) return true;
   const phaseTransition = enemy.miniBoss ? getMiniBossPhaseTransition(enemy) : getBossPhaseTransition(enemy);
   if (phaseTransition) {
@@ -12572,7 +12835,7 @@ function updateBossOverlapPressure(room, enemy, target, dt, profile) {
     }
   }
 
-  enemy.bossPressureTimer = (phaseThree ? 4.25 : 5.25) * Math.max(0.62, enemy.cadenceMul || 1);
+  enemy.bossPressureTimer = (phaseThree ? 3.95 : 4.9) * Math.max(0.62, enemy.cadenceMul || 1);
 }
 
 function updateExecutionBoss(room, enemy, target, dist, dt, profile) {
@@ -12682,7 +12945,7 @@ function updateExecutionBoss(room, enemy, target, dist, dt, profile) {
     });
   }
 
-  enemy.executionPatternTimer = phase >= 4 ? 1.3 : phase >= 3 ? 1.65 : phase >= 2 ? 2 : 2.4;
+  enemy.executionPatternTimer = phase >= 4 ? 1.18 : phase >= 3 ? 1.5 : phase >= 2 ? 1.82 : 2.18;
   return true;
 }
 
@@ -12816,10 +13079,33 @@ function updateDuelistMiniBoss(room, enemy, target, dist, dt, profile) {
         damageMul: 0.48,
         style: "mini_duelist_guard_break"
       });
+    } else if (pattern === "duelist_pinwheel") {
+      startBossSpiralBarrage(room, enemy, profile, {
+        delay: 0.46,
+        waves: 5,
+        count: 10,
+        gapSize: 2,
+        waveInterval: 0.3,
+        speed: 430,
+        damageMul: 0.18,
+        rotationStep: 0.42,
+        style: "mini_duelist_blade",
+        damageType: "mini_duelist_pinwheel"
+      });
+    } else if (pattern === "duelist_pincer") {
+      castBossBeamFan(room, enemy, profile, 4, Math.atan2(target.y - enemy.y, target.x - enemy.x), {
+        spread: 2.45,
+        armTime: 1.16,
+        length: 780,
+        width: 25,
+        damageMul: 0.44,
+        style: "mini_duelist_pincer"
+      });
+      bossShockwave(room, enemy, profile, 178, { armTime: 1.08, damageMul: 0.4, knockback: 52 });
     } else {
       startMiniCleave(room, enemy, target, profile, 142, 0.45);
     }
-    setSpecialPatternTimer(enemy, "miniboss", 2.75 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+    setSpecialPatternTimer(enemy, "miniboss", 2.48 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
     return true;
   }
 
@@ -12879,6 +13165,37 @@ function updatePlagueMiniBoss(room, enemy, target, dist, dt, profile) {
       style: "venom_spit",
       damageType: "mini_plague_spit"
     });
+  } else if (pattern === "plague_spore_clock") {
+    startBossSpiralBarrage(room, enemy, profile, {
+      delay: 0.5,
+      waves: 6,
+      count: 12,
+      gapSize: 2,
+      waveInterval: 0.34,
+      speed: 345,
+      damageMul: 0.13,
+      rotationStep: -0.36,
+      poison: 0.8 + room.wave * 0.04,
+      poisonDuration: 1.8,
+      style: "hive_spore_bolt",
+      damageType: "mini_plague_spore_clock"
+    });
+  } else if (pattern === "plague_quarantine") {
+    castBossGapBloom(room, enemy, profile, target, {
+      count: 8,
+      ring: 265,
+      radius: 62,
+      armTime: 1.3,
+      damageMul: 0.42,
+      style: "mini_plague_quarantine"
+    });
+    castBossAcidPools(room, enemy, profile, target, 2, {
+      radius: 74,
+      armTime: 1.08,
+      poolTime: 2.8,
+      damageMul: 0.12,
+      poison: 1.1 + room.wave * 0.06
+    });
   } else {
     enemy.barrier = Math.max(enemy.barrier || 0, Math.round(enemy.maxHp * 0.075));
     enemy.barrierTimer = Math.max(enemy.barrierTimer || 0, 3.8);
@@ -12886,7 +13203,7 @@ function updatePlagueMiniBoss(room, enemy, target, dist, dt, profile) {
     addEffect(room, "shield", enemy.x, enemy.y, { color: profile.color, radius: enemy.radius + 38, style: "enemy_barrier" });
   }
 
-  setSpecialPatternTimer(enemy, "miniboss", 3.05 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+  setSpecialPatternTimer(enemy, "miniboss", 2.72 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
   return true;
 }
 
@@ -12922,7 +13239,7 @@ function updateHunterMiniBoss(room, enemy, target, dist, dt, profile) {
         style: "stalker_shuriken",
         damageType: "mini_shuriken"
       });
-      setSpecialPatternTimer(enemy, "miniboss", 2.65 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+      setSpecialPatternTimer(enemy, "miniboss", 2.4 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
     } else if (pattern === "hunter_crossfire") {
       castBossBeamFan(room, enemy, profile, 3, Math.atan2(target.y - enemy.y, target.x - enemy.x), {
         spread: 0.72,
@@ -12932,10 +13249,43 @@ function updateHunterMiniBoss(room, enemy, target, dist, dt, profile) {
         damageMul: 0.5,
         style: "mini_hunter_crossfire"
       });
-      setSpecialPatternTimer(enemy, "miniboss", 2.9 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+      setSpecialPatternTimer(enemy, "miniboss", 2.62 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
     } else if (pattern === "hunter_marked_blast") {
       castBossBlasts(room, enemy, profile, enemy.bossPhase >= 2 ? 2 : 1, { armTimeMul: 1.2, radiusMul: 0.7 });
-      setSpecialPatternTimer(enemy, "miniboss", 2.85 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+      setSpecialPatternTimer(enemy, "miniboss", 2.56 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+    } else if (pattern === "hunter_blink_ring") {
+      repositionVoidBoss(room, enemy, target, profile);
+      startBossProjectileVolley(room, enemy, null, profile, {
+        shape: "ring",
+        armTime: 0.82,
+        count: 12,
+        speed: 500,
+        damageMul: 0.38,
+        radius: 6,
+        style: "stalker_shuriken",
+        damageType: "mini_hunter_blink_ring"
+      });
+      setSpecialPatternTimer(enemy, "miniboss", 2.48 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
+    } else if (pattern === "hunter_ricochet") {
+      castBossCrossBeams(room, enemy, profile, 5, {
+        rotation: Math.atan2(target.y - enemy.y, target.x - enemy.x) + Math.PI / 5,
+        armTime: 1.12,
+        width: 22,
+        damageMul: 0.42,
+        style: "mini_hunter_ricochet"
+      });
+      startBossProjectileVolley(room, enemy, target, profile, {
+        armTime: 0.74,
+        count: 4,
+        spread: 0.58,
+        range: 760,
+        speed: 640,
+        damageMul: 0.42,
+        radius: 5,
+        style: "stalker_shuriken",
+        damageType: "mini_hunter_ricochet"
+      });
+      setSpecialPatternTimer(enemy, "miniboss", 2.62 * getSpecialPatternCooldownMultiplier(enemy, "miniboss"));
     } else {
       const windupTime = getEnemyTelegraphTime(room, enemy, "special", 0.92) * Math.max(0.95, enemy.cadenceMul || 1);
       const predicted = predictPlayerPosition(room, enemy, target, 760, windupTime, getEnemyAimAccuracy(room, enemy) * 0.92);
@@ -13148,6 +13498,39 @@ function updateChargeBoss(room, enemy, target, dist, dt, profile) {
         damageMul: enemy.bossPhase >= 3 ? 0.78 : 0.68,
         style: "iron_sweeping_arc"
       });
+    } else if (pattern === "iron_anvil_corridor") {
+      castBossFieldJudgment(room, enemy, profile, target, {
+        armTime: enemy.bossPhase >= 3 ? 2.18 : 2.42,
+        safeRadius: enemy.bossPhase >= 3 ? 122 : 136,
+        safeCount: 1,
+        style: "iron_anvil_corridor"
+      });
+      startChargeWindup(room, enemy, target, {
+        windupTime: enemy.bossPhase >= 3 ? 0.58 : 0.68,
+        radius: enemy.bossPhase >= 3 ? 148 : 134,
+        style: "iron_anvil_charge",
+        color: profile.color,
+        accuracyBonus: 0.24,
+        chainCount: enemy.bossPhase >= 3 ? 2 : 1
+      });
+    } else if (pattern === "iron_rotor_barrage") {
+      startBossSpiralBarrage(room, enemy, profile, {
+        delay: 0.48,
+        waves: enemy.bossPhase >= 3 ? 9 : 7,
+        count: enemy.bossPhase >= 3 ? 18 : 14,
+        gapSize: 3,
+        waveInterval: enemy.bossPhase >= 3 ? 0.27 : 0.32,
+        speed: enemy.bossPhase >= 3 ? 470 : 420,
+        damageMul: 0.17,
+        rotationStep: 0.38,
+        style: "iron_rotor_shard",
+        damageType: "iron_rotor_barrage"
+      });
+      bossShockwave(room, enemy, profile, enemy.bossPhase >= 3 ? 285 : 245, {
+        armTime: enemy.bossPhase >= 3 ? 1.08 : 1.22,
+        damageMul: 0.54,
+        knockback: 72
+      });
     } else {
       castBossGapBloom(room, enemy, profile, target, {
         count: enemy.bossPhase >= 3 ? 9 : 7,
@@ -13159,7 +13542,7 @@ function updateChargeBoss(room, enemy, target, dist, dt, profile) {
       });
     }
     enemy.chargeTimer = Math.max(enemy.chargeTimer || 0, 1.4 * (enemy.cadenceMul || 1));
-    setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 3.25 : enemy.bossPhase >= 2 ? 3.65 : 4.05) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
+    setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 2.95 : enemy.bossPhase >= 2 ? 3.32 : 3.7) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
   }
   return false;
 }
@@ -13224,6 +13607,45 @@ function updateRitualBoss(room, enemy, target, dist, dt, profile) {
       damageMul: enemy.bossPhase >= 3 ? 0.64 : 0.54,
       style: "hive_safe_bloom"
     });
+  } else if (pattern === "hive_quarantine") {
+    castBossFieldJudgment(room, enemy, profile, target, {
+      armTime: enemy.bossPhase >= 3 ? 2.35 : 2.62,
+      safeRadius: enemy.bossPhase >= 3 ? 116 : 132,
+      safeCount: Math.min(2, Math.max(1, getActiveLivingPlayers(room).length)),
+      style: "hive_quarantine"
+    });
+    castBossProjectileRing(room, enemy, profile, enemy.bossPhase >= 3 ? 16 : 12, {
+      speed: enemy.bossPhase >= 3 ? 430 : 380,
+      damageMul: 0.3,
+      radius: 7,
+      poison: 1.05 + room.wave * 0.06,
+      poisonDuration: 2,
+      style: "hive_spore_bolt",
+      damageType: "hive_quarantine_ring",
+      distanceLeft: 920
+    });
+  } else if (pattern === "hive_creeping_orbit") {
+    startBossSpiralBarrage(room, enemy, profile, {
+      delay: 0.48,
+      waves: enemy.bossPhase >= 3 ? 11 : 8,
+      count: enemy.bossPhase >= 3 ? 22 : 18,
+      gapSize: 3,
+      waveInterval: enemy.bossPhase >= 3 ? 0.26 : 0.32,
+      speed: enemy.bossPhase >= 3 ? 420 : 370,
+      damageMul: 0.14,
+      rotationStep: -0.34,
+      poison: 0.72 + room.wave * 0.04,
+      poisonDuration: 1.6,
+      style: "hive_spore_bolt",
+      damageType: "hive_creeping_orbit"
+    });
+    castBossAcidPools(room, enemy, profile, target, enemy.bossPhase >= 3 ? 4 : 3, {
+      radius: enemy.bossPhase >= 3 ? 92 : 82,
+      armTime: enemy.bossPhase >= 3 ? 0.98 : 1.1,
+      poolTime: 3.1,
+      damageMul: 0.12,
+      poison: 1.2 + room.wave * 0.07
+    });
   } else {
     startBossProjectileVolley(room, enemy, target, profile, {
       armTime: 1.08,
@@ -13239,7 +13661,7 @@ function updateRitualBoss(room, enemy, target, dist, dt, profile) {
       damageType: "hive_venom_ring"
     });
   }
-  setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 3.45 : enemy.bossPhase >= 2 ? 3.85 : 4.25) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
+  setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 3.12 : enemy.bossPhase >= 2 ? 3.5 : 3.88) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
   return false;
 }
 
@@ -13303,6 +13725,42 @@ function updateVoidBoss(room, enemy, target, dist, dt, profile) {
         style: "sniper_bolt",
         damageType: "void_split_shot"
       });
+    } else if (pattern === "void_gravity_clock") {
+      repositionVoidBoss(room, enemy, target, profile);
+      startBossSpiralBarrage(room, enemy, profile, {
+        delay: 0.44,
+        waves: enemy.bossPhase >= 3 ? 10 : 8,
+        count: enemy.bossPhase >= 3 ? 20 : 16,
+        gapSize: enemy.bossPhase >= 3 ? 3 : 2,
+        waveInterval: enemy.bossPhase >= 3 ? 0.25 : 0.3,
+        speed: enemy.bossPhase >= 3 ? 490 : 435,
+        damageMul: 0.16,
+        rotationStep: 0.4,
+        style: "void_clock_bolt",
+        damageType: "void_gravity_clock"
+      });
+      castBossCrossBeams(room, enemy, profile, enemy.bossPhase >= 3 ? 6 : 4, {
+        rotation: Math.atan2(target.y - enemy.y, target.x - enemy.x) + Math.PI / 6,
+        armTime: enemy.bossPhase >= 3 ? 0.94 : 1.08,
+        width: enemy.bossPhase >= 3 ? 38 : 32,
+        damageMul: 0.54,
+        style: "void_gravity_clock"
+      });
+    } else if (pattern === "void_starless_trial") {
+      castBossFieldJudgment(room, enemy, profile, target, {
+        armTime: enemy.bossPhase >= 3 ? 2.28 : 2.52,
+        safeRadius: enemy.bossPhase >= 3 ? 108 : 124,
+        safeCount: 1,
+        style: "void_starless_trial"
+      });
+      castBossGapBloom(room, enemy, profile, target, {
+        count: enemy.bossPhase >= 3 ? 11 : 9,
+        ring: enemy.bossPhase >= 3 ? 410 : 365,
+        radius: enemy.bossPhase >= 3 ? 88 : 80,
+        armTime: enemy.bossPhase >= 3 ? 1.22 : 1.38,
+        damageMul: enemy.bossPhase >= 3 ? 0.62 : 0.52,
+        style: "void_starless_seal"
+      });
     } else {
       castBossGapBloom(room, enemy, profile, target, {
         count: enemy.bossPhase >= 3 ? 10 : 8,
@@ -13314,7 +13772,7 @@ function updateVoidBoss(room, enemy, target, dist, dt, profile) {
       });
     }
     enemy.shotTimer = Math.max(enemy.shotTimer || 0, 1.65 * (enemy.cadenceMul || 1));
-    setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 3.35 : enemy.bossPhase >= 2 ? 3.7 : 4.1) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
+    setSpecialPatternTimer(enemy, "boss", (enemy.bossPhase >= 3 ? 3.02 : enemy.bossPhase >= 2 ? 3.36 : 3.74) * getSpecialPatternCooldownMultiplier(enemy, "boss"));
   }
 
   if (enemy.shotTimer <= 0 && dist > 130 && dist < 920) {
@@ -13328,7 +13786,7 @@ function updateVoidBoss(room, enemy, target, dist, dt, profile) {
       x: predicted.x,
       y: predicted.y
     };
-    setSpecialPatternTimer(enemy, "boss_shot", (enemy.bossPhase >= 3 ? 2.95 : enemy.bossPhase >= 2 ? 3.25 : 3.55) * getSpecialPatternCooldownMultiplier(enemy, "boss_shot"));
+    setSpecialPatternTimer(enemy, "boss_shot", (enemy.bossPhase >= 3 ? 2.68 : enemy.bossPhase >= 2 ? 2.96 : 3.24) * getSpecialPatternCooldownMultiplier(enemy, "boss_shot"));
     return true;
   }
   return false;
@@ -13394,12 +13852,12 @@ function castBossCrossBeams(room, enemy, profile, count = 4, options = {}) {
         ? 0.8
         : 0.9
     : enemy.miniBoss
-      ? 1.18
+      ? 1.08
       : enemy.bossPhase >= 3
-        ? 0.98
+        ? 0.9
         : enemy.bossPhase >= 2
-          ? 1.1
-          : 1.22;
+          ? 1
+          : 1.12;
   const armTime = Math.max(requestedArmTime, minArmTime);
   const length = options.length || Math.max(room.world.w, room.world.h) * 1.08;
   const width = options.width || (enemy.bossPhase >= 3 ? 46 : 38);
@@ -13508,6 +13966,14 @@ function castBossFieldJudgment(room, enemy, profile, target, options = {}) {
   const baseAngle = Math.atan2(centroid.y - enemy.y, centroid.x - enemy.x) + Math.PI * 0.44;
   const fieldRadius = Math.hypot(room.world.w, room.world.h);
 
+  room.hazards = room.hazards.filter((hazard) => hazard.ownerId !== enemy.id);
+  room.projectiles = room.projectiles.filter((projectile) => projectile.ownerId !== enemy.id);
+  enemy.windup = null;
+  enemy.chargeMove = null;
+  enemy.lethalCastTimer = armTime;
+  enemy.lethalCastTimerMax = armTime;
+  enemy.lethalCastLabel = "즉사 패턴";
+
   room.hazards.push({
     id: nextHazardId++,
     type: "boss_field_judgment",
@@ -13568,12 +14034,12 @@ function startBossProjectileVolley(room, enemy, target, profile, options = {}) {
         ? 0.72
         : 0.82
     : enemy.miniBoss
-      ? 1.02
+      ? 0.94
       : enemy.bossPhase >= 3
-        ? 0.92
+        ? 0.86
         : enemy.bossPhase >= 2
-          ? 1.04
-          : 1.18;
+          ? 0.96
+          : 1.08;
   const windupTime = getEnemyTelegraphTime(room, enemy, "special", Math.max(requestedArmTime, minimumArmTime));
   const baseAngle = Number.isFinite(options.angle)
     ? options.angle
@@ -13665,12 +14131,12 @@ function castBossGapBloom(room, enemy, profile, target, options = {}) {
         ? 0.88
         : 0.98
     : enemy.miniBoss
-      ? 1.32
+      ? 1.2
       : enemy.bossPhase >= 3
-        ? 1.08
+        ? 0.98
         : enemy.bossPhase >= 2
-          ? 1.2
-          : 1.36;
+          ? 1.1
+          : 1.24;
   const armTime = Math.max(requestedArmTime, minimumArmTime);
   const margin = ring + radius + 18;
   const centerX = margin * 2 <= room.world.w ? clamp(enemy.x, margin, room.world.w - margin) : room.world.w * 0.5;
@@ -13802,12 +14268,12 @@ function castBossBeamFan(room, enemy, profile, count = 3, baseAngle = enemy.aiPh
         ? 0.82
         : 0.92
     : enemy.miniBoss
-      ? 1.18
+      ? 1.08
       : enemy.bossPhase >= 3
-        ? 1
+        ? 0.92
         : enemy.bossPhase >= 2
-          ? 1.12
-          : 1.24;
+          ? 1.02
+          : 1.14;
   const armTime = Math.max(Number(options.armTime) || defaultArmTime, minimumArmTime);
   const length = Number(options.length) || (enemy.bossPhase >= 3 ? 1080 : enemy.bossPhase >= 2 ? 980 : 880);
   const width = Number(options.width) || (enemy.bossPhase >= 3 ? 50 : enemy.bossPhase >= 2 ? 44 : 38);
@@ -13882,10 +14348,11 @@ function spawnBossAdds(room, enemy, profile, count, scale) {
   const livingAdds = room.enemies.filter((candidate) => candidate.hp > 0 && candidate.id !== enemy.id && distance(candidate, enemy) < 760).length;
   const spawnCount = Math.max(0, Math.min(count, 8 - livingAdds));
   if (spawnCount <= 0) return;
+  const escorts = Array.isArray(profile?.escorts) ? profile.escorts.filter(Boolean) : [];
 
   for (let i = 0; i < spawnCount; i += 1) {
     const angle = enemy.aiPhase + (Math.PI * 2 * i) / spawnCount + Math.random() * 0.25;
-    const type = profile.escorts[i % profile.escorts.length] || pickEnemyType(room.wave);
+    const type = escorts.length > 0 ? escorts[i % escorts.length] : pickEnemyType(room.wave);
     spawnEnemy(room, type, {
       x: enemy.x + Math.cos(angle) * (130 + Math.random() * 70),
       y: enemy.y + Math.sin(angle) * (110 + Math.random() * 70),
@@ -14790,10 +15257,25 @@ function getEnemyTarget(room, enemy) {
   }
   const defenseTarget = getDefenseObjectiveTarget(room, enemy);
   if (defenseTarget) return defenseTarget;
-  if (enemy.type === "sniper" || (enemy.type === "stalker" && enemy.elite)) {
-    return lowestHealthLivingPlayer(room) || nearestLivingPlayer(room, enemy);
+  if (enemy.targetLockTimer > 0 && enemy.targetId) {
+    const lockedTarget = room.players.get(enemy.targetId);
+    if (isActiveLivingPlayer(lockedTarget)) return lockedTarget;
   }
-  return nearestLivingPlayer(room, enemy);
+  let target = null;
+  if (enemy.type === "sniper" || (enemy.type === "stalker" && enemy.elite)) {
+    target = lowestHealthLivingPlayer(room) || nearestLivingPlayer(room, enemy);
+  } else {
+    target = nearestLivingPlayer(room, enemy);
+  }
+  if (target) {
+    enemy.targetId = target.id;
+    enemy.targetLockTimer = enemy.type === "boss"
+      ? 0.45
+      : ["sniper", "mortar", "spitter", "shaman"].includes(enemy.type)
+        ? 1.1
+        : 0.72;
+  }
+  return target;
 }
 
 function getDefenseObjectiveTarget(room, enemy) {
@@ -15590,6 +16072,8 @@ function nearestEnemy(room, x, y, maxDistance) {
 
 function dealDamage(room, enemy, amount, ownerId, options = {}) {
   const owner = room.players.get(ownerId);
+  const isBossTarget = enemy.type === "boss" || Boolean(enemy.bossId) || Boolean(enemy.miniBoss);
+  let bossGateFailOpen = false;
   let finalDamage = amount;
   let critical = false;
 
@@ -15620,7 +16104,6 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     if ((enemy.elite || enemy.type === "boss") && owner.eliteDamageMul) {
       finalDamage *= owner.eliteDamageMul;
     }
-    const isBossTarget = enemy.type === "boss" || enemy.bossId;
     if (isBossTarget && owner.bossDamageMul) {
       finalDamage *= owner.bossDamageMul;
     }
@@ -15649,6 +16132,14 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     if (enemy.vulnerableTimer > 0) finalDamage *= 1.22;
   }
 
+  if (isBossTarget && bossSystem.isBossDamageLocked(enemy)) {
+    startPendingBossPhaseTransition(room, enemy, owner);
+    if (bossSystem.isBossDamageLocked(enemy)) {
+      if ((Number(enemy.phaseTransitionTimer) || 0) > 0) return 0;
+      bossGateFailOpen = true;
+    }
+  }
+
   let barrierBlocked = 0;
   if (!options.fixedDamage && enemy.barrier > 0 && finalDamage > 0) {
     barrierBlocked = Math.min(enemy.barrier, finalDamage);
@@ -15671,8 +16162,17 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
 
   if (finalDamage <= 0) return 0;
 
+  if (isBossTarget && !bossGateFailOpen) {
+    finalDamage = bossSystem.getBossDamageAllowance(enemy, finalDamage);
+    if (finalDamage <= 0) return 0;
+  }
+
   const appliedDamage = Math.min(Math.max(0, enemy.hp), finalDamage);
   enemy.hp -= finalDamage;
+  if (isBossTarget && enemy.hp > 0) startPendingBossPhaseTransition(room, enemy, owner);
+  if (room.status === "lobby" && enemy.trainingDummy) {
+    recordTrainingDummyDamage(enemy, finalDamage, Date.now());
+  }
   if (owner && appliedDamage > 0) {
     const stats = owner.runStats || (owner.runStats = createEmptyRunStats());
     stats.damage += appliedDamage;
@@ -15784,6 +16284,19 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     maybeDropRelicChest(room, enemy, ownerId);
   }
   return finalDamage;
+}
+
+function recordTrainingDummyDamage(dummy, damage, now = Date.now()) {
+  const dealt = Math.max(0, Number(damage) || 0);
+  if (!dummy?.trainingDummy || dealt <= 0) return;
+  const cutoff = now - 5000;
+  const samples = Array.isArray(dummy.trainingDamageSamples)
+    ? dummy.trainingDamageSamples.filter((sample) => Number(sample?.at) >= cutoff)
+    : [];
+  samples.push({ at: now, damage: dealt });
+  dummy.trainingDamageSamples = samples;
+  dummy.trainingDamageTotal = Math.max(0, Number(dummy.trainingDamageTotal) || 0) + dealt;
+  dummy.trainingLastHitAt = now;
 }
 
 function interruptEnemyCast(room, enemy, options = {}) {
@@ -16441,13 +16954,15 @@ function maybeDropFieldPickup(room, enemy) {
   if (room.fieldPickups.filter((pickup) => !pickup.dead).length >= 12) return;
 
   const chanceMul = enemy.elite ? 2 : 1;
+  const ascensionRewardMul = getAbyssDifficulty(room).rewardMul;
+  const equipmentChance = EQUIPMENT_DROP_CHANCE * Math.sqrt(ascensionRewardMul);
   const roll = Math.random();
   let type = "";
   if (roll < HEALTH_POTION_DROP_CHANCE * chanceMul) {
     type = "health_potion";
   } else if (roll < (HEALTH_POTION_DROP_CHANCE + XP_MAGNET_DROP_CHANCE) * chanceMul) {
     type = "xp_magnet";
-  } else if (roll < (HEALTH_POTION_DROP_CHANCE + XP_MAGNET_DROP_CHANCE + EQUIPMENT_DROP_CHANCE) * chanceMul) {
+  } else if (roll < (HEALTH_POTION_DROP_CHANCE + XP_MAGNET_DROP_CHANCE + equipmentChance) * chanceMul) {
     type = "equipment";
   }
   if (!type) return;
@@ -16694,9 +17209,9 @@ function buildRunResult(room, outcome, reason) {
       bossDefeats: room.runBossDefeats || []
     }))
   });
-  summary.unlockedAscensionLevel = outcome === "victory"
-    ? Math.min(MAX_ASCENSION_LEVEL, Math.max(0, Number(room.ascensionLevel || 0)) + 1)
-    : Math.max(0, Number(room.ascensionLevel || 0));
+  summary.highestAscensionCleared = outcome === "victory"
+    ? Math.max(0, Number(room.ascensionLevel || 0))
+    : 0;
   if (room.survival?.active) {
     summary.survivalCompleted = Boolean(room.survival.finalBossDefeated);
     summary.survivalTimeSec = Math.round(room.survival.elapsed || 0);
@@ -17179,6 +17694,8 @@ function getPlayerStats(player) {
     areaRadius: Math.round(areaRadius),
     blastRadius: Math.round(blastRadius),
     attackCooldown: round2(def.attackCd * player.cooldownMul * getAttackCooldownMultiplier(player)),
+    attackSpeed: round2(clamp(player.attackSpeed || 0, 0, 500)),
+    skillHaste: round2(skillSystem.getSkillHaste(player)),
     skillCooldownMax: round2(getSkillCooldown(player, "q")),
     dashCooldownMax: round2(getDashCooldown(player)),
     dashDistance: Math.round(getDashDistance(player)),
@@ -17358,6 +17875,36 @@ function distanceToSegment(point, ax, ay, bx, by) {
   return collisionSystem.distanceToSegment(point, ax, ay, bx, by);
 }
 
+const MAX_ROOM_EFFECTS_PER_BROADCAST = 120;
+const PRIMARY_EFFECT_KINDS = new Set(["slash", "spin", "dash", "warning", "meteor", "trap", "shot", "chain", "arcane", "freeze", "slow"]);
+
+function getEffectRetentionPriority(effect) {
+  const kind = String(effect?.kind || "");
+  const style = String(effect?.style || "");
+  if (kind === "damage" || kind === "heal" || kind === "xp" || (kind === "poison" && effect?.value)) return 0;
+  if (kind === "impact") {
+    return style === "critical_hit" || style === "heavy_hit" || style === "cleave_execute" ? 2 : 1;
+  }
+  const radius = Math.max(0, Number(effect?.rangeRadius || effect?.radius || 0));
+  return (PRIMARY_EFFECT_KINDS.has(kind) ? 3 : 2) + (radius >= 140 ? 1 : 0);
+}
+
+function trimRoomEffects(effects, maxEffects = MAX_ROOM_EFFECTS_PER_BROADCAST) {
+  while (effects.length > maxEffects) {
+    let dropIndex = 0;
+    let dropPriority = getEffectRetentionPriority(effects[0]);
+    for (let index = 1; index < effects.length; index += 1) {
+      const priority = getEffectRetentionPriority(effects[index]);
+      if (priority < dropPriority) {
+        dropIndex = index;
+        dropPriority = priority;
+        if (priority === 0) break;
+      }
+    }
+    effects.splice(dropIndex, 1);
+  }
+}
+
 function addEffect(room, kind, x, y, data = {}) {
   room.effects.push({
     id: nextEffectId++,
@@ -17367,7 +17914,7 @@ function addEffect(room, kind, x, y, data = {}) {
     ...data,
     ...(data.ownerId == null && room.activeEffectOwnerId != null ? { ownerId: room.activeEffectOwnerId } : {})
   });
-  if (room.effects.length > 80) room.effects.splice(0, room.effects.length - 80);
+  trimRoomEffects(room.effects);
 }
 
 function getAimVector(player) {
@@ -17388,8 +17935,9 @@ function rotate(vector, angle) {
 
 function xpToNext(level) {
   if (level >= MAX_PLAYER_LEVEL) return 0;
-  const lateLevel = Math.max(0, level - 8);
-  const required = (170 + level * 86 + level * level * 15 + lateLevel * lateLevel * 40) * 0.9;
+  const baseRequirement = 120 + level * 95;
+  const lateRequirement = Math.max(0, level - 3) * 20;
+  const required = baseRequirement + lateRequirement;
   return Math.round(required / 5) * 5;
 }
 

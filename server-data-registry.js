@@ -2,10 +2,8 @@ const REWARD_EFFECTS = {
   power_core: [{ op: "mul", key: "damageMul", value: 1.1 }],
   iron_plate: [{ op: "capAdd", key: "armor", value: 2, max: 18 }],
   swift_boots: [{ op: "mul", key: "speedMul", value: 1.1 }],
-  cooling_gear: [
-    { op: "mul", key: "cooldownMul", value: 0.9 },
-    { op: "mul", key: "skillCooldownMul", value: 0.9 }
-  ],
+  cooling_gear: [{ op: "capAdd", key: "skillHaste", value: 10, max: 500 }],
+  rapid_loader: [{ op: "capAdd", key: "attackSpeed", value: 10, max: 500 }],
   splitter_core: [{ op: "capAdd", key: "projectileCountBonus", value: 1, max: 1 }],
   giant_lens: [{ op: "mul", key: "areaMul", value: 1.1 }],
   sharp_eye: [{ op: "capAdd", key: "crit", value: 0.1, max: 0.85 }],

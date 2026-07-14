@@ -3,7 +3,7 @@ export const PROGRESS_KEY = "rogue-party.progress.v3";
 export const LEGACY_PROGRESS_KEYS = ["rogue-party.progress.v2", "rogue-party.progress.v1"] as const;
 export const CLASS_IDS = ["warrior", "ranger", "mage", "engineer", "puppeteer", "martialist", "alchemist", "assassin"] as const;
 export const MASTERY_NODE_IDS = ["attack", "survival", "speed", "special"] as const;
-export const MAX_ASCENSION_LEVEL = 25;
+export const MAX_ASCENSION_LEVEL = 5;
 
 export type MasteryNodeId = (typeof MASTERY_NODE_IDS)[number];
 

@@ -5,6 +5,15 @@ const SLOT_COOLDOWN_MUL = {
   f: 1.24
 };
 const ENGINEER_MECHA_COOLDOWN_MUL = 2;
+const MAX_SKILL_HASTE = 500;
+
+function getSkillHaste(player) {
+  return Math.max(0, Math.min(MAX_SKILL_HASTE, Number(player?.skillHaste) || 0));
+}
+
+function getSkillCooldownMultiplier(player) {
+  return 100 / (100 + getSkillHaste(player));
+}
 
 function hasSkillUpgrade(player, upgradeId) {
   return (player.skillUpgrades || []).includes(upgradeId);
@@ -29,7 +38,7 @@ function getSkillCooldown(player, slot, classes) {
   const def = classes[player.classId];
   const slotMul = SLOT_COOLDOWN_MUL[slot] || 1;
   const classSlotMul = player.classId === "engineer" && slot === "e" ? ENGINEER_MECHA_COOLDOWN_MUL : 1;
-  return def.skillCd * slotMul * classSlotMul * player.skillCooldownMul;
+  return def.skillCd * slotMul * classSlotMul * getSkillCooldownMultiplier(player);
 }
 
 function applySkillCooldown(player, slot, classes) {
@@ -43,6 +52,9 @@ module.exports = {
   canTriggerSkillSlot,
   canUseSkillSlot,
   getSkillCooldown,
+  getSkillCooldownMultiplier,
+  getSkillHaste,
   getUnlockedSlotUpgrade,
-  hasSkillUpgrade
+  hasSkillUpgrade,
+  MAX_SKILL_HASTE
 };

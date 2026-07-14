@@ -164,8 +164,11 @@ function getEnemyCrowdPush(enemies, enemy) {
     const dy = enemy.y - other.y;
     const dist = Math.hypot(dx, dy);
     const min = enemy.radius + other.radius;
-    if (dist > 0 && dist < min) {
-      const force = (min - dist) * 4;
+    const softMin = min * (enemy.type === "boss" || other.type === "boss" ? 1.08 : 1.42);
+    if (dist > 0 && dist < softMin) {
+      const overlap = Math.max(0, min - dist);
+      const spacing = Math.max(0, softMin - Math.max(min, dist));
+      const force = overlap * 4 + spacing * 0.72;
       x += (dx / dist) * force;
       y += (dy / dist) * force;
     }
@@ -229,7 +232,15 @@ function tickEnemyTimers(enemy, dt) {
   enemy.chargeTimer = Math.max(0, (enemy.chargeTimer || 0) - dt);
   enemy.specialTimer = Math.max(0, (enemy.specialTimer || 0) - dt);
   enemy.eliteSpecialTimer = Math.max(0, (enemy.eliteSpecialTimer || 0) - dt);
-  enemy.phaseTransitionTimer = Math.max(0, (enemy.phaseTransitionTimer || 0) - dt);
+  const phaseTransitionTimer = Number(enemy.phaseTransitionTimer);
+  enemy.phaseTransitionTimer = Number.isFinite(phaseTransitionTimer)
+    ? Math.max(0, phaseTransitionTimer - dt)
+    : 0;
+  const lethalCastTimer = Number(enemy.lethalCastTimer);
+  enemy.lethalCastTimer = Number.isFinite(lethalCastTimer)
+    ? Math.max(0, lethalCastTimer - dt)
+    : 0;
+  enemy.targetLockTimer = Math.max(0, (Number(enemy.targetLockTimer) || 0) - dt);
   enemy.slowTimer = Math.max(0, (enemy.slowTimer || 0) - dt);
   enemy.freezeTimer = Math.max(0, (enemy.freezeTimer || 0) - dt);
   enemy.tauntTimer = Math.max(0, (enemy.tauntTimer || 0) - dt);

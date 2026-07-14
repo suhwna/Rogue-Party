@@ -192,6 +192,96 @@
     return { x: x + ux * forward + px * side, y: y + uy * forward + py * side };
   }
 
+  function drawThemeTrail(renderer, colors, x, y, angle, length, width, alpha, z, now) {
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const tailX = x - ux * length;
+    const tailY = y - uy * length;
+    if (colors.shape === "void") {
+      renderer.drawGfxLine?.(tailX, tailY, x, y, width * 1.9, colors.dark, alpha * 0.72, z, "normal");
+      renderer.drawGfxLine?.(tailX + px * width, tailY + py * width, x, y, width * 0.36, colors.hot, alpha * 0.82, z + 1, "add");
+    } else if (colors.shape === "ember") {
+      renderer.drawGfxLine?.(tailX, tailY, x, y, width * 1.7, colors.main, alpha * 0.34, z, "add");
+      for (let i = 0; i < 3; i += 1) {
+        const t = 0.2 + i * 0.28;
+        const sway = Math.sin(now / 75 + i * 2.1) * width;
+        drawFlame(renderer, x - ux * length * t + px * sway, y - uy * length * t + py * sway, width * 0.75, colors, alpha * (0.8 - i * 0.16), z + 1 + i, angle);
+      }
+    } else if (colors.shape === "leaf") {
+      renderer.drawGfxLine?.(tailX, tailY, x, y, width * 0.62, colors.main, alpha * 0.7, z, "normal");
+      for (let i = 0; i < 3; i += 1) {
+        const t = 0.22 + i * 0.3;
+        drawLeaf(renderer, x - ux * length * t + px * (i % 2 ? width : -width), y - uy * length * t + py * (i % 2 ? width : -width), width * 0.62, colors, alpha * 0.78, z + i + 1, angle + (i % 2 ? 0.8 : -0.8));
+      }
+    } else {
+      renderer.drawGfxLine?.(tailX, tailY, x, y, width * 1.65, colors.main, alpha * 0.24, z, "add");
+      renderer.drawGfxLine?.(tailX + ux * length * 0.18, tailY + uy * length * 0.18, x, y, width * 0.38, colors.hot, alpha * 0.9, z + 1, "add");
+      for (let i = 0; i < 3; i += 1) {
+        const t = 0.18 + i * 0.3;
+        drawStar(renderer, x - ux * length * t + px * (i - 1) * width, y - uy * length * t + py * (i - 1) * width, width * 0.48, colors, alpha * (0.8 - i * 0.13), z + 2 + i, now / 260 + i);
+      }
+    }
+  }
+
+  function drawThemedArrow(renderer, projectile, colors, now, tags) {
+    const angle = Number(projectile.angle || 0);
+    const r = Math.max(7, Number(projectile.radius || 7));
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const z = projectile.y + 22;
+    const style = String(projectile.style || "").toLowerCase();
+    const laser = Boolean(tags.laser) || style.includes("laser");
+    const poison = style.includes("poison");
+    const fire = style.includes("fire") || style.includes("explosive");
+    const tip = point(projectile.x, projectile.y, ux, uy, px, py, r * (laser ? 4.4 : 2.35), 0);
+    const tail = point(projectile.x, projectile.y, ux, uy, px, py, -r * (laser ? 4 : 2.4), 0);
+    const main = poison ? "#a3e635" : fire ? "#fb923c" : colors.main;
+    const hot = poison ? "#ecfccb" : fire ? "#fff7ed" : colors.hot;
+
+    drawThemeTrail(renderer, colors, projectile.x - ux * r * 0.4, projectile.y - uy * r * 0.4, angle, r * (laser ? 7.5 : 5.2), laser ? r * 0.7 : r * 0.34, 0.78, z - 5, now);
+    if (laser) {
+      renderer.drawGfxLine?.(tail.x, tail.y, tip.x, tip.y, Math.max(8, r * 1.1), colors.dark, 0.36, z - 1, colors.shape === "void" ? "normal" : "add");
+      renderer.drawGfxLine?.(tail.x, tail.y, tip.x, tip.y, Math.max(3, r * 0.46), main, 0.96, z, "add");
+      renderer.drawGfxLine?.(projectile.x, projectile.y, tip.x, tip.y, Math.max(1.4, r * 0.17), hot, 1, z + 1, "add");
+      drawSkinMotif(renderer, colors.shape, tip.x, tip.y, r * 0.42, colors, 0.96, z + 3, angle);
+      return;
+    }
+    renderer.drawGfxLine?.(tail.x, tail.y, tip.x, tip.y, Math.max(3, r * 0.42), colors.dark, 0.96, z, "normal");
+    renderer.drawGfxLine?.(tail.x + ux * r * 0.5, tail.y + uy * r * 0.5, tip.x, tip.y, Math.max(1.5, r * 0.19), main, 0.96, z + 1, "add");
+    for (const side of [-1, 1]) {
+      const wing = point(tip.x, tip.y, ux, uy, px, py, -r * 0.78, side * r * 0.58);
+      renderer.drawGfxLine?.(wing.x, wing.y, tip.x, tip.y, Math.max(2, r * 0.25), hot, 0.92, z + 2, "add");
+      const feather = point(tail.x, tail.y, ux, uy, px, py, -r * 0.35, side * r * 0.52);
+      renderer.drawGfxLine?.(tail.x + ux * r * 0.45, tail.y + uy * r * 0.45, feather.x, feather.y, 1.8, main, 0.82, z + 2, "normal");
+    }
+    if (fire) drawFlame(renderer, tail.x, tail.y, r * 0.8, { ...colors, main, hot }, 0.94, z + 4, angle);
+    if (poison) renderer.drawGfxCircle?.(tip.x - ux * r * 0.42, tip.y - uy * r * 0.42, r * 0.28, "#365314", 0.7, main, 0.72, 1.4, z + 4, "add", 9);
+  }
+
+  function drawThemedMageOrb(renderer, projectile, colors, now) {
+    const r = Math.max(7, Number(projectile.radius || 7));
+    const z = projectile.y + 20;
+    const angle = Number(projectile.angle || 0);
+    drawThemeTrail(renderer, colors, projectile.x, projectile.y, angle, r * 4.4, r * 0.42, 0.7, z - 4, now);
+    if (colors.shape === "star") {
+      drawStar(renderer, projectile.x, projectile.y, r * 1.05, colors, 0.98, z, now / 240);
+      renderer.drawGfxCircle?.(projectile.x, projectile.y, r * 1.4, colors.dark, 0.08, colors.main, 0.18, 2, z - 1, "add", 16);
+    } else if (colors.shape === "void") {
+      renderer.drawGfxCircle?.(projectile.x, projectile.y, r * 1.08, "#05010a", 0.96, colors.main, 0.82, 3, z, "normal", 18);
+      renderer.drawGfxArc?.(projectile.x, projectile.y, r * 1.45, now / 180, now / 180 + Math.PI * 1.25, 2.4, colors.hot, 0.72, z + 1, "add", 13);
+    } else if (colors.shape === "ember") {
+      renderer.drawGfxCircle?.(projectile.x, projectile.y, r * 0.72, colors.dark, 0.86, colors.hot, 0.88, 2, z, "add", 12);
+      for (let i = 0; i < 4; i += 1) drawFlame(renderer, projectile.x + Math.cos(now / 160 + i * 1.57) * r * 0.7, projectile.y + Math.sin(now / 160 + i * 1.57) * r * 0.7, r * 0.5, colors, 0.76, z + i + 1, now / 160 + i * 1.57);
+    } else {
+      renderer.drawGfxCircle?.(projectile.x, projectile.y, r * 0.72, colors.dark, 0.84, colors.main, 0.88, 2, z, "normal", 12);
+      for (let i = 0; i < 4; i += 1) drawLeaf(renderer, projectile.x + Math.cos(now / 340 + i * 1.57) * r, projectile.y + Math.sin(now / 340 + i * 1.57) * r, r * 0.36, colors, 0.9, z + i + 1, now / 340 + i * 1.57);
+    }
+  }
+
   function renderPlayerBodyEffect(renderer, player, pos, radius, now, bob, z) {
     const colors = palette(player.skin);
     if (!colors) return false;
@@ -207,19 +297,26 @@
     const back = point(x, y, ux, uy, px, py, -radius * 0.62, 0);
 
     if (classId === "warrior") {
-      for (const side of [-1, 1]) {
-        const shoulder = point(x, y, ux, uy, px, py, -radius * 0.12, side * radius * 0.68);
-        renderer.drawGfxLine?.(shoulder.x - ux * radius * 0.34, shoulder.y - uy * radius * 0.34, shoulder.x + ux * radius * 0.22, shoulder.y + uy * radius * 0.22, 3.2, colors.main, pulse, z + 32, "normal");
-      }
+      const swordHilt = point(x, y, ux, uy, px, py, radius * 0.18, radius * 0.72);
+      const swordTip = point(swordHilt.x, swordHilt.y, ux, uy, px, py, radius * 1.38, 0);
+      const shield = point(x, y, ux, uy, px, py, radius * 0.18, -radius * 0.78);
+      renderer.drawGfxLine?.(swordHilt.x, swordHilt.y, swordTip.x, swordTip.y, radius * 0.24, colors.dark, 0.96, z + 32, "normal");
+      renderer.drawGfxLine?.(swordHilt.x + ux * radius * 0.2, swordHilt.y + uy * radius * 0.2, swordTip.x, swordTip.y, radius * 0.09, colors.hot, pulse, z + 33, "add");
+      renderer.drawGfxLine?.(swordHilt.x - px * radius * 0.34, swordHilt.y - py * radius * 0.34, swordHilt.x + px * radius * 0.34, swordHilt.y + py * radius * 0.34, 3, colors.main, 0.9, z + 34, "normal");
+      renderer.drawGfxCircle?.(shield.x, shield.y, radius * 0.58, colors.dark, 0.86, colors.main, 0.9, 3, z + 33, "normal", colors.shape === "star" ? 8 : 14);
+      drawSkinMotif(renderer, colors.shape, shield.x, shield.y, radius * 0.18, colors, 0.86, z + 35, angle);
     } else if (classId === "ranger") {
+      const bow = point(x, y, ux, uy, px, py, radius * 0.12, radius * 0.78);
+      renderer.drawGfxArc?.(bow.x, bow.y, radius * 0.72, angle - 1.18, angle + 1.18, 3.2, colors.main, 0.9, z + 32, "normal", 12);
+      renderer.drawGfxLine?.(bow.x + ux * radius * 0.28 - px * radius * 0.66, bow.y + uy * radius * 0.28 - py * radius * 0.66, bow.x + ux * radius * 0.28 + px * radius * 0.66, bow.y + uy * radius * 0.28 + py * radius * 0.66, 1.2, colors.hot, 0.76, z + 33, "add");
       for (let i = -1; i <= 1; i += 1) {
         const q = point(back.x, back.y, ux, uy, px, py, -radius * 0.15, i * radius * 0.2);
-        renderer.drawGfxLine?.(q.x, q.y, q.x - ux * radius * 0.72 + px * i * radius * 0.12, q.y - uy * radius * 0.72 + py * i * radius * 0.12, 1.8, i === 0 ? colors.hot : colors.main, pulse, z + 32 + i, "normal");
+        renderer.drawGfxLine?.(q.x, q.y, q.x - ux * radius * 0.72 + px * i * radius * 0.12, q.y - uy * radius * 0.72 + py * i * radius * 0.12, 1.8, i === 0 ? colors.hot : colors.main, pulse, z + 34 + i, "normal");
       }
     } else if (classId === "mage") {
       const focus = point(x, y, ux, uy, px, py, radius * 0.18, radius * 0.72);
-      renderer.drawGfxArc?.(focus.x, focus.y, radius * 0.27, now / 680, now / 680 + Math.PI * 1.45, 1.8, colors.main, pulse, z + 33, "add", 9);
-      drawSkinMotif(renderer, colors.shape, focus.x, focus.y, radius * 0.09, colors, 0.72, z + 35, now / 900);
+      renderer.drawGfxArc?.(focus.x, focus.y, radius * 0.36, now / 680, now / 680 + Math.PI * 1.45, 2.2, colors.main, pulse, z + 33, "add", 9);
+      drawSkinMotif(renderer, colors.shape, focus.x, focus.y, radius * 0.2, colors, 0.9, z + 35, now / 900);
     } else if (classId === "engineer") {
       const pack = [point(back.x, back.y, ux, uy, px, py, -radius * 0.3, -radius * 0.4), point(back.x, back.y, ux, uy, px, py, radius * 0.25, -radius * 0.4), point(back.x, back.y, ux, uy, px, py, radius * 0.25, radius * 0.4), point(back.x, back.y, ux, uy, px, py, -radius * 0.3, radius * 0.4)];
       renderer.drawGfxPath?.(pack, colors.dark, 0.62, colors.main, pulse, 1.8, z + 32, "normal");
@@ -252,44 +349,12 @@
   }
 
   function renderPlayerAttackOverride(renderer, player, pos, radius, now, bob, z) {
-    const colors = palette(player.skin);
-    if (!colors) return false;
-    const age = Date.now() - Number(player.lastAttackAt || 0);
-    if (age < 0 || age >= 190) return false;
-    const t = Math.max(0, Math.min(1, age / 190));
-    const fade = 1 - t;
-    const angle = Number(player.facing || 0);
-    const ux = Math.cos(angle);
-    const uy = Math.sin(angle);
-    const px = -uy;
-    const py = ux;
-    const x = pos.x;
-    const y = pos.y + bob;
-    const reach = radius * (1.55 + t * 0.85);
-    const classId = String(player.classId || "warrior");
-    if (["warrior", "martialist", "assassin"].includes(classId)) {
-      const spread = classId === "assassin" ? 0.72 : classId === "martialist" ? 0.48 : 0.88;
-      renderer.drawGfxArc?.(x, y, reach, angle - spread, angle + spread, classId === "warrior" ? 3.4 : 2.2, colors.main, fade * 0.48, z + 47, "add", 12);
-      if (classId === "assassin") renderer.drawGfxArc?.(x, y, reach * 0.78, angle - spread * 0.72, angle + spread * 0.72, 1.6, colors.hot, fade * 0.62, z + 48, "add", 10);
-    } else if (classId === "ranger") {
-      const tip = point(x, y, ux, uy, px, py, reach, 0);
-      renderer.drawGfxLine?.(x + px * radius * 0.58, y + py * radius * 0.58, tip.x, tip.y, 1.6, colors.main, fade * 0.48, z + 46, "add");
-      drawSkinMotif(renderer, colors.shape, tip.x, tip.y, radius * 0.1, colors, fade * 0.62, z + 48, angle);
-    } else if (classId === "mage") {
-      const focus = point(x, y, ux, uy, px, py, radius * 0.82, 0);
-      renderer.drawGfxArc?.(focus.x, focus.y, radius * (0.28 + t * 0.2), now / 220, now / 220 + Math.PI * 1.5, 2, colors.main, fade * 0.62, z + 47, "add", 10);
-    } else if (classId === "engineer") {
-      for (const side of [-1, 1]) renderer.drawGfxLine?.(x + ux * radius * 0.65 + px * side * radius * 0.2, y + uy * radius * 0.65 + py * side * radius * 0.2, x + ux * reach + px * side * radius * 0.32, y + uy * reach + py * side * radius * 0.32, 1.7, side < 0 ? colors.main : colors.hot, fade * 0.5, z + 47, "add");
-    } else {
-      const tip = point(x, y, ux, uy, px, py, reach * 0.8, 0);
-      renderer.drawGfxLine?.(x, y, tip.x, tip.y, 1.5, colors.main, fade * 0.4, z + 46, "add");
-      drawSkinMotif(renderer, colors.shape, tip.x, tip.y, radius * 0.09, colors, fade * 0.56, z + 47, angle);
-    }
     return false;
   }
 
   function renderProjectileOverride(renderer, projectile, now, tags = {}) {
-    if (!palette(projectile.skin) || projectile.hostile) return false;
+    const colors = palette(projectile.skin);
+    if (!colors || projectile.hostile) return false;
     renderProjectileSkinEffect(renderer, projectile, now, tags);
     return false;
   }
@@ -333,7 +398,8 @@
   }
 
   function renderHazardOverride(renderer, hazard, now) {
-    if (!palette(hazard.skin) || hazard.hostile) return false;
+    const colors = palette(hazard.skin);
+    if (!colors || hazard.hostile) return false;
     renderHazardSkinEffect(renderer, hazard, now);
     return false;
   }
@@ -346,6 +412,10 @@
     return owner?.skin || "";
   }
 
+  function resolveEffectPalette(renderer, effect) {
+    return palette(resolveEffectSkin(renderer, effect));
+  }
+
   function renderSkillEffectOverride(renderer, effect, progress, alpha, radius, now) {
     if (["damage", "heal", "xp", "death", "warning"].includes(String(effect.kind || ""))) return false;
     const skin = resolveEffectSkin(renderer, effect);
@@ -354,34 +424,32 @@
     const state = renderer.getState?.();
     const owner = state?.players?.find((player) => String(player.id) === String(effect.ownerId));
     const classId = String(owner?.classId || "");
+    if (classId === "mage") return false;
     const style = String(effect.style || "").toLowerCase();
-    const effectRadius = Math.max(16, radius * (0.34 + progress * 0.54));
-    const fade = Math.min(0.46, alpha * 0.42);
+    const exactRadius = Math.max(16, Number(effect.rangeRadius || effect.radius || radius || 16));
+    const fade = Math.min(0.72, alpha * 0.7);
     const z = effect.y + 88;
     const phase = now / 620 + (renderer.hash?.(effect.id || effect.ownerId) || 0);
 
-    if (classId === "warrior" || style.includes("warrior")) {
-      renderer.drawGfxArc?.(effect.x, effect.y, effectRadius, phase - 0.72, phase + 0.72, 2.6, colors.main, fade, z, "add", 12);
-    } else if (classId === "ranger" || style.includes("arrow")) {
-      for (let i = 0; i < 3; i += 1) {
-        const angle = phase + i * Math.PI * 2 / 3;
-        renderer.drawGfxLine?.(effect.x + Math.cos(angle) * effectRadius * 0.68, effect.y + Math.sin(angle) * effectRadius * 0.68, effect.x + Math.cos(angle) * effectRadius, effect.y + Math.sin(angle) * effectRadius, 1.8, i === 1 ? colors.hot : colors.main, fade, z + i, "add");
+    const areaEffect = style.includes("frost") || style.includes("spin") || style.includes("taunt") || style.includes("burst") || style.includes("explosion");
+    if (areaEffect) {
+      const displayedRadius = exactRadius * (0.28 + Math.min(1, progress * 1.45) * 0.72);
+      for (let i = 0; i < 5; i += 1) {
+        const angle = phase * 0.14 + i * Math.PI * 0.4;
+        const distance = displayedRadius * (0.42 + (i % 2) * 0.34);
+        drawSkinMotif(renderer, colors.shape, effect.x + Math.cos(angle) * distance, effect.y + Math.sin(angle) * distance, Math.max(3.5, Math.min(9, exactRadius * 0.045)), colors, fade * 0.68, z + i, angle);
       }
-    } else if (classId === "mage" || style.includes("meteor") || style.includes("star")) {
-      renderer.drawGfxArc?.(effect.x, effect.y, effectRadius * 0.82, phase, phase + Math.PI * 1.28, 1.8, colors.main, fade, z, "add", 12);
-      renderer.drawGfxArc?.(effect.x, effect.y, effectRadius * 0.56, -phase, -phase + Math.PI * 0.9, 1.3, colors.hot, fade * 0.82, z + 1, "add", 10);
-    } else if (classId === "engineer" || style.includes("engineer")) {
-      for (let i = 0; i < 4; i += 1) {
-        const angle = Math.PI * 0.25 + i * Math.PI * 0.5;
-        const cx = effect.x + Math.cos(angle) * effectRadius * 0.78;
-        const cy = effect.y + Math.sin(angle) * effectRadius * 0.78;
-        renderer.drawGfxLine?.(cx, cy, cx + Math.cos(angle) * effectRadius * 0.22, cy + Math.sin(angle) * effectRadius * 0.22, 1.8, i % 2 ? colors.hot : colors.main, fade, z + i, "add");
+    } else if (effect.kind === "chain" || style.includes("laser") || style.includes("piercing")) {
+      const angle = Number(effect.angle || 0);
+      const line = renderer.effectEndpoints?.(effect, exactRadius, angle);
+      if (line) {
+        for (let i = 1; i <= 2; i += 1) {
+          const t = i / 3;
+          drawSkinMotif(renderer, colors.shape, line.fromX + (line.toX - line.fromX) * t, line.fromY + (line.toY - line.fromY) * t, 4.5, colors, fade * 0.54, z + i, angle);
+        }
       }
-    } else {
-      for (const side of [-1, 1]) {
-        const angle = phase + side * 1.2;
-        drawSkinMotif(renderer, colors.shape, effect.x + Math.cos(angle) * effectRadius * 0.72, effect.y + Math.sin(angle) * effectRadius * 0.72, Math.max(3, effectRadius * 0.06), colors, fade, z + side, angle);
-      }
+    } else if (classId) {
+      drawSkinMotif(renderer, colors.shape, effect.x, effect.y, Math.max(4, Math.min(10, exactRadius * 0.06)), colors, fade * 0.42, z, phase);
     }
     return false;
   }
@@ -395,6 +463,7 @@
     renderPlayerAttackOverride,
     renderProjectileOverride,
     renderHazardOverride,
+    resolveEffectPalette,
     renderSkillEffectOverride,
   });
 })();

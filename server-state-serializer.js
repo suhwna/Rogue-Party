@@ -151,6 +151,17 @@ function enemyView(enemy, options = {}) {
   const getAiState = options.getAiState || (() => "");
   const getWindupChannel = options.getWindupChannel || (() => "");
   const def = enemyDefs[enemy.type];
+  const now = Number.isFinite(options.now) ? options.now : Date.now();
+  const trainingSamples = enemy.trainingDummy && Array.isArray(enemy.trainingDamageSamples)
+    ? enemy.trainingDamageSamples.filter((sample) => Number(sample?.at) >= now - 5000)
+    : [];
+  const trainingSampleDamage = trainingSamples.reduce((sum, sample) => sum + Math.max(0, Number(sample?.damage) || 0), 0);
+  const trainingWindowSeconds = trainingSamples.length
+    ? Math.max(1, (now - Number(trainingSamples[0].at || now)) / 1000)
+    : 1;
+  const trainingDps = enemy.trainingDummy && now - Number(enemy.trainingLastHitAt || 0) <= 2000
+    ? trainingSampleDamage / trainingWindowSeconds
+    : 0;
   return {
     id: enemy.id,
     type: enemy.type,
@@ -164,6 +175,9 @@ function enemyView(enemy, options = {}) {
     phaseTransitionTime: round2(enemy.phaseTransitionTimer || 0),
     phaseTransitionTimeMax: round2(enemy.phaseTransitionTimerMax || 0),
     phaseAuraColor: enemy.phaseAuraColor || "",
+    lethalCastTime: round2(enemy.lethalCastTimer || 0),
+    lethalCastTimeMax: round2(enemy.lethalCastTimerMax || 0),
+    lethalCastLabel: enemy.lethalCastLabel || "",
     x: round2(enemy.x),
     y: round2(enemy.y),
     hp: Math.max(0, Math.ceil(enemy.hp)),
@@ -173,6 +187,9 @@ function enemyView(enemy, options = {}) {
     poisonMaxStacks: Math.max(3, Math.floor(enemy.poisonMaxStacks || 3)),
     radius: enemy.radius,
     role: enemy.role,
+    trainingDummy: Boolean(enemy.trainingDummy),
+    trainingDps: round2(trainingDps),
+    trainingTotalDamage: round2(Math.max(0, Number(enemy.trainingDamageTotal) || 0)),
     aiState: getAiState(enemy),
     blockadeRunner: Boolean(enemy.blockadeRunner),
     executionBoss: Boolean(enemy.executionBoss),

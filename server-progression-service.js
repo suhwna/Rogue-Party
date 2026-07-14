@@ -123,6 +123,16 @@ function getDefaultProgress() {
   return normalizeProgress(manager.defaultProgress);
 }
 
+function getCatalogSnapshot() {
+  return clone({
+    itemBases: manager.ITEM_BASES || [],
+    runes: manager.RUNES || [],
+    monsters: manager.MONSTER_CATALOG || [],
+    bosses: manager.BOSS_CATALOG || [],
+    relics: manager.RELIC_CATALOG || [],
+  });
+}
+
 function clampInteger(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return min;
@@ -131,6 +141,7 @@ function clampInteger(value, min, max) {
 
 module.exports = {
   SAVE_VERSION: manager.SAVE_VERSION,
+  getCatalogSnapshot,
   getDefaultProgress,
   getEquipmentDropPreview,
   getGrowthLoadout,

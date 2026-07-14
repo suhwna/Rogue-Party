@@ -57,7 +57,7 @@
     return label;
   }
 
-  function drawShield(renderer, x, y, angle, size, color, alpha, zIndex) {
+  function drawShield(renderer, x, y, angle, size, color, alpha, zIndex, skinPalette = null) {
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
     const px = -uy;
@@ -72,11 +72,15 @@
       { x: x + ux * front + px * half, y: y + uy * front + py * half },
       { x: x - ux * back + px * half * 0.76, y: y - uy * back + py * half * 0.76 },
     ];
-    renderer.drawGfxPath(points, "#08111f", alpha * 0.74, color, alpha * 0.88, 3, zIndex, "add");
-    renderer.drawGfxLine(x + ux * 2 - px * half * 0.58, y + uy * 2 - py * half * 0.58, x + ux * 2 + px * half * 0.58, y + uy * 2 + py * half * 0.58, 4, "#e0f2fe", alpha * 0.62, zIndex + 1, "add");
+    renderer.drawGfxPath(points, skinPalette?.dark || "#08111f", alpha * 0.74, color, alpha * 0.88, skinPalette ? 4 : 3, zIndex, skinPalette?.shape === "void" ? "normal" : "add");
+    renderer.drawGfxLine(x + ux * 2 - px * half * 0.58, y + uy * 2 - py * half * 0.58, x + ux * 2 + px * half * 0.58, y + uy * 2 + py * half * 0.58, 4, skinPalette?.hot || "#e0f2fe", alpha * 0.62, zIndex + 1, "add");
+    if (skinPalette?.shape === "star") renderer.drawGfxDiamond(x + ux * size * 0.06, y + uy * size * 0.06, size * 0.18, skinPalette.hot, alpha * 0.9, zIndex + 2, angle, skinPalette.main);
+    else if (skinPalette?.shape === "void") renderer.drawGfxCircle(x, y, size * 0.16, "#020005", alpha * 0.94, skinPalette.hot, alpha * 0.56, 2, zIndex + 2, "normal", 12);
+    else if (skinPalette?.shape === "ember") renderer.drawGfxArc(x, y, size * 0.22, angle - 2.4, angle + 2.4, 4, skinPalette.hot, alpha * 0.8, zIndex + 2, "add", 9);
+    else if (skinPalette?.shape === "leaf") renderer.drawGfxDiamond(x, y, size * 0.2, skinPalette.main, alpha * 0.88, zIndex + 2, angle + Math.PI * 0.25, skinPalette.hot);
   }
 
-  function drawSword(renderer, x, y, angle, length, color, alpha, zIndex) {
+  function drawSword(renderer, x, y, angle, length, color, alpha, zIndex, skinPalette = null) {
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
     const px = -uy;
@@ -96,47 +100,85 @@
         { x: tipX + px * width * 0.58, y: tipY + py * width * 0.58 },
         { x: startX + px * width, y: startY + py * width },
       ],
-      "#f8fafc",
+      skinPalette?.hot || "#f8fafc",
       alpha * 0.86,
       color,
       alpha * 0.74,
       2,
       zIndex,
-      "add",
+      skinPalette?.shape === "void" ? "normal" : "add",
     );
-    renderer.drawGfxLine(x - px * width * 1.5, y - py * width * 1.5, x + px * width * 1.5, y + py * width * 1.5, 4, "#ffd166", alpha * 0.72, zIndex + 1, "add");
+    renderer.drawGfxLine(x - px * width * (skinPalette?.shape === "star" ? 2.05 : 1.5), y - py * width * (skinPalette?.shape === "star" ? 2.05 : 1.5), x + px * width * (skinPalette?.shape === "star" ? 2.05 : 1.5), y + py * width * (skinPalette?.shape === "star" ? 2.05 : 1.5), skinPalette ? 5 : 4, skinPalette?.main || "#ffd166", alpha * 0.78, zIndex + 1, "add");
+    if (skinPalette?.shape === "star") renderer.drawGfxDiamond(x, y, width * 1.05, skinPalette.hot, alpha * 0.88, zIndex + 2, angle, skinPalette.main);
+    else if (skinPalette?.shape === "void") renderer.drawGfxArc(tipX, tipY, width * 1.8, angle + 1.7, angle + 4.55, 3, skinPalette.hot, alpha * 0.66, zIndex + 2, "add", 8);
+    else if (skinPalette?.shape === "ember") renderer.drawGfxLine(startX, startY, tipX, tipY, width * 0.54, skinPalette.hot, alpha * 0.74, zIndex + 2, "add");
+    else if (skinPalette?.shape === "leaf") renderer.drawGfxDiamond(x + ux * length * 0.62, y + uy * length * 0.62, width * 0.82, skinPalette.main, alpha * 0.8, zIndex + 2, angle, skinPalette.hot);
   }
 
-  function drawBow(renderer, x, y, angle, size, color, alpha, zIndex) {
+  function drawBow(renderer, x, y, angle, size, color, alpha, zIndex, skinPalette = null) {
     const px = -Math.sin(angle);
     const py = Math.cos(angle);
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
     renderer.drawGfxArc(x, y, size * 0.8, angle - 0.96, angle + 0.96, 4, color, alpha * 0.82, zIndex, "add", 12);
-    renderer.drawGfxLine(x + px * size * 0.48, y + py * size * 0.48, x - px * size * 0.48, y - py * size * 0.48, 2, "#f8fafc", alpha * 0.58, zIndex + 1, "add");
-    renderer.drawGfxLine(x - ux * size * 0.28, y - uy * size * 0.28, x + ux * size * 0.88, y + uy * size * 0.88, 4, "#f1d08b", alpha * 0.78, zIndex + 2, "add");
+    renderer.drawGfxLine(x + px * size * 0.48, y + py * size * 0.48, x - px * size * 0.48, y - py * size * 0.48, 2, skinPalette?.hot || "#f8fafc", alpha * 0.58, zIndex + 1, "add");
+    renderer.drawGfxLine(x - ux * size * 0.28, y - uy * size * 0.28, x + ux * size * 0.88, y + uy * size * 0.88, skinPalette ? 5 : 4, skinPalette?.hot || "#f1d08b", alpha * 0.78, zIndex + 2, "add");
+    if (skinPalette) renderer.drawGfxDiamond(x + ux * size * 0.92, y + uy * size * 0.92, size * 0.12, skinPalette.main, alpha * 0.9, zIndex + 3, angle, skinPalette.hot);
   }
 
-  function drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, zIndex) {
+  function drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, zIndex, skinPalette = null) {
     const meta = metaFor(player);
-    const color = classColor(player);
-    const accent = meta.accent;
+    const color = skinPalette?.main || classColor(player);
+    const accent = skinPalette?.hot || meta.accent;
+    const dark = skinPalette?.dark || meta.dark;
     const angle = Number(player.facing || 0);
     const classId = player.classId || "warrior";
     const pulse = 0.5 + Math.sin(now / 240 + renderer.hash(player.id) * 6) * 0.5;
 
-    renderer.drawGfxCircle(pos.x, pos.y + bob + 2, radius * 0.9, meta.dark, alpha * 0.62, color, alpha * 0.58, 3, zIndex, "add", 22);
+    renderer.drawGfxCircle(pos.x, pos.y + bob + 2, radius * 0.9, dark, alpha * 0.62, color, alpha * 0.58, 3, zIndex, skinPalette?.shape === "void" ? "normal" : "add", 22);
     renderer.drawGfxCircle(pos.x, pos.y + bob + 2, radius * (1.06 + pulse * 0.04), "#000000", 0, color, alpha * (0.22 + pulse * 0.1), 2, zIndex + 1, "add", 24);
 
     if (classId === "warrior") {
-      drawSword(renderer, pos.x - face * radius * 0.18, pos.y + bob + 3, angle - face * 0.18, radius * 1.7, color, alpha, zIndex + 8);
-      drawShield(renderer, pos.x + face * radius * 0.46, pos.y + bob + 3, angle, radius * 0.98, "#ffd166", alpha, zIndex + 10);
+      drawSword(renderer, pos.x - face * radius * 0.18, pos.y + bob + 3, angle - face * 0.18, radius * 1.7, color, alpha, zIndex + 8, skinPalette);
+      drawShield(renderer, pos.x + face * radius * 0.46, pos.y + bob + 3, angle, radius * 0.98, skinPalette ? accent : "#ffd166", alpha, zIndex + 10, skinPalette);
     } else if (classId === "ranger") {
-      drawBow(renderer, pos.x, pos.y + bob + 2, angle, radius * 1.08, color, alpha, zIndex + 8);
+      drawBow(renderer, pos.x, pos.y + bob + 2, angle, radius * 1.08, color, alpha, zIndex + 8, skinPalette);
       renderer.drawGfxDiamond(pos.x + Math.cos(angle) * radius * 0.9, pos.y + bob + Math.sin(angle) * radius * 0.9, radius * 0.13, accent, alpha * 0.86, zIndex + 12, angle);
     } else if (classId === "mage") {
-      renderer.drawGfxRuneRing(pos.x, pos.y + bob + 2, radius * 0.92, color, alpha * 0.86, zIndex + 8, now / 900, 7);
-      renderer.drawGfxDiamond(pos.x + face * radius * 0.9, pos.y + bob - radius * 0.64, radius * 0.18, accent, alpha * 0.92, zIndex + 13, now / 260);
+      const cx = pos.x;
+      const cy = pos.y + bob + 2;
+      const spin = now / 900;
+      renderer.drawGfxRuneRing(cx, cy, radius * 0.92, color, alpha * (skinPalette ? 0.58 : 0.86), zIndex + 8, spin, skinPalette?.shape === "void" ? 5 : 7);
+      if (!skinPalette) {
+        renderer.drawGfxDiamond(cx + face * radius * 0.9, cy - radius * 0.68, radius * 0.18, accent, alpha * 0.92, zIndex + 13, now / 260);
+      } else if (skinPalette.shape === "star") {
+        renderer.drawGfxStar?.(cx, cy, radius * 0.56, accent, alpha * 0.9, zIndex + 13, 8);
+        renderer.drawGfxDiamond(cx, cy, radius * 0.2, "#ffffff", alpha * 0.86, zIndex + 15, spin, color);
+        for (let i = -1; i <= 1; i += 1) {
+          const crownX = cx + i * radius * 0.42;
+          const crownY = cy - radius * (1.02 + (i === 0 ? 0.22 : 0));
+          renderer.drawGfxDiamond(crownX, crownY, radius * (i === 0 ? 0.16 : 0.11), i === 0 ? accent : color, alpha * 0.82, zIndex + 16 + i, spin + i * 0.5, accent);
+        }
+      } else if (skinPalette.shape === "void") {
+        renderer.drawGfxCircle(cx, cy, radius * 0.44, skinPalette.dark, alpha * 0.92, color, alpha * 0.7, 2.4, zIndex + 13, "normal", 18);
+        renderer.drawGfxArc(cx, cy, radius * 0.68, spin, spin + Math.PI * 1.18, 3.4, accent, alpha * 0.68, zIndex + 15, "add", 12);
+        renderer.drawGfxArc(cx, cy, radius * 0.68, spin + Math.PI, spin + Math.PI * 2.18, 3.4, color, alpha * 0.72, zIndex + 16, "add", 12);
+      } else if (skinPalette.shape === "ember") {
+        renderer.drawGfxPath?.([
+          { x: cx, y: cy - radius * 0.7 },
+          { x: cx + radius * 0.42, y: cy + radius * 0.46 },
+          { x: cx, y: cy + radius * 0.25 },
+          { x: cx - radius * 0.42, y: cy + radius * 0.46 },
+        ], color, alpha * 0.78, accent, alpha * 0.88, 2, zIndex + 13, "add");
+        renderer.drawGfxDiamond(cx, cy + radius * 0.05, radius * 0.18, accent, alpha * 0.94, zIndex + 15, spin, "#ffffff");
+      } else {
+        renderer.drawGfxDiamond(cx, cy, radius * 0.5, color, alpha * 0.74, zIndex + 13, Math.PI * 0.25, accent);
+        for (const side of [-1, 1]) {
+          const leafX = cx + side * radius * 0.48;
+          renderer.drawGfxDiamond(leafX, cy - radius * 0.06, radius * 0.24, side > 0 ? accent : color, alpha * 0.74, zIndex + 14, side * 0.68, accent);
+          renderer.drawGfxLine(cx, cy + radius * 0.38, leafX, cy - radius * 0.06, 1.8, accent, alpha * 0.58, zIndex + 15, "add");
+        }
+      }
     } else if (classId === "engineer") {
       renderer.drawGfxGear(pos.x, pos.y + bob + 2, radius * 0.88, color, alpha * 0.95, zIndex + 8, now / 680, 8);
       renderer.drawGfxLine(pos.x - radius * 0.62, pos.y + bob, pos.x + radius * 0.62, pos.y + bob, 3, accent, alpha * 0.5, zIndex + 11, "add");
@@ -162,7 +204,9 @@
       drawTextGlyph(renderer, meta.glyph, pos.x, pos.y + bob + 1, accent, alpha * 0.88, zIndex + 9, 18);
     }
 
-    drawTextGlyph(renderer, meta.glyph, pos.x, pos.y + bob + radius * 0.1, "#e0f2fe", alpha * 0.5, zIndex + 20, 11);
+    if (!(classId === "mage" && skinPalette)) {
+      drawTextGlyph(renderer, meta.glyph, pos.x, pos.y + bob + radius * 0.1, skinPalette ? accent : "#e0f2fe", alpha * 0.5, zIndex + 20, 11);
+    }
   }
 
   const GEAR_RARITY_COLORS = Object.freeze({
@@ -356,11 +400,11 @@
       }
     }
 
-    drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, z + 8);
-    renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, z + 29);
+    const skinPalette = skinEffects.palette?.(player.skin) || null;
+    drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, z + 8, skinPalette);
+    if (!skinPalette) renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, z + 29);
     const skinAttackOverride = skinEffects.renderPlayerAttackOverride?.(renderer, player, pos, radius, now, bob, z);
     if (!skinAttackOverride) renderPlayerAttackEffect(renderer, player, pos, face, bob);
-    skinEffects.renderPlayerBodyEffect?.(renderer, player, pos, radius, now, bob, z);
 
     if (player.shield > 0) renderer.drawGfxCircle(pos.x, pos.y + bob + 2, radius * 1.42, "#000000", 0, "#67e8f9", 0.46, 4, z + 30, "add", 26);
     const poisonStacks = Math.max(0, Math.min(3, Math.floor(Number(player.poisonStacks || 0))));

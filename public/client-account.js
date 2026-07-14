@@ -72,6 +72,24 @@
     return session;
   }
 
+  async function reset(session) {
+    const stored = loadCredentials();
+    const accountId = String(session?.account?.id || stored?.accountId || "");
+    const sessionToken = String(session?.sessionToken || stored?.sessionToken || "");
+    if (!accountId || !sessionToken) {
+      const error = new Error("초기화할 계정 세션이 없습니다.");
+      error.status = 401;
+      throw error;
+    }
+    const response = await request("/api/account/reset", { accountId, sessionToken });
+    const nextSession = hydrateSession(response, {
+      sessionToken,
+      recoveryCode: String(session?.recoveryCode || stored?.recoveryCode || ""),
+    });
+    saveCredentials(nextSession);
+    return nextSession;
+  }
+
   function hydrateSession(response, previous = null) {
     const session = {
       ok: true,
@@ -137,5 +155,6 @@
     getRecoveryKey,
     loadCredentials,
     recover,
+    reset,
   });
 })();

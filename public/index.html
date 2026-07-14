@@ -22,12 +22,19 @@
         </div>
         <section id="runContext" class="run-context hidden" aria-label="전투 정보" aria-live="polite">
           <div class="run-context-metric timer">
-            <span>TIME</span>
+            <span class="run-time-label"><i aria-hidden="true"></i> SURVIVAL TIME</span>
             <div><strong id="runTimer">0:00</strong><small id="runTimerMax">/ 9:00</small></div>
+            <small id="runTimePhase" class="run-time-phase">다음 보스 3:00</small>
           </div>
           <div class="run-context-metric ascension">
             <span>DIFFICULTY</span>
             <strong id="runAscension">승천 0</strong>
+          </div>
+          <div class="run-timeline" aria-hidden="true">
+            <b id="runTimelineFill"></b>
+            <i style="--checkpoint: 33.333%"></i>
+            <i style="--checkpoint: 66.666%"></i>
+            <i style="--checkpoint: 100%"></i>
           </div>
         </section>
         <button id="startButton" class="start-run stage-start hidden" type="button" data-icon="play_arrow">START RUN</button>
@@ -53,6 +60,7 @@
               <button type="button" data-lobby-view="gear" data-icon="inventory_2" aria-selected="false"><strong>장비</strong><small>세트 · 룬</small></button>
               <button type="button" data-lobby-view="forge" data-icon="construction" aria-selected="false"><strong>대장간</strong><small>강화 · 제작</small></button>
               <button type="button" data-lobby-view="archive" data-icon="menu_book" aria-selected="false"><strong>기록</strong><small>도감 · 업적</small></button>
+              <button type="button" data-lobby-view="cosmetics" data-icon="styler" aria-selected="false"><strong>외형</strong><small>칭호 · 스킨</small></button>
               <button type="button" data-lobby-view="challenges" data-icon="task_alt" aria-selected="false"><strong>개인 임무</strong><small>일일 · 주간</small></button>
               <button type="button" data-lobby-view="training" data-icon="science" aria-selected="false"><strong>훈련 설정</strong><small>스킬 · 유물</small></button>
             </nav>
@@ -120,8 +128,8 @@
           <div class="lobby-actions">
             <div id="lobbyBotControl" class="lobby-bot-control">
               <span id="lobbyBotCount">BOT 0</span>
-              <button id="removeBotButton" class="lobby-bot-button google-icon-only" type="button" data-icon="remove" aria-label="봇 제거" title="봇 제거">-</button>
-              <button id="addBotButton" class="lobby-bot-button google-icon-only" type="button" data-icon="add" aria-label="봇 추가" title="봇 추가">+</button>
+              <button id="removeBotButton" class="lobby-bot-button" type="button" aria-label="봇 제거" title="봇 제거">-</button>
+              <button id="addBotButton" class="lobby-bot-button" type="button" aria-label="봇 추가" title="봇 추가">+</button>
             </div>
             <div class="lobby-primary-actions">
               <button id="spectatorButton" class="lobby-spectator-button" type="button" data-icon="visibility">SPECTATE</button>
@@ -337,6 +345,7 @@
           <div class="account-settings-actions">
             <button id="accountCopyRecoveryButton" class="ghost-button" type="button" data-icon="content_copy">복구 키 복사</button>
             <button id="accountNewGuestButton" class="ghost-button" type="button" data-icon="person_add">새 게스트 계정</button>
+            <button id="accountResetButton" class="ghost-button danger" type="button" data-icon="delete_forever">계정 초기화</button>
           </div>
           <div class="account-recovery-row">
             <input id="accountRecoveryInput" type="text" autocomplete="off" placeholder="RP-계정ID.복구키" aria-label="Account recovery key" />

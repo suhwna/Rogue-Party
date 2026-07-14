@@ -131,13 +131,46 @@ function getBossPhaseTransition(enemy) {
   return null;
 }
 
+function getBossHealthGateRatio(enemy) {
+  const phase = Math.max(1, Number(enemy?.bossPhase || 1));
+  if (enemy?.executionBoss) {
+    if (phase < 2) return 0.8;
+    if (phase < 3) return 0.55;
+    if (phase < 4) return 0.28;
+    return null;
+  }
+  if (enemy?.miniBoss) return phase < 2 ? 0.5 : null;
+  if (phase < 2) return 0.72;
+  if (phase < 3) return 0.4;
+  return null;
+}
+
+function isBossDamageLocked(enemy) {
+  const gateRatio = getBossHealthGateRatio(enemy);
+  if (gateRatio == null) return false;
+  const gateHp = Math.ceil(Math.max(1, Number(enemy?.maxHp || 1)) * gateRatio);
+  return Number(enemy?.hp || 0) <= gateHp;
+}
+
+function getBossDamageAllowance(enemy, incomingDamage) {
+  const damage = Math.max(0, Number(incomingDamage) || 0);
+  if (damage <= 0 || isBossDamageLocked(enemy)) return 0;
+  const gateRatio = getBossHealthGateRatio(enemy);
+  if (gateRatio == null) return damage;
+  const gateHp = Math.ceil(Math.max(1, Number(enemy?.maxHp || 1)) * gateRatio);
+  return Math.min(damage, Math.max(0, Number(enemy?.hp || 0) - gateHp));
+}
+
 module.exports = {
   bossProfileView,
   getSignaturePatterns,
   getBossPhaseTransition,
+  getBossDamageAllowance,
+  getBossHealthGateRatio,
   getBossProfileById,
   getChapterBossProfile,
   getMiniBossProfile,
   getPhasePatterns,
+  isBossDamageLocked,
   nextBossPattern
 };

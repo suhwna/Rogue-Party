@@ -86,6 +86,46 @@
     return projectile.color || "#f8fafc";
   }
 
+  function drawSkinnedMageOrb(renderer, projectile, palette, z, now) {
+    const radius = Math.max(7, Number(projectile.radius || 6));
+    const angle = Number(projectile.angle || 0);
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const phase = now / 420 + Number(projectile.id || 0) * 0.37;
+    const x = projectile.x;
+    const y = projectile.y;
+    const tail = radius * 3.3;
+
+    renderer.drawGfxLine?.(x - ux * tail, y - uy * tail, x - ux * radius * 0.25, y - uy * radius * 0.25, radius * 0.7, palette.dark, 0.22, z - 5, "add");
+    renderer.drawGfxLine?.(x - ux * tail * 0.78, y - uy * tail * 0.78, x, y, Math.max(2, radius * 0.28), palette.main, 0.48, z - 4, "add");
+
+    if (palette.shape === "star") {
+      renderer.drawGfxStar?.(x, y, radius * 1.16, palette.hot, 0.92, z + 1, 8);
+      renderer.drawGfxDiamond?.(x, y, radius * 0.38, "#ffffff", 0.9, z + 3, phase, palette.main);
+      renderer.drawGfxLine?.(x - px * radius * 1.35, y - py * radius * 1.35, x + px * radius * 1.35, y + py * radius * 1.35, 1.5, palette.hot, 0.58, z + 2, "add");
+    } else if (palette.shape === "void") {
+      renderer.drawGfxDiamond?.(x, y, radius * 1.02, palette.dark, 0.96, z + 1, angle + Math.PI * 0.25, palette.main);
+      renderer.drawGfxArc?.(x, y, radius * 1.28, phase, phase + Math.PI * 1.15, 2.6, palette.hot, 0.74, z + 3, "add", 9);
+      renderer.drawGfxArc?.(x, y, radius * 1.28, phase + Math.PI, phase + Math.PI * 2.15, 2.6, palette.main, 0.68, z + 4, "add", 9);
+    } else if (palette.shape === "ember") {
+      renderer.drawGfxPath?.([
+        { x: x + ux * radius * 1.35, y: y + uy * radius * 1.35 },
+        { x: x - ux * radius * 0.9 + px * radius * 0.72, y: y - uy * radius * 0.9 + py * radius * 0.72 },
+        { x: x - ux * radius * 0.42, y: y - uy * radius * 0.42 },
+        { x: x - ux * radius * 0.9 - px * radius * 0.72, y: y - uy * radius * 0.9 - py * radius * 0.72 },
+      ], palette.main, 0.82, palette.hot, 0.82, 1.8, z + 1, "add");
+      renderer.drawGfxDiamond?.(x + ux * radius * 0.2, y + uy * radius * 0.2, radius * 0.38, palette.hot, 0.94, z + 3, angle, "#ffffff");
+    } else {
+      renderer.drawGfxDiamond?.(x, y, radius * 1.02, palette.main, 0.86, z + 1, angle + Math.PI * 0.25, palette.hot);
+      for (const side of [-1, 1]) {
+        renderer.drawGfxDiamond?.(x - ux * radius * 0.42 + px * side * radius * 0.62, y - uy * radius * 0.42 + py * side * radius * 0.62, radius * 0.46, side > 0 ? palette.hot : palette.main, 0.68, z + 2, angle + side * 0.72, palette.hot);
+      }
+      renderer.drawGfxLine?.(x - ux * radius * 0.82, y - uy * radius * 0.82, x + ux * radius * 0.72, y + uy * radius * 0.72, 1.5, palette.hot, 0.78, z + 4, "add");
+    }
+  }
+
   function drawArrow(renderer, projectile, tint, z, now) {
     const angle = projectile.angle || 0;
     const r = Math.max(7, projectile.radius || 6);
@@ -481,7 +521,8 @@
     for (const projectile of projectiles) {
       if (renderer.isWorldVisible?.(projectile, Math.max(96, Number(projectile.splash || 0) + 32)) === false) continue;
       const tags = classifyProjectile(projectile);
-      const tint = projectileTint(projectile, tags);
+      const skinPalette = !isHostileProjectile(projectile, tags) ? skinEffects.palette?.(projectile.skin) : null;
+      const tint = skinPalette?.main || projectileTint(projectile, tags);
       const angle = projectile.angle || 0;
       const radius = Math.max(7, projectile.radius || 6);
       const z = projectile.y + 4;
@@ -516,10 +557,14 @@
       } else if (tags.arrow) {
         drawArrow(renderer, projectile, tint, z, now);
       } else if (tags.arcane) {
-        const fill = tags.style.includes("star_orb") ? "#3b184b" : "#1d1230";
-        const core = tags.style.includes("star_orb") ? "#f0abfc" : tint;
-        renderer.drawGfxCircle(projectile.x, projectile.y, radius * 1.18, fill, 0.5, tint, 0, 0, z, "add", 14);
-        renderer.drawGfxCircle(projectile.x, projectile.y, radius * 0.52, core, 0.82, "#ffffff", 0, 0, z + 1, "add", 10);
+        if (skinPalette) {
+          drawSkinnedMageOrb(renderer, projectile, skinPalette, z, now);
+        } else {
+          const fill = tags.style.includes("star_orb") ? "#3b184b" : "#1d1230";
+          const core = tags.style.includes("star_orb") ? "#f0abfc" : tint;
+          renderer.drawGfxCircle(projectile.x, projectile.y, radius * 1.18, fill, 0.5, tint, 0, 0, z, "add", 14);
+          renderer.drawGfxCircle(projectile.x, projectile.y, radius * 0.52, core, 0.82, "#ffffff", 0, 0, z + 1, "add", 10);
+        }
       } else if (tags.fire || tags.poison) {
         renderer.drawGfxCircle(projectile.x, projectile.y, radius * 1.12, tags.fire ? "#7c2d12" : "#365314", 0.18, tint, 0.54, 3, z, "add", 14);
         renderer.drawGfxLine(projectile.x - Math.cos(angle) * radius * 1.7, projectile.y - Math.sin(angle) * radius * 1.7, projectile.x, projectile.y, 5, tint, 0.24, z - 1, "add");

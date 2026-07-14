@@ -12,7 +12,7 @@ function createAccountStore(options = {}) {
   const backupPath = options.backupPath || `${filePath}.backup`;
   let data = loadStore(filePath, backupPath);
 
-  function createGuest({ displayName = "Player", progress = null } = {}) {
+  function createAccount({ displayName = "Player", progress = null, role = "user" } = {}) {
     let id;
     do id = `RP-${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
     while (data.accounts[id]);
@@ -24,15 +24,24 @@ function createAccountStore(options = {}) {
       tokenHash: hashSecret(sessionToken),
       recoveryHash: hashSecret(recoveryCode),
       displayName: sanitizeDisplayName(displayName),
+      role: role === "admin" ? "admin" : "user",
       progress: progress ? progression.sanitizeImportedProgress(progress) : progression.getDefaultProgress(),
       revision: 1,
       createdAt: now,
       updatedAt: now,
-      lastReason: progress ? "local-migration" : "guest-created",
+      lastReason: role === "admin" ? "admin-created" : progress ? "local-migration" : "guest-created",
     };
     data.accounts[id] = account;
     persist();
     return sessionView(account, { sessionToken, recoveryCode, created: true });
+  }
+
+  function createGuest({ displayName = "Player", progress = null } = {}) {
+    return createAccount({ displayName, progress, role: "user" });
+  }
+
+  function createAdmin({ displayName = "관리자", progress = null } = {}) {
+    return createAccount({ displayName, progress, role: "admin" });
   }
 
   function authenticate(accountId, sessionToken) {
@@ -87,6 +96,17 @@ function createAccountStore(options = {}) {
     return sessionView(account, { created: false });
   }
 
+  function resetProgress(accountId, sessionToken) {
+    const account = authenticate(accountId, sessionToken);
+    if (!account) return null;
+    account.progress = progression.getDefaultProgress();
+    account.revision = Math.max(1, Number(account.revision || 0) + 1);
+    account.updatedAt = Date.now();
+    account.lastReason = "account-reset";
+    persist();
+    return sessionView(account, { sessionToken, reset: true });
+  }
+
   function getTrusted(accountId) {
     return data.accounts[String(accountId || "")] || null;
   }
@@ -113,11 +133,13 @@ function createAccountStore(options = {}) {
   return {
     authenticate,
     backupPath,
+    createAdmin,
     createGuest,
     filePath,
     getSession,
     getTrusted,
     recover,
+    resetProgress,
     updateDisplayName,
     updateProgress,
   };

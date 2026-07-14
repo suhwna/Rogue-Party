@@ -5,12 +5,21 @@ export const SLOT_COOLDOWN_MUL: Readonly<Record<string, number>> = {
   f: 1.24,
 };
 const ENGINEER_MECHA_COOLDOWN_MUL = 2;
+export const MAX_SKILL_HASTE = 500;
 
 export interface PlayerSkillLike {
   readonly classId: string;
-  readonly skillCooldownMul: number;
+  readonly skillHaste?: number;
   readonly skillUpgrades?: readonly string[];
   readonly skillTimers?: Record<string, number>;
+}
+
+export function getSkillHaste(player: PlayerSkillLike): number {
+  return Math.max(0, Math.min(MAX_SKILL_HASTE, Number(player.skillHaste) || 0));
+}
+
+export function getSkillCooldownMultiplier(player: PlayerSkillLike): number {
+  return 100 / (100 + getSkillHaste(player));
 }
 
 export interface SkillUpgradeLike {
@@ -62,7 +71,7 @@ export function getSkillCooldown(
   if (!def) return 0;
   const slotMul = SLOT_COOLDOWN_MUL[slot] || 1;
   const classSlotMul = player.classId === "engineer" && slot === "e" ? ENGINEER_MECHA_COOLDOWN_MUL : 1;
-  return def.skillCd * slotMul * classSlotMul * player.skillCooldownMul;
+  return def.skillCd * slotMul * classSlotMul * getSkillCooldownMultiplier(player);
 }
 
 export interface PlayerSkillTimerLike extends PlayerSkillLike {

@@ -60,7 +60,27 @@ function pickBestBotRelicChoice(bot, random = Math.random) {
 
 function scoreBotRelicChoice(bot, choice, random = Math.random) {
   let score = 100;
-  if (choice.consumable && bot.hp < bot.maxHp * 0.55) score += 80;
+  const relicId = choice.id || choice.relicId || choice.targetId || "";
+  const damageWeights = {
+    power_core: 82,
+    sharp_eye: 70,
+    fatal_mark: 64,
+    rapid_loader: 58,
+    cooling_gear: 52,
+    splitter_core: 48,
+    giant_lens: 42,
+    swift_boots: 10,
+    heartstone: 6,
+    iron_plate: 4,
+    living_moss: 2
+  };
+  score += damageWeights[relicId] || 0;
+  if (relicId === "splitter_core") {
+    const projectileClasses = new Set(["ranger", "mage", "engineer", "puppeteer", "alchemist"]);
+    score += projectileClasses.has(bot.classId) ? 24 : -44;
+  }
+  if (choice.consumable && bot.hp < bot.maxHp * 0.35) score += 96;
+  else if (choice.consumable) score -= 26;
   if (choice.target && choice.target !== "공용" && choice.target !== "Common") score += 18;
   if (choice.upgrading) score += 14;
   if (!choice.consumable && choice.maxLevel && choice.level >= choice.maxLevel) score -= 80;

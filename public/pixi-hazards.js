@@ -244,8 +244,12 @@
     const z = hazard.y + 20;
     const id = hazard.id || 0;
     const pulse = 1 + Math.sin(now / 210 + id) * 0.012;
-    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * pulse, "#4a3415", state.armed ? 0.035 : 0.025, "#f1d08b", state.armed ? 0.36 : 0.24, state.armed ? 2.4 : 1.8, z - 16, "add", 56);
-    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.72, "#000000", 0, "#fde68a", state.armed ? 0.12 : 0.08, 1.2, z - 15, "add", 42);
+    const skin = skinEffects.palette?.(hazard.skin);
+    const dark = skin?.dark || "#4a3415";
+    const main = skin?.main || "#f1d08b";
+    const hot = skin?.hot || "#fde68a";
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * pulse, dark, state.armed ? 0.035 : 0.025, main, state.armed ? 0.36 : 0.24, state.armed ? 2.4 : 1.8, z - 16, "add", 56);
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.72, "#000000", 0, hot, state.armed ? 0.12 : 0.08, 1.2, z - 15, "add", 42);
     if (!state.armed) return;
     const dropCount = 9;
     const skyY = hazard.y - state.radius * 2.1;
@@ -256,7 +260,7 @@
       const x = hazard.x + lane;
       const slant = (i % 2 ? -1 : 1) * 3;
       const topY = skyY + t * state.radius * 2.45;
-      renderer.drawGfxArrow(x - slant, topY - 42, x + slant, topY + 30, i % 3 === 0 ? "#fff7ed" : "#f1d08b", 0.58 + t * 0.18, z + i, i % 3 === 0 ? 4 : 3);
+      renderer.drawGfxArrow(x - slant, topY - 42, x + slant, topY + 30, i % 3 === 0 ? hot : main, 0.58 + t * 0.18, z + i, i % 3 === 0 ? 4 : 3);
     }
   }
 
@@ -291,8 +295,12 @@
 
   function renderMeteorHazard(renderer, hazard, state, now) {
     const z = hazard.y - 14;
-    drawNeonRing(renderer, hazard.x, hazard.y, state.radius, "#f97316", state.armed ? 0.24 : 0.42, z, now / 720, true);
-    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.38, "#7c2d12", 0.05, "#fed7aa", 0.14, 2, z + 2, "add", 24);
+    const skin = skinEffects.palette?.(hazard.skin);
+    const main = skin?.main || "#f97316";
+    const dark = skin?.dark || "#7c2d12";
+    const hot = skin?.hot || "#fed7aa";
+    drawNeonRing(renderer, hazard.x, hazard.y, state.radius, main, state.armed ? 0.24 : 0.42, z, now / 720, true);
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.38, dark, 0.05, hot, 0.14, 2, z + 2, "add", 24);
   }
 
   function renderMortarBlast(renderer, hazard, state, now) {
@@ -338,10 +346,13 @@
     const radius = Math.max(72, state.radius);
     const angle = Number.isFinite(hazard.angle) ? hazard.angle : 0;
     const spin = now / 155 + Number(hazard.id || 0) * 0.41;
-    const tint = hazard.color || "#f97316";
+    const skin = skinEffects.palette?.(hazard.skin);
+    const tint = skin?.main || hazard.color || "#f97316";
+    const edge = skin?.hot || "#fff7ed";
+    const dark = skin?.dark || "#2a0f05";
     const z = hazard.y + 42;
-    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.82, "#2a0f05", 0.045, tint, 0.16, 4, z - 8, "add", 42);
-    renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.5, "#fde68a", 0.14, z - 5, -spin * 0.35, 9);
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.82, dark, 0.045, tint, 0.16, 4, z - 8, "add", 42);
+    renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.5, edge, 0.14, z - 5, -spin * 0.35, 9);
 
     for (let i = 0; i < 5; i += 1) {
       const lane = i / 5;
@@ -349,8 +360,8 @@
       const start = spin + i * 1.24;
       const end = start + 1.35 + lane * 0.42;
       const width = 4 + i;
-      renderer.drawGfxArc(hazard.x, hazard.y, r, start, end, width, i % 2 ? tint : "#fff7ed", 0.2 + lane * 0.08, z + i, "add", 18);
-      renderer.drawGfxArc(hazard.x, hazard.y, r * 1.08, start + 0.18, end + 0.08, Math.max(2, width - 2), "#fbbf24", 0.11 + lane * 0.04, z + i + 5, "add", 16);
+      renderer.drawGfxArc(hazard.x, hazard.y, r, start, end, width, i % 2 ? tint : edge, 0.2 + lane * 0.08, z + i, "add", 18);
+      renderer.drawGfxArc(hazard.x, hazard.y, r * 1.08, start + 0.18, end + 0.08, Math.max(2, width - 2), tint, 0.11 + lane * 0.04, z + i + 5, "add", 16);
     }
 
     renderer.drawGfxLine(

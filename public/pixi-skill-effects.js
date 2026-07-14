@@ -23,7 +23,7 @@
     };
   }
 
-  function createStyledSkillContext(renderer, effect, progress, alpha, radius, color, style) {
+  function createStyledSkillContext(renderer, effect, progress, alpha, radius, color, style, options = {}) {
     const s = normalizeSkillStyle(style);
     if (!s) return null;
     const kind = effect.kind || "";
@@ -51,11 +51,34 @@
       effectRadius,
       end,
       z: effect.y + 108,
+      skinPalette: options.skinPalette || null,
     };
   }
 
   function shouldRenderStyledSkill(style) {
     return normalizeSkillStyle(style).length > 0;
+  }
+
+  function drawMageSkinGlyph(renderer, palette, x, y, size, alpha, z, rotation = 0) {
+    if (!palette || size <= 0) return false;
+    if (palette.shape === "star") {
+      renderer.drawGfxStar?.(x, y, size, palette.hot, alpha, z, 8);
+      renderer.drawGfxDiamond?.(x, y, size * 0.28, "#ffffff", alpha * 0.82, z + 2, rotation, palette.main);
+    } else if (palette.shape === "void") {
+      renderer.drawGfxDiamond?.(x, y, size * 0.74, palette.dark, alpha * 0.9, z, rotation, palette.main);
+      renderer.drawGfxArc?.(x, y, size, rotation - 0.82, rotation + 0.82, Math.max(1.5, size * 0.14), palette.hot, alpha * 0.72, z + 2, "add", 8);
+    } else if (palette.shape === "ember") {
+      renderer.drawGfxPath?.([
+        { x, y: y - size },
+        { x: x + size * 0.56, y: y + size * 0.72 },
+        { x, y: y + size * 0.34 },
+        { x: x - size * 0.56, y: y + size * 0.72 },
+      ], palette.main, alpha * 0.78, palette.hot, alpha * 0.86, Math.max(1.4, size * 0.1), z, "add");
+    } else {
+      renderer.drawGfxDiamond?.(x, y, size * 0.78, palette.main, alpha * 0.82, z, rotation + Math.PI * 0.25, palette.hot);
+      renderer.drawGfxLine?.(x - Math.cos(rotation) * size * 0.55, y - Math.sin(rotation) * size * 0.55, x + Math.cos(rotation) * size * 0.55, y + Math.sin(rotation) * size * 0.55, Math.max(1.2, size * 0.08), palette.hot, alpha * 0.72, z + 2, "add");
+    }
+    return true;
   }
 
   function meteorRockPoints(x, y, angle, length, width, phase = 0) {
@@ -1319,7 +1342,7 @@
   }
 
   function renderCrispMageEffect(renderer, context) {
-    const { effect, progress, alpha, s, kind, peak, pulse, effectRadius, end, z, styleInfo } = context;
+    const { effect, progress, alpha, s, kind, peak, pulse, effectRadius, end, z, styleInfo, skinPalette } = context;
     const cx = effect.x;
     const cy = effect.y;
     const t = Math.max(0, Math.min(1, progress));
@@ -1362,6 +1385,14 @@
         const r = ring * (0.62 + (i % 2) * 0.08);
         renderer.drawGfxDiamond(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.92, 5 + (i % 2), "#dbeafe", iceAlpha * 0.24, z + 14 + i, a, "#93c5fd");
       }
+      if (skinPalette) {
+        const glyphCount = skinPalette.shape === "star" ? 8 : 6;
+        for (let i = 0; i < glyphCount; i += 1) {
+          const a = phase * 0.04 + (Math.PI * 2 * i) / glyphCount;
+          const r = Math.min(frostRadius * 0.76, ring * (0.68 + (i % 2) * 0.08));
+          drawMageSkinGlyph(renderer, skinPalette, cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.92, Math.max(5, frostRadius * 0.055), iceAlpha * 0.62, z + 24 + i, a + Math.PI * 0.5);
+        }
+      }
       if (s.includes("lock") || s.includes("shatter")) {
         renderer.drawGfxImpactBurst(cx, cy, frostRadius * 0.38, "#dbeafe", alpha * 0.22, z + 20, t * 1.6, 7);
       }
@@ -1379,22 +1410,32 @@
       const mx = startX + (cx - startX) * fall;
       const my = startY + (cy - startY) * fall;
       const meteorAngle = Math.atan2(cy - startY, cx - startX);
+      const meteorTint = skinPalette?.main || "#fb923c";
+      const meteorHot = skinPalette?.hot || "#fed7aa";
+      const meteorDark = skinPalette?.dark || "#2a120b";
       const targetAlpha = alpha * Math.max(0.06, 0.3 - impact * 0.14);
       drawMeteorLandingShadow(renderer, cx, cy, meteorRadius, fall, impact, alpha, z - 20);
-      renderer.drawGfxCircle(cx, cy, meteorRadius * (0.42 + impact * 0.5), "#2a120b", alpha * (0.04 + impact * 0.045), "#fb923c", targetAlpha, 2.5, z - 18, "add", 48);
-      renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, Math.PI * 0.1, Math.PI * 0.86, 4, "#fed7aa", targetAlpha * 0.78, z - 16, "add", 14);
-      renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, -Math.PI * 0.86, -Math.PI * 0.1, 4, "#fb923c", targetAlpha * 0.78, z - 15, "add", 14);
+      renderer.drawGfxCircle(cx, cy, meteorRadius * (0.42 + impact * 0.5), meteorDark, alpha * (0.04 + impact * 0.045), meteorTint, targetAlpha, 2.5, z - 18, "add", 48);
+      renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, Math.PI * 0.1, Math.PI * 0.86, 4, meteorHot, targetAlpha * 0.78, z - 16, "add", 14);
+      renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, -Math.PI * 0.86, -Math.PI * 0.1, 4, meteorTint, targetAlpha * 0.78, z - 15, "add", 14);
       if (impact <= 0.04) {
         const meteorSize = meteorRadius * (0.2 + fall * 0.075);
         const tailX = mx - Math.cos(meteorAngle) * meteorRadius * 0.75;
         const tailY = my - Math.sin(meteorAngle) * meteorRadius * 0.75;
-        drawMeteorTrail(renderer, tailX, tailY, mx, my, meteorSize, alpha * 0.82, z - 4 + fall * 10, t);
-        renderer.drawGfxPath?.(meteorRockPoints(mx, my, meteorAngle, meteorSize * 1.52, meteorSize * 0.98, t * 4), "#3f1f13", alpha * 0.9, "#fed7aa", alpha * 0.56, 2.2, z + 10 + fall * 12, "normal");
-        renderer.drawGfxLine?.(mx - Math.cos(meteorAngle) * meteorSize * 0.55, my - Math.sin(meteorAngle) * meteorSize * 0.55, mx + Math.cos(meteorAngle) * meteorSize * 0.28, my + Math.sin(meteorAngle) * meteorSize * 0.28, Math.max(3, meteorSize * 0.18), "#fde68a", alpha * 0.36, z + 14 + fall * 12, "add");
+        if (skinPalette) {
+          renderer.drawGfxLine?.(tailX, tailY, mx, my, meteorSize * 1.15, meteorDark, alpha * 0.28, z - 5 + fall * 10, "add");
+          renderer.drawGfxLine?.(tailX, tailY, mx, my, meteorSize * 0.5, meteorTint, alpha * 0.64, z - 4 + fall * 10, "add");
+          drawMageSkinGlyph(renderer, skinPalette, mx, my, meteorSize * 1.25, alpha * 0.96, z + 12 + fall * 12, meteorAngle + t * 1.8);
+        } else {
+          drawMeteorTrail(renderer, tailX, tailY, mx, my, meteorSize, alpha * 0.82, z - 4 + fall * 10, t);
+          renderer.drawGfxPath?.(meteorRockPoints(mx, my, meteorAngle, meteorSize * 1.52, meteorSize * 0.98, t * 4), "#3f1f13", alpha * 0.9, "#fed7aa", alpha * 0.56, 2.2, z + 10 + fall * 12, "normal");
+          renderer.drawGfxLine?.(mx - Math.cos(meteorAngle) * meteorSize * 0.55, my - Math.sin(meteorAngle) * meteorSize * 0.55, mx + Math.cos(meteorAngle) * meteorSize * 0.28, my + Math.sin(meteorAngle) * meteorSize * 0.28, Math.max(3, meteorSize * 0.18), "#fde68a", alpha * 0.36, z + 14 + fall * 12, "add");
+        }
       } else {
         const shock = meteorRadius * (0.4 + impact * 0.5);
-        renderer.drawGfxCircle(cx, cy + meteorRadius * 0.06, shock, "#7c2d12", alpha * (0.11 - impact * 0.03), "#fb923c", alpha * (0.36 - impact * 0.14), 4, z + 8, "add", 42);
-        renderer.drawGfxImpactBurst(cx, cy, meteorRadius * (0.58 + impact * 0.28), "#f97316", alpha * (0.28 - impact * 0.08), z + 18, t * 2.1, 10);
+        renderer.drawGfxCircle(cx, cy + meteorRadius * 0.06, shock, meteorDark, alpha * (0.11 - impact * 0.03), meteorTint, alpha * (0.36 - impact * 0.14), 4, z + 8, "add", 42);
+        renderer.drawGfxImpactBurst(cx, cy, meteorRadius * (0.58 + impact * 0.28), meteorTint, alpha * (0.28 - impact * 0.08), z + 18, t * 2.1, 10);
+        if (skinPalette) drawMageSkinGlyph(renderer, skinPalette, cx, cy, meteorRadius * 0.24, alpha * (0.66 - impact * 0.28), z + 23, t * 2.4);
         drawMeteorFragments(renderer, cx, cy, meteorRadius * (0.36 + impact * 0.18), alpha * impact * 0.62, z + 24, t * 4.6);
       }
       return true;
@@ -1405,8 +1446,8 @@
       const rail = s.includes("rail");
       const engineerArc = s.includes("engineer") || s.includes("turret") || s.includes("drone") || s.includes("overclock") || s.includes("coil");
       const mageChain = (s.includes("chain_lightning") || (kind === "chain" && !engineerArc && !s.includes("assassin") && !s.includes("puppet") && !s.includes("elite"))) && !s.includes("mark_chain");
-      const tint = rail ? "#fde68a" : empowered ? "#ef4444" : engineerArc ? "#67e8f9" : "#9ee6ff";
-      const core = empowered ? "#fee2e2" : "#f8fafc";
+      const tint = mageChain && skinPalette ? skinPalette.main : rail ? "#fde68a" : empowered ? "#ef4444" : engineerArc ? "#67e8f9" : "#9ee6ff";
+      const core = mageChain && skinPalette ? skinPalette.hot : empowered ? "#fee2e2" : "#f8fafc";
       if (mageChain) {
         const dx = end.toX - end.fromX;
         const dy = end.toY - end.fromY;
@@ -1416,15 +1457,28 @@
         const px = -uy;
         const py = ux;
         const width = empowered ? 8 : 7;
-        renderer.drawGfxLightning(end.fromX, end.fromY, end.toX, end.toY, tint, alpha * 0.86, z, width, 8, 16, t * 1.35);
-        renderer.drawGfxLightning(end.fromX, end.fromY, end.toX, end.toY, core, alpha * 0.18, z + 4, Math.max(2, width * 0.34), 5, 8, t * 1.35 + 0.31);
-        for (let i = 0; i < 3; i += 1) {
+        if (skinPalette?.shape === "star") {
+          renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, width + 9, skinPalette.dark, alpha * 0.3, z - 4, "add");
+          renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, width + 3, tint, alpha * 0.76, z, "add");
+          renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(2.4, width * 0.36), core, alpha * 0.96, z + 4, "add");
+        } else {
+          renderer.drawGfxLightning(end.fromX, end.fromY, end.toX, end.toY, tint, alpha * 0.86, z, width, skinPalette?.shape === "leaf" ? 6 : 8, skinPalette?.shape === "void" ? 22 : 16, t * 1.35);
+          renderer.drawGfxLightning(end.fromX, end.fromY, end.toX, end.toY, core, alpha * 0.2, z + 4, Math.max(2, width * 0.34), 5, 8, t * 1.35 + 0.31);
+        }
+        const branchCount = skinPalette?.shape === "star" ? 4 : 3;
+        for (let i = 0; i < branchCount; i += 1) {
           const along = (i + 1) / 4;
           const bx = end.fromX + dx * along;
           const by = end.fromY + dy * along;
           const side = i % 2 ? 1 : -1;
           const len = 30 + i * 5;
-          renderer.drawGfxLightning(bx, by, bx + ux * len * 0.2 + px * side * len, by + uy * len * 0.2 + py * side * len, tint, alpha * (0.24 - i * 0.035), z + 8 + i, 2.6, 3, 7, t + i * 0.27);
+          if (skinPalette?.shape === "star") {
+            drawMageSkinGlyph(renderer, skinPalette, bx, by, 6 + (i % 2) * 2, alpha * 0.62, z + 8 + i, t + i * 0.27);
+          } else if (skinPalette?.shape === "leaf") {
+            drawMageSkinGlyph(renderer, skinPalette, bx + px * side * 5, by + py * side * 5, 7, alpha * 0.48, z + 8 + i, Math.atan2(dy, dx) + side * 0.5);
+          } else {
+            renderer.drawGfxLightning(bx, by, bx + ux * len * 0.2 + px * side * len, by + uy * len * 0.2 + py * side * len, tint, alpha * (0.24 - i * 0.035), z + 8 + i, 2.6, 3, 7, t + i * 0.27);
+          }
         }
         renderer.drawGfxCircle(end.fromX, end.fromY, 9 + peak * 3, tint, alpha * 0.08, core, alpha * 0.22, 2, z + 7, "add", 12);
         renderer.drawGfxCircle(end.toX, end.toY, 15 + peak * 6, tint, alpha * 0.12, core, alpha * 0.34, 2.5, z + 12, "add", 14);
@@ -1478,9 +1532,9 @@
       const blink = s.includes("blink");
       const burst = s.includes("burst") || s.includes("splash");
       const split = s.includes("split");
-      const tint = blink ? "#93c5fd" : burst ? "#d8b4fe" : "#c4b5fd";
-      const core = blink ? "#e0f2fe" : "#f8fafc";
-      const starRadius = Math.max(34, effectRadius * (burst ? 0.58 : 0.42) * (0.94 + peak * 0.08));
+      const tint = skinPalette?.main || (blink ? "#93c5fd" : burst ? "#d8b4fe" : "#c4b5fd");
+      const core = skinPalette?.hot || (blink ? "#e0f2fe" : "#f8fafc");
+      const starRadius = Math.max(34, effectRadius * (burst ? 1 : 0.42) * (0.94 + peak * 0.06));
       if (blink) {
         const fromX = Number.isFinite(effect.fromX) ? effect.fromX : end.fromX;
         const fromY = Number.isFinite(effect.fromY) ? effect.fromY : end.fromY;
@@ -1502,10 +1556,11 @@
         }
         return true;
       }
-      renderer.drawGfxCircle(cx, cy, starRadius * 0.94, "#180f2a", alpha * 0.07, tint, alpha * 0.2, 2, z - 8, "add", 34);
+      renderer.drawGfxCircle(cx, cy, starRadius * 0.94, skinPalette?.dark || "#180f2a", alpha * 0.07, tint, alpha * 0.2, 2, z - 8, "add", 34);
       renderer.drawGfxCircle(cx, cy, starRadius * 0.54, "#000000", 0, core, alpha * 0.16, 1.4, z - 7, "add", 24);
       renderer.drawGfxRuneRing(cx, cy, starRadius * 0.9, tint, alpha * 0.28, z - 5, phase * 0.22, burst ? 8 : 6);
-      renderer.drawGfxStar(cx, cy, Math.max(20, starRadius * 0.62), core, alpha * 0.62, z + 2, burst ? 8 : 6);
+      if (skinPalette) drawMageSkinGlyph(renderer, skinPalette, cx, cy, Math.max(20, starRadius * 0.62), alpha * 0.82, z + 2, phase * 0.2);
+      else renderer.drawGfxStar(cx, cy, Math.max(20, starRadius * 0.62), core, alpha * 0.62, z + 2, burst ? 8 : 6);
       const orbitCount = burst ? 8 : 6;
       for (let i = 0; i < orbitCount; i += 1) {
         const a = phase * (burst ? 0.16 : 0.1) + (Math.PI * 2 * i) / orbitCount;
@@ -2444,7 +2499,7 @@
 
     if (cleave) {
       swordLength = Math.max(150, Math.min(320, reach));
-      swordWidth = Math.max(26, Math.min(42, swordLength * 0.135));
+      swordWidth = Math.max(26, Math.min(64, swordLength * 0.18));
       const startAngle = angle - side * halfAngle;
       const finishAngle = angle + side * halfAngle;
       currentAngle = startAngle + (finishAngle - startAngle) * ease;
@@ -2470,8 +2525,8 @@
           bladeColor: "#fff7ed",
           edgeColor: "#fef3c7",
           maxLength: 360,
-          maxWidth: 42,
-          maxGuard: 72,
+          maxWidth: 64,
+          maxGuard: 108,
           blendMode: "add"
         });
       }
@@ -2485,8 +2540,8 @@
         shadowColor: "#5f2a18",
         hiltColor: "#92400e",
         maxLength: 360,
-        maxWidth: 42,
-        maxGuard: 72
+        maxWidth: 64,
+        maxGuard: 108
       });
       renderPixelSwordTipSpark(
         renderer,
@@ -2503,7 +2558,8 @@
 
     const hiltOffset = Math.max(24, Math.min(42, reach * 0.3));
     swordLength = Math.max(58, Math.min(150, reach - hiltOffset));
-    swordWidth = Math.max(7, Math.min(11, swordLength * 0.065));
+    const rangeWidthScale = Math.max(1, Math.min(1.7, Math.sqrt(Math.max(1, reach / 100))));
+    swordWidth = Math.max(7, Math.min(18, swordLength * 0.065 * rangeWidthScale));
     const startAngle = angle - side * halfAngle;
     const finishAngle = angle + side * halfAngle;
     currentAngle = startAngle + (finishAngle - startAngle) * ease;
@@ -2527,7 +2583,7 @@
         bladeColor: palette.light,
         edgeColor: "#fff7ed",
         minWidth: 6,
-        maxWidth: 12,
+        maxWidth: 18,
         blendMode: "add"
       });
     }
@@ -2541,7 +2597,7 @@
       bladeColor: "#fff7ed",
       edgeColor: "#fef3c7",
       minWidth: 6,
-      maxWidth: 12
+      maxWidth: 18
     });
     renderPixelSwordTipSpark(
       renderer,

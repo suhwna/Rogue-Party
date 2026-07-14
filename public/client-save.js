@@ -17,7 +17,8 @@
     { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
     { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
     { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
-    { id: "cooldown", label: "쿨타임 감소", description: "기본 공격과 스킬의 쿨타임이 감소합니다." },
+    { id: "attackSpeed", label: "공격 속도", description: "기본 공격과 기계공 터렛·드론의 공격 속도가 증가합니다. 공격 간격은 기본 간격 × 100 / (100 + 공격 속도)입니다." },
+    { id: "cooldown", label: "스킬 가속", description: "스킬 가속이 증가합니다. 실제 쿨타임은 기본 쿨타임 × 100 / (100 + 스킬 가속)입니다." },
     { id: "critDamage", label: "치명타 피해", description: "치명타로 주는 피해가 증가합니다." },
     { id: "area", label: "범위", description: "범위 공격과 폭발의 크기가 증가합니다." },
   ]);
@@ -27,11 +28,13 @@
     maxHp: "survival",
     regen: "survival",
     moveSpeed: "speed",
+    attackSpeed: "",
     cooldown: "speed",
     critDamage: "attack",
     area: "special",
   });
-  const MAX_ASCENSION_LEVEL = 25;
+  const MAX_ASCENSION_LEVEL = 5;
+  const ASCENSION_REWARD_MULTIPLIERS = Object.freeze([1, 1.5, 2, 2.75, 3.75, 5]);
   const SHARED_MASTERY_KEY = "shared";
 
   function createDefaultMasteryEntry() {
@@ -375,6 +378,7 @@
     const maxHp = growthCurve(nodes?.maxHp || 0);
     const regen = growthCurve(nodes?.regen || 0);
     const moveSpeed = growthCurve(nodes?.moveSpeed || 0);
+    const attackSpeed = growthCurve(nodes?.attackSpeed || 0);
     const cooldown = growthCurve(nodes?.cooldown || 0);
     const critDamage = growthCurve(nodes?.critDamage || 0);
     const area = growthCurve(nodes?.area || 0);
@@ -383,7 +387,8 @@
       maxHpMul: 1 + Math.min(0.58, maxHp * 0.027),
       regenBonus: Math.min(2.5, regen * 0.08),
       speedMul: 1 + Math.min(0.26, moveSpeed * 0.014),
-      skillCooldownMul: 1 - Math.min(0.28, cooldown * 0.016),
+      attackSpeed: Math.min(40, attackSpeed * 2),
+      skillHaste: Math.min(28, cooldown * 1.6),
       armorBonus: 0,
       critChanceBonus: 0,
       critDamageMul: 1 + Math.min(0.45, critDamage * 0.018),
@@ -401,7 +406,8 @@
     bonuses.maxHpMul = roundBonus(bonuses.maxHpMul);
     bonuses.regenBonus = roundBonus(bonuses.regenBonus);
     bonuses.speedMul = roundBonus(bonuses.speedMul);
-    bonuses.skillCooldownMul = roundBonus(Math.max(0.62, bonuses.skillCooldownMul));
+    bonuses.attackSpeed = roundBonus(Math.min(500, bonuses.attackSpeed));
+    bonuses.skillHaste = roundBonus(Math.min(500, bonuses.skillHaste));
     bonuses.armorBonus = roundBonus(bonuses.armorBonus);
     bonuses.critChanceBonus = roundBonus(bonuses.critChanceBonus);
     bonuses.critDamageMul = roundBonus(bonuses.critDamageMul);
@@ -424,7 +430,7 @@
       maxHpMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
       regenBonus: roundBonus(Math.min(2, gainedLevels * 0.04)),
       speedMul: roundBonus(1 + Math.min(0.15, gainedLevels * 0.003)),
-      skillCooldownMul: roundBonus(1 - Math.min(0.2, gainedLevels * 0.003)),
+      skillHaste: roundBonus(Math.min(20, gainedLevels * 0.3)),
       armorBonus: roundBonus(Math.min(6, gainedLevels * 0.12)),
       critChanceBonus: roundBonus(Math.min(0.15, gainedLevels * 0.003)),
       critDamageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
@@ -469,7 +475,7 @@
     const progressReward = Math.floor(stagesCleared * 5 + highestLevel * 2 + totalRelics * 3 + Math.sqrt(totalScore) * 0.42);
     const victoryReward = outcome === "victory" ? 45 : 0;
     const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
-    const ascensionMultiplier = 1 + ascensionLevel * 0.1;
+    const ascensionMultiplier = ASCENSION_REWARD_MULTIPLIERS[ascensionLevel] || 1;
     const rawShards = Math.max(2, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier));
     const rawXp = Math.max(10, Math.floor(rawShards * 1.75 + stagesCleared * 3 + highestLevel * 6));
     const rewardBreakdown = [
@@ -525,13 +531,7 @@
     });
     next.records.highestAbyssDepth = Math.max(next.records.highestAbyssDepth, rewards.abyssDepth);
     if (outcome === "victory") {
-      const unlockedAscensionLevel = normalizeInteger(
-        result?.unlockedAscensionLevel,
-        Math.min(MAX_ASCENSION_LEVEL, rewards.ascensionLevel + 1),
-        0,
-        MAX_ASCENSION_LEVEL,
-      );
-      next.records.highestAscension = Math.max(next.records.highestAscension, unlockedAscensionLevel);
+      next.records.highestAscension = Math.max(next.records.highestAscension, rewards.ascensionLevel);
     }
     next.records.lastRunKey = resultKey || `${Date.now()}:${outcome}:${chapter}:${stage}:${totalScore}`;
 

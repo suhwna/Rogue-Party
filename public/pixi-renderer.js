@@ -2374,18 +2374,19 @@
     renderFloatingEffects(effects, now) {
       this.diagnostics.effects = effects.length;
       this.effectRenderTrace = [];
-      const startIndex = pixiRuntime.effectStartIndex
-        ? pixiRuntime.effectStartIndex(effects.length, this.qualityPreset.effectBudget)
-        : Math.max(0, effects.length - this.qualityPreset.effectBudget);
-      for (let effectIndex = startIndex; effectIndex < effects.length; effectIndex += 1) {
-        const effect = effects[effectIndex];
+      const visibleEffects = pixiRuntime.selectEffectsForBudget
+        ? pixiRuntime.selectEffectsForBudget(effects, this.qualityPreset.effectBudget)
+        : effects.slice(Math.max(0, effects.length - this.qualityPreset.effectBudget));
+      for (const effect of visibleEffects) {
         if (!effect || effect.age < 0) continue;
         const progress = pixiEffects.effectProgress
           ? pixiEffects.effectProgress(effect)
           : Math.max(0, Math.min(1, effect.age / Math.max(0.1, effect.ttl || 0.7)));
         const alpha = Math.max(0, 1 - progress);
-        const color = effect.color || "#f8f3e9";
         const style = effect.style || "";
+        const isNumericEffect = ["damage", "heal", "xp", "poison"].includes(String(effect.kind || ""));
+        const effectSkinPalette = isNumericEffect ? null : pixiSkinEffects.resolveEffectPalette?.(this, effect) || null;
+        const color = effectSkinPalette?.main || effect.color || "#f8f3e9";
         const rawRadius = Math.max(18, Number(effect.radius || 42));
         const radius = pixiEffects.effectRadius
           ? pixiEffects.effectRadius(effect, rawRadius)
@@ -2403,7 +2404,7 @@
             fontFamily: "Inter, sans-serif",
             fontWeight: "900",
             fontSize: effect.critical ? 26 : effect.kind === "xp" ? 15 : 18,
-            fill: effect.kind === "heal" ? "#bbf7d0" : effect.kind === "xp" ? "#dbeafe" : color,
+            fill: effect.kind === "heal" ? "#bbf7d0" : effect.kind === "xp" ? "#dbeafe" : effect.critical ? "#facc15" : effect.color || "#f6f1e8",
             stroke: { color: "#000000", width: effect.critical ? 5 : 3 }
           };
           const text = this.textPool.next(this.layers.effect, style);
@@ -2436,7 +2437,7 @@
           this.noteEffectRenderer("pixi-renderer:taunt-fallback", effect, styledEffectKey);
           continue;
         }
-        if (shouldPrioritizeMageSkillRenderer(styledEffectKey, effect) && this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+        if (shouldPrioritizeMageSkillRenderer(styledEffectKey, effect) && this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey, { skinPalette: effectSkinPalette })) {
           this.noteEffectRenderer(this.lastStyledSkillRenderer || "pixi-skill-effects:mage-priority", effect, styledEffectKey);
           continue;
         }
@@ -2444,7 +2445,7 @@
           this.noteEffectRenderer("pixi-effects:neon-fallback", effect, styledEffectKey);
           continue;
         }
-        if (this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey)) {
+        if (this.renderStyledSkillEffect(effect, progress, alpha, radius, color, styledEffectKey, { skinPalette: effectSkinPalette })) {
           this.noteEffectRenderer(this.lastStyledSkillRenderer || "pixi-skill-effects", effect, styledEffectKey);
           continue;
         }
@@ -2730,7 +2731,7 @@
     renderStyledSkillEffect(effect, progress, alpha, radius, color, style, options = {}) {
       this.lastStyledSkillRenderer = "";
       const skillContext = pixiSkillEffects.createStyledSkillContext
-        ? pixiSkillEffects.createStyledSkillContext(this, effect, progress, alpha, radius, color, style)
+        ? pixiSkillEffects.createStyledSkillContext(this, effect, progress, alpha, radius, color, style, options)
         : null;
       const s = skillContext ? skillContext.s : String(style || "").toLowerCase();
       if (!s) return false;
@@ -2743,7 +2744,7 @@
       const z = skillContext ? skillContext.z : effect.y + 108;
 
       const drewPolish = Boolean(pixiSkillEffects.renderSkillEffectPolishLayer && pixiSkillEffects.renderSkillEffectPolishLayer(this, skillContext));
-      if (this.renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z)) {
+      if (this.renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z, skillContext?.skinPalette)) {
         this.lastStyledSkillRenderer = "pixi-renderer:crisp-skill-fallback";
         return true;
       }
@@ -3258,14 +3259,16 @@
       const uy = Math.sin(angle);
       const px = -uy;
       const py = ux;
-      const hiltBack = heavy ? 24 : 18;
-      const guard = heavy ? 25 : 18;
+      const baseReach = heavy ? 150 : 100;
+      const rangeWidthScale = Math.max(1, Math.min(2.15, Math.sqrt(Math.max(1, reach / baseReach))));
+      const hiltBack = (heavy ? 24 : 18) * (0.9 + rangeWidthScale * 0.1);
+      const guard = (heavy ? 25 : 18) * (0.72 + rangeWidthScale * 0.28);
       const bladeStart = heavy ? 18 : 14;
       const bladeMid = reach * 0.64;
       const tip = reach;
-      const baseWidth = heavy ? 12 : 9;
-      const midWidth = heavy ? 16 : 12;
-      const tipWidth = heavy ? 7 : 5;
+      const baseWidth = (heavy ? 12 : 9) * rangeWidthScale;
+      const midWidth = (heavy ? 16 : 12) * rangeWidthScale;
+      const tipWidth = (heavy ? 7 : 5) * (0.82 + rangeWidthScale * 0.18);
       const tint = color || "#f97316";
       const baseX = originX + ux * bladeStart;
       const baseY = originY + uy * bladeStart;
@@ -4269,7 +4272,7 @@
       return true;
     }
 
-    renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z) {
+    renderCrispStyledSkillEffect(effect, progress, alpha, radius, color, s, kind, angle, peak, pulse, effectRadius, end, z, skinPalette = null) {
       if (s.includes("warrior") || s.includes("shield_charge") || s.includes("shield_slam") || s.includes("taunt")) return false;
       const context = {
         effect,
@@ -4285,6 +4288,7 @@
         effectRadius,
         end,
         z,
+        skinPalette,
       };
 
       if (pixiSkillEffects.renderCrispPrimaryClassStyledEffect && pixiSkillEffects.renderCrispPrimaryClassStyledEffect(this, context)) return true;

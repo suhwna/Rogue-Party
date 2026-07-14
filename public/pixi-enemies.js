@@ -697,6 +697,9 @@
     if (enemy.statusEffects?.includes("barrier") || enemy.barrier > 0) renderer.drawGfxCircle(pos.x, pos.y, enemy.radius * 1.58, "#000000", 0, "#67e8f9", 0.42, 3, z + 35, "add", 22);
     drawEnemyStatusGraphics(renderer, enemy, pos, now, z);
     drawEnemyStatusPips(renderer, enemy, pos, z);
+    if (enemy.trainingDummy || enemy.type === "training_dummy") {
+      drawTrainingDummyDamageStats(renderer, enemy, pos, z);
+    }
     renderer.healthShieldBar(
       pos.x,
       pos.y - enemy.radius * 1.45 - 20,
@@ -707,6 +710,65 @@
       enemy.barrier,
       enemy.executionBoss ? "#dc2626" : "#ff4d6d"
     );
+    if (enemy.type === "boss" && Number(enemy.phaseTransitionTime || 0) > 0) {
+      drawBossPhaseProtection(renderer, enemy, pos, z);
+    }
+  }
+
+  function drawBossPhaseProtection(renderer, enemy, pos, z) {
+    if (!renderer.textPool?.next) return;
+    const barY = pos.y - enemy.radius * 1.45 - 20;
+    const width = enemy.radius * 2.05;
+    const color = enemy.phaseAuraColor || enemy.color || "#f8fafc";
+
+    renderer.drawGfxLine(pos.x - width / 2, barY + 2.5, pos.x + width / 2, barY + 2.5, 3, color, 0.92, z + 72, "add");
+    const label = renderer.textPool.next(renderer.layers.effect, {
+      fontFamily: "Inter, sans-serif",
+      fontWeight: "900",
+      fontSize: enemy.executionBoss ? 12 : 11,
+      fill: "#f8fafc",
+      stroke: { color: "#05070a", width: 4 },
+    });
+    label.text = "페이즈 전환";
+    label.anchor.set(0.5);
+    label.position.set(pos.x, barY - 10);
+    label.zIndex = z + 73;
+  }
+
+  function compactDamageNumber(value) {
+    const amount = Math.max(0, Number(value) || 0);
+    if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(amount >= 10000000000 ? 0 : 1)}B`;
+    if (amount >= 1000000) return `${(amount / 1000000).toFixed(amount >= 10000000 ? 0 : 1)}M`;
+    if (amount >= 10000) return `${(amount / 1000).toFixed(amount >= 100000 ? 0 : 1)}K`;
+    return Math.round(amount).toLocaleString("ko-KR");
+  }
+
+  function drawTrainingDummyDamageStats(renderer, enemy, pos, z) {
+    if (!renderer.textPool?.next) return;
+    const top = pos.y - enemy.radius * 1.45 - 48;
+    const dps = renderer.textPool.next(renderer.layers.effect, {
+      fontFamily: "Inter, sans-serif",
+      fontWeight: "900",
+      fontSize: 13,
+      fill: "#facc15",
+      stroke: { color: "#05070a", width: 4 },
+    });
+    dps.text = `DPS ${compactDamageNumber(enemy.trainingDps)}`;
+    dps.anchor.set(0.5);
+    dps.position.set(pos.x, top);
+    dps.zIndex = z + 70;
+
+    const total = renderer.textPool.next(renderer.layers.effect, {
+      fontFamily: "Inter, sans-serif",
+      fontWeight: "800",
+      fontSize: 11,
+      fill: "#e2e8f0",
+      stroke: { color: "#05070a", width: 3 },
+    });
+    total.text = `누적 피해 ${compactDamageNumber(enemy.trainingTotalDamage)}`;
+    total.anchor.set(0.5);
+    total.position.set(pos.x, top + 15);
+    total.zIndex = z + 69;
   }
 
   function renderEnemies(renderer, enemies, now, world) {
@@ -724,6 +786,7 @@
     enemyTextureKey,
     enemyScale,
     enemyStatusMarkers,
+    compactDamageNumber,
     renderEnemy,
     renderEnemies,
   });

@@ -98,6 +98,34 @@ function checkBossPatternContract() {
     throw new Error("execution boss four-phase contract failed");
   }
 
+  const firstGateDamage = bossSystem.getBossDamageAllowance({ hp: 100, maxHp: 100, bossPhase: 1 }, 90);
+  const lockedAtGate = bossSystem.getBossDamageAllowance({ hp: 72, maxHp: 100, bossPhase: 1 }, 10);
+  const secondGateDamage = bossSystem.getBossDamageAllowance({ hp: 72, maxHp: 100, bossPhase: 2 }, 50);
+  const transitionDamage = bossSystem.getBossDamageAllowance({ hp: 90, maxHp: 100, bossPhase: 1, phaseTransitionTimer: 0.5 }, 10);
+  const miniBossGateDamage = bossSystem.getBossDamageAllowance({ hp: 100, maxHp: 100, bossPhase: 1, miniBoss: true }, 80);
+  const executionGateDamage = bossSystem.getBossDamageAllowance({ hp: 100, maxHp: 100, bossPhase: 1, executionBoss: true }, 90);
+  if (
+    firstGateDamage !== 28 ||
+    lockedAtGate !== 0 ||
+    secondGateDamage !== 32 ||
+    transitionDamage !== 10 ||
+    miniBossGateDamage !== 50 ||
+    executionGateDamage !== 20
+  ) {
+    throw new Error("boss health gate contract failed");
+  }
+  const earlyPhaseTransitionIndex = serverSource.indexOf("if (startPendingBossPhaseTransition(room, enemy)) continue;");
+  const knockbackShortCircuitIndex = serverSource.indexOf("if (updateEnemyKnockback(room, enemy, dt))");
+  const freezeShortCircuitIndex = serverSource.indexOf("if (enemy.freezeTimer > 0) continue;");
+  if (
+    earlyPhaseTransitionIndex < 0 ||
+    earlyPhaseTransitionIndex > knockbackShortCircuitIndex ||
+    earlyPhaseTransitionIndex > freezeShortCircuitIndex ||
+    !serverSource.includes("function startPendingBossPhaseTransition(room, enemy, preferredTarget = null)")
+  ) {
+    throw new Error("boss phase gate crowd-control escape contract failed");
+  }
+
   const expandedPatterns = [
     "iron_sweeping_arc",
     "iron_fortress_gap",
@@ -114,7 +142,19 @@ function checkBossPatternContract() {
     "plague_safe_bloom",
     "plague_venom_fan",
     "hunter_crossfire",
-    "hunter_marked_blast"
+    "hunter_marked_blast",
+    "iron_anvil_corridor",
+    "iron_rotor_barrage",
+    "hive_quarantine",
+    "hive_creeping_orbit",
+    "void_gravity_clock",
+    "void_starless_trial",
+    "duelist_pinwheel",
+    "duelist_pincer",
+    "plague_spore_clock",
+    "plague_quarantine",
+    "hunter_blink_ring",
+    "hunter_ricochet"
   ];
   if (
     expandedPatterns.some((pattern) => !serverSource.includes(pattern)) ||
@@ -129,12 +169,27 @@ function checkBossPatternContract() {
     !serverSource.includes('type: "boss_field_judgment"') ||
     !serverSource.includes('type: "boss_safe_zone"') ||
     !serverSource.includes('type: "boss_spiral_emitter"') ||
+    !serverSource.includes('enemy.lethalCastLabel = "즉사 패턴";') ||
+    !serverSource.includes("room.projectiles = room.projectiles.filter((projectile) => projectile.ownerId !== enemy.id);") ||
+    !serverSource.includes("function findBotLethalSafeZone(room, bot)") ||
+    !serverSource.includes("function moveBotToLethalSafeZone(room, bot, safeZone, now)") ||
+    !serverSource.includes('if (hazard.type === "boss_field_judgment") continue;') ||
+    !serverSource.includes("enemy.targetLockTimer > 0 && enemy.targetId") ||
+    !clientSource.includes("파란 안전지대로 이동") ||
     !serverSource.includes("execution_crimson_cage") ||
     !serverSource.includes("execution_relentless_hunt") ||
     !serverSource.includes("execution_crossfire") ||
     !serverSource.includes("execution_final_sentence") ||
     !serverSource.includes("triggerBossPhaseTransition(room, enemy, profile, target);") ||
     !serverSource.includes("if ((enemy.phaseTransitionTimer || 0) > 0) return true") ||
+    !serverSource.includes("bossSystem.isBossDamageLocked(enemy)") ||
+    !serverSource.includes("let bossGateFailOpen = false;") ||
+    !serverSource.includes("startPendingBossPhaseTransition(room, enemy, owner);") ||
+    !serverSource.includes("if (isBossTarget && !bossGateFailOpen)") ||
+    !serverSource.includes("bossSystem.getBossDamageAllowance(enemy, finalDamage)") ||
+    !serverSource.includes("CHAPTER_BOSS_HEALTH_MUL = 4") ||
+    !serverSource.includes("MINIBOSS_HEALTH_MUL = 3") ||
+    !serverSource.includes("SURVIVAL_EXECUTION_BOSS_HP_MUL = 40") ||
     !clientSource.includes('"boss_volley"') ||
     !pixiEnemySource.includes('"boss_volley"') ||
     !pixiHazardSource.includes("function renderBossFieldJudgment") ||
@@ -271,11 +326,67 @@ function checkEngineerBalanceContract() {
     !serverSource.includes('"name": "자동 기뢰 살포"') ||
     !serverSource.includes("player.engineerMineCharges += 1") ||
     !serverSource.includes('hasUpgrade(player, "engineer_auto_mine")') ||
-    !serverSource.includes("7.5 * (player.skillCooldownMul || 1)")
+    !serverSource.includes("7.5 * skillSystem.getSkillCooldownMultiplier(player)") ||
+    !serverSource.includes('room.status === "lobby" && room.enemies.some((enemy) => enemy.trainingDummy)') ||
+    !skillSource.includes("설치 주기는 스킬 가속의 영향을 받습니다") ||
+    !serverSource.includes("function getAttackSpeedCooldownMultiplier(player)") ||
+    !serverSource.includes("getAttackSpeedCooldownMultiplier(player);") ||
+    !serverSource.includes("missileAttackSpeedMul: fireRateMul") ||
+    !serverSource.includes('skillTag: "engineer_turret_missile"') ||
+    !serverSource.includes('skillTag: "engineer_drone_missile"') ||
+    !serverSource.includes("splash: 140 * (owner.areaMul || 1)") ||
+    !serverSource.includes("splash: 120 * (owner.areaMul || 1)")
   ) {
     throw new Error("engineer skill balance contract failed");
   }
   console.log("engineer skill balance contract ok");
+}
+
+function checkBotSurvivalContract() {
+  const botSystem = require("./server-bot-system");
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const bot = {
+    classId: "ranger",
+    hp: 100,
+    maxHp: 100,
+    choices: [
+      { id: "iron_plate" },
+      { id: "power_core" },
+      { id: "swift_boots" }
+    ]
+  };
+  const selected = botSystem.pickBestBotRelicChoice(bot, () => 0);
+  if (
+    selected?.id !== "power_core" ||
+    !serverSource.includes("function getBotBeamAvoidance") ||
+    !serverSource.includes("function getBotArenaPressureVector") ||
+    !serverSource.includes("function findNearestBotHealthPotion") ||
+    !serverSource.includes("distanceToSegment(point, hazard.x, hazard.y, endX, endY) - hazard.width")
+  ) {
+    throw new Error("bot survival decision contract failed");
+  }
+  console.log("bot survival decision contract ok");
+}
+
+function checkSkillHasteContract() {
+  const skillSystem = require("./server-skill-system");
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const noHaste = skillSystem.getSkillCooldownMultiplier({ skillHaste: 0 });
+  const hundredHaste = skillSystem.getSkillCooldownMultiplier({ skillHaste: 100 });
+  const cappedHaste = skillSystem.getSkillCooldownMultiplier({ skillHaste: 900 });
+  if (
+    noHaste !== 1 ||
+    hundredHaste !== 0.5 ||
+    Math.abs(cappedHaste - (1 / 6)) > 0.000001 ||
+    skillSystem.getSkillHaste({ skillHaste: 900 }) !== 500 ||
+    !serverSource.includes("player.skillHaste = Math.min(500") ||
+    !serverSource.includes("player.attackSpeed = Math.min(500") ||
+    !serverSource.includes("100 / (100 + attackSpeed)") ||
+    !serverSource.includes('id: "rapid_loader"')
+  ) {
+    throw new Error("skill haste and attack speed formula contract failed");
+  }
+  console.log("skill haste and attack speed contract ok");
 }
 
 function checkSoloBalanceContract() {
@@ -290,8 +401,13 @@ function checkSoloBalanceContract() {
     !serverSource.includes("xpMul: 1.14") ||
     !serverSource.includes("const solo = players === 1") ||
     !serverSource.includes("solo ? 26 + minute * 3.6 : 32 + minute * 5") ||
-    !serverSource.includes("Math.ceil(scheduledCount * 0.5)") ||
     !serverSource.includes("solo ? 0.42 : 0.3") ||
+    !serverSource.includes("def.damage * 2.55") ||
+    !serverSource.includes("def.damage * 3.7 * bossExecutionBonus") ||
+    !serverSource.includes("const bolts = 10 + getProjectileCountBonus(player)") ||
+    !serverSource.includes("splitCore ? (piercingFragments ? 0.16 : 0.2) : 0.15") ||
+    !serverSource.includes("getEngineerMechaAttackDamageMul(player) * 1.1") ||
+    !serverSource.includes("mini ? 0.72 : 1.1") ||
     !difficultySource.includes("spawnMul: 0.54") ||
     !difficultySource.includes("hpMul: 0.78") ||
     !difficultySource.includes("damageMul: 0.74")
@@ -318,10 +434,10 @@ function checkSurvivalModeContract() {
     !serverSource.includes("SURVIVAL_MINIBOSS_SCHEDULE") ||
     !serverSource.includes("{ minute: 1, count: 1 }") ||
     !serverSource.includes("{ minute: 2, count: 1 }") ||
-    !serverSource.includes("{ minute: 4, count: 2 }") ||
-    !serverSource.includes("{ minute: 5, count: 2 }") ||
-    !serverSource.includes("{ minute: 7, count: 3 }") ||
-    !serverSource.includes("{ minute: 8, count: 3 }") ||
+    !serverSource.includes("{ minute: 4, count: 1 }") ||
+    !serverSource.includes("{ minute: 5, count: 1 }") ||
+    !serverSource.includes("{ minute: 7, count: 1 }") ||
+    !serverSource.includes("{ minute: 8, count: 1 }") ||
     !serverSource.includes("function startSurvivalMode") ||
     !serverSource.includes("function updateSurvivalMode") ||
     !serverSource.includes("solo ? 26 + minute * 3.6 : 32 + minute * 5") ||
@@ -329,6 +445,7 @@ function checkSurvivalModeContract() {
     !serverSource.includes(": 2 + Math.floor(survival.elapsed / 120)") ||
     !serverSource.includes(": 0.92 - elapsedRatio * 0.52") ||
     !serverSource.includes("function spawnScheduledSurvivalMiniBosses") ||
+    !serverSource.includes("function spawnSurvivalMiniBossWave(room, minute, count) {\n  const total = 1;") ||
     !serverSource.includes("function clearSurvivalRegularEnemiesForBoss") ||
     !serverSource.includes("boss.survivalMiniBoss = true") ||
     !serverSource.includes("boss.guaranteedRelicDrop = true") ||
@@ -359,6 +476,57 @@ function checkSurvivalModeContract() {
   console.log("survival contract ok");
 }
 
+function checkExperienceCurveContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  if (
+    !serverSource.includes("const baseRequirement = 120 + level * 95") ||
+    !serverSource.includes("const lateRequirement = Math.max(0, level - 3) * 20")
+  ) {
+    throw new Error("experience curve source contract failed");
+  }
+
+  const requirement = (level) => Math.round((120 + level * 95 + Math.max(0, level - 3) * 20) / 5) * 5;
+  const levelFourTotal = [1, 2, 3].reduce((total, level) => total + requirement(level), 0);
+  const maxLevelTotal = Array.from({ length: 14 }, (_, index) => index + 1)
+    .reduce((total, level) => total + requirement(level), 0);
+  if (levelFourTotal !== 930 || maxLevelTotal !== 12975) {
+    throw new Error("experience curve timing target contract failed");
+  }
+  console.log("experience curve contract ok");
+}
+
+function checkAscensionDifficultyContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const clientSource = fs.readFileSync("public/client.js", "utf8");
+  const saveSource = fs.readFileSync("public/client-save.js", "utf8");
+  const progressionSource = fs.readFileSync("public/client-progression.js", "utf8");
+  const authoritativeStart = serverSource.indexOf("function getAuthoritativeGrowthLoadout");
+  const authoritativeEnd = serverSource.indexOf("function handleAccountProgressAction", authoritativeStart);
+  const authoritativeSource = serverSource.slice(authoritativeStart, authoritativeEnd);
+  if (
+    !serverSource.includes("const MAX_ASCENSION_LEVEL = 5") ||
+    !serverSource.includes("hpMul: 4.2") ||
+    !serverSource.includes("damageMul: 1.78") ||
+    !serverSource.includes("spawnMul: 1.68") ||
+    !serverSource.includes("cadenceMul: 0.68") ||
+    !serverSource.includes("rewardMul: 5") ||
+    !serverSource.includes("chapterDifficulty.cadenceMul *\n    abyssDifficulty.cadenceMul") ||
+    !serverSource.includes("baseMaxAlive * ascensionDifficulty.spawnMul") ||
+    !serverSource.includes("EQUIPMENT_DROP_CHANCE * Math.sqrt(ascensionRewardMul)") ||
+    authoritativeSource.includes("highestAscension") ||
+    authoritativeSource.includes("unlockedAscension") ||
+    !clientSource.includes("전 단계 즉시 선택 가능") ||
+    clientSource.includes("level >= unlocked") ||
+    !saveSource.includes("const MAX_ASCENSION_LEVEL = 5") ||
+    !saveSource.includes("[1, 1.5, 2, 2.75, 3.75, 5]") ||
+    !progressionSource.includes("integer(result?.ascensionLevel) * 3") ||
+    !progressionSource.includes("[1, 1.4, 1.9, 2.6, 3.5, 4.5]")
+  ) {
+    throw new Error("five-tier unrestricted ascension contract failed");
+  }
+  console.log("ascension difficulty contract ok");
+}
+
 function checkLongTermProgressionContract() {
   const serverSource = fs.readFileSync("server.js", "utf8");
   const progressionSource = fs.readFileSync("public/client-progression.js", "utf8");
@@ -373,8 +541,11 @@ function checkLongTermProgressionContract() {
   const requiredServer = [
     "function nextRoomRandom",
     "challengeLeaderboards",
-    "ascension * 0.18 + overcap * 0.06",
-    "ascension * 0.07 + overcap * 0.025",
+    "ASCENSION_DIFFICULTY_PROFILES",
+    "hpMul: 4.2",
+    "spawnMul: 1.68",
+    "cadenceMul: 0.68",
+    "rewardMul: 5",
     "Math.min(0.55",
     "room?.ascensionLevel || 0) >= 3",
     "room.ascensionLevel || 0) >= 4",
@@ -400,7 +571,8 @@ function checkLongTermProgressionContract() {
     "mechanistTurretMine",
     "explosiveArrow: fireArrow",
     "ranger_explosive_arrow",
-    "runWithEffectOwner"
+    "runWithEffectOwner",
+    "fire_pool_tick"
   ];
   const requiredProgression = [
     "BOSS_RECIPES",
@@ -429,7 +601,8 @@ function checkLongTermProgressionContract() {
     "mechanistTurretMine",
     "meta-equipped-card",
     "meta-equipped-set",
-    "meta-loadout-column"
+    "meta-loadout-column",
+    "function getRaritySpecialText"
   ];
   const requiredSkinEffects = [
     "victory_trim",
@@ -465,11 +638,51 @@ function checkLongTermProgressionContract() {
   const skinProjectileOverride = skinApi?.renderProjectileOverride(skinRenderer, { id: 1, x: 10, y: 20, angle: 0, radius: 8, skin: "victory_trim" }, 1000, {});
   const skinHazardOverride = skinApi?.renderHazardOverride(skinRenderer, { id: 2, x: 20, y: 30, radius: 60, skin: "season_verdant", type: "pool", armed: true }, 1000);
   const skinSkillOverride = skinApi?.renderSkillEffectOverride(skinRenderer, { kind: "slash", ownerId: "skin-owner", x: 30, y: 40 }, 0.3, 0.7, 70, 1000);
+  const themedPlayers = [
+    { id: "ranger-owner", classId: "ranger", skin: "victory_trim" },
+    { id: "mage-owner", classId: "mage", skin: "victory_trim" },
+    { id: "warrior-owner", classId: "warrior", skin: "season_ember" },
+  ];
+  skinRenderer.getState = () => ({ players: themedPlayers });
+  const themedLaserOverride = skinApi?.renderProjectileOverride(skinRenderer, {
+    id: 3, x: 40, y: 50, angle: 0, radius: 8, skin: "victory_trim", classId: "ranger", style: "ranger_laser_arrow"
+  }, 1000, { arrow: true, laser: true });
+  const themedRainOverride = skinApi?.renderHazardOverride(skinRenderer, {
+    id: 4, x: 50, y: 60, radius: 90, skin: "victory_trim", type: "arrow_rain", armTime: 0
+  }, 1000);
+  const themedMeteorOverride = skinApi?.renderSkillEffectOverride(skinRenderer, {
+    id: 5, kind: "meteor", style: "meteor_call", ownerId: "mage-owner", x: 60, y: 70
+  }, 0.45, 0.9, 100, 1000);
+  const themedChainOverride = skinApi?.renderSkillEffectOverride(skinRenderer, {
+    id: 6, kind: "chain", style: "chain_lightning", ownerId: "mage-owner", x: 70, y: 80, angle: 0
+  }, 0.35, 0.9, 100, 1000);
   const projectileSkinView = serializer.projectileView({ id: 1, ownerId: 7, x: 0, y: 0 }, {
     getOwnerSkin: (ownerId) => ownerId === 7 ? "season_ember" : ""
   });
   const hazardSkinView = serializer.hazardView({ id: 2, ownerId: 8, type: "test", x: 0, y: 0 }, {
     getOwnerSkin: (ownerId) => ownerId === 8 ? "season_verdant" : ""
+  });
+  const trainingDummy = {
+    id: 9,
+    type: "training_dummy",
+    x: 100,
+    y: 100,
+    hp: 360,
+    maxHp: 360,
+    radius: 28,
+    role: "dummy",
+    trainingDummy: true,
+    trainingDamageTotal: 500,
+    trainingLastHitAt: 9000,
+    trainingDamageSamples: [{ at: 6000, damage: 100 }, { at: 9000, damage: 200 }],
+  };
+  const trainingDummyView = serializer.enemyView(trainingDummy, {
+    now: 10000,
+    enemyDefs: { training_dummy: { label: "Training Dummy", color: "#94a3b8" } },
+  });
+  const idleTrainingDummyView = serializer.enemyView(trainingDummy, {
+    now: 12001,
+    enemyDefs: { training_dummy: { label: "Training Dummy", color: "#94a3b8" } },
   });
   const skinnedPlayerIdentity = serializer.playerIdentityView({
     id: 3, classId: "ranger", appearanceColor: "#fb923c", cosmeticSkin: "season_ember"
@@ -480,6 +693,10 @@ function checkLongTermProgressionContract() {
     skinProjectileOverride !== false ||
     skinHazardOverride !== false ||
     skinSkillOverride !== false ||
+    themedLaserOverride !== false ||
+    themedRainOverride !== false ||
+    themedMeteorOverride !== false ||
+    themedChainOverride !== false ||
     skinDrawCalls.length < 5 ||
     skinnedPlayerIdentity.color !== "#22c55e" ||
     skinnedPlayerIdentity.skinColor !== "#fb923c" ||
@@ -505,6 +722,9 @@ function checkLongTermProgressionContract() {
     !indexSource.includes('/pixi-skin-effects.js') ||
     projectileSkinView.skin !== "season_ember" ||
     hazardSkinView.skin !== "season_verdant" ||
+    trainingDummyView.trainingDps !== 75 ||
+    trainingDummyView.trainingTotalDamage !== 500 ||
+    idleTrainingDummyView.trainingDps !== 0 ||
     !batchSalvage.changed ||
     batchSalvage.progress.inventory.items.length !== 1 ||
     batchSalvage.progress.inventory.items[0].id !== "keep-c" ||
@@ -521,20 +741,21 @@ function checkServerAccountStoreContract() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "rogue-account-smoke-"));
   try {
     const ascensionResult = {
-      resultKey: "party-ascension-9",
+      resultKey: "party-ascension-5",
       outcome: "victory",
-      ascensionLevel: 9,
-      unlockedAscensionLevel: 10,
+      ascensionLevel: 5,
       stagesCleared: 1,
       highestLevel: 1,
       classId: "warrior",
     };
-    const hostUnlock = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 9 } }, ascensionResult);
-    const memberUnlock = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 0 } }, ascensionResult);
-    if (hostUnlock.records.highestAscension !== 10 || memberUnlock.records.highestAscension !== 10) {
-      throw new Error("party ascension catch-up unlock failed");
+    const hostClear = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 4 } }, ascensionResult);
+    const memberClear = progression.recordRunResult({ ...progression.getDefaultProgress(), records: { highestAscension: 0 } }, ascensionResult);
+    if (hostClear.records.highestAscension !== 5 || memberClear.records.highestAscension !== 5) {
+      throw new Error("party ascension clear record failed");
     }
     const store = createAccountStore({ progression, dataDir });
+    const catalog = progression.getCatalogSnapshot();
+    const admin = store.createAdmin({ displayName: "Admin Smoke" });
     const created = store.createGuest({
       displayName: "Account Smoke",
       progress: {
@@ -546,6 +767,11 @@ function checkServerAccountStoreContract() {
     if (
       !created.account.id.startsWith("RP-") ||
       created.account.role !== "user" ||
+      catalog.itemBases.length < 100 ||
+      catalog.runes.length < 20 ||
+      admin.account.role !== "admin" ||
+      !admin.sessionToken ||
+      !store.authenticate(admin.account.id, admin.sessionToken) ||
       !created.sessionToken ||
       created.progress.currencies.abyssShards !== 125 ||
       !store.authenticate(created.account.id, created.sessionToken)
@@ -580,7 +806,7 @@ function checkServerAccountStoreContract() {
       saved.account.revision <= created.account.revision ||
       restored?.progress?.mastery?.shared?.nodes?.damage !== 1 ||
       restored?.progress?.statistics?.runs !== 1 ||
-      restored?.progress?.records?.highestAscension !== 1 ||
+      restored?.progress?.records?.highestAscension !== 0 ||
       restored?.progress?.records?.lastRunKey !== "account-store-run-1"
     ) {
       throw new Error("server account persistence contract failed");
@@ -593,11 +819,25 @@ function checkServerAccountStoreContract() {
     ) {
       throw new Error("server account recovery contract failed");
     }
+    const reset = reloaded.resetProgress(created.account.id, recovered.sessionToken);
+    if (
+      !reset?.reset ||
+      reset.account.id !== created.account.id ||
+      reset.account.revision <= recovered.account.revision ||
+      reset.progress.account.level !== 1 ||
+      reset.progress.statistics.runs !== 0 ||
+      reset.progress.inventory.items.length !== 0 ||
+      !reloaded.authenticate(created.account.id, recovered.sessionToken)
+    ) {
+      throw new Error("server account reset contract failed");
+    }
     const persistedText = fs.readFileSync(path.join(dataDir, "accounts.json"), "utf8");
     if (
       !fs.existsSync(store.backupPath) ||
       persistedText.includes(created.sessionToken) ||
-      persistedText.includes(created.recoveryCode)
+      persistedText.includes(created.recoveryCode) ||
+      persistedText.includes(admin.sessionToken) ||
+      persistedText.includes(admin.recoveryCode)
     ) {
       throw new Error("server account secret hashing contract failed");
     }
@@ -630,6 +870,7 @@ async function checkHttp() {
     !html.includes("lobbyArenaDock") ||
     !html.includes("accountStatusLabel") ||
     !html.includes("accountRecoveryInput") ||
+    !html.includes("accountResetButton") ||
     !html.includes("/client-account.js") ||
     !html.includes('data-lobby-view="challenges"') ||
     !html.includes("runContext") ||
@@ -1436,14 +1677,14 @@ async function checkClientSaveRuntimeContract() {
   }
   vm.runInNewContext(clientProgressionSource, sandbox, { filename: "client-progression.js" });
   const manager = sandbox.window.RogueSaveManager;
-  if (!manager || manager.SAVE_VERSION !== 3 || !manager.PROGRESS_KEY || !manager.LEGACY_PROGRESS_KEYS) {
+  if (!manager || manager.SAVE_VERSION !== 4 || !manager.PROGRESS_KEY || !manager.LEGACY_PROGRESS_KEYS) {
     throw new Error("client save runtime manager missing");
   }
   const archiveHtml = manager.renderProgressionPanel(manager.defaultProgress, { activeTab: "archive", classId: "warrior", embedded: true });
-  const cosmeticArchiveHtml = manager.renderProgressionPanel(manager.normalizeProgress({
+  const cosmeticsHtml = manager.renderProgressionPanel(manager.normalizeProgress({
     skins: ["victory_trim", "abyss_glow", "season_ember", "season_verdant"],
     cosmetics: { selectedSkin: "season_ember" },
-  }), { activeTab: "archive", classId: "warrior", embedded: true });
+  }), { activeTab: "cosmetics", classId: "warrior", embedded: true });
   const equipmentCodexHtml = manager.renderCodexEntryDetail("equipment", "vanguard_blade", true);
   const runeCodexHtml = manager.renderCodexEntryDetail("rune", "ward", true);
   const eclipseRuneCodexHtml = manager.renderCodexEntryDetail("rune", "eclipse", true);
@@ -1472,7 +1713,7 @@ async function checkClientSaveRuntimeContract() {
     const items = ["weapon", "armor", "amulet", "core"].map((slot) => ({
       id: `${classId}-${slot}-signature`,
       baseId: `${classId}_${slot}_1`,
-      rarity: "common",
+      rarity: "epic",
       itemLevel: 1,
       enhance: 0,
       affixes: [],
@@ -1525,12 +1766,14 @@ async function checkClientSaveRuntimeContract() {
   if (
     !archiveHtml.includes("data-codex-entry") ||
     !archiveHtml.includes("meta-codex-inspector") ||
-    !cosmeticArchiveHtml.includes("skin-choice active") ||
-    !cosmeticArchiveHtml.includes("직업 장비에 왕실 금장과 태양 문장") ||
-    !cosmeticArchiveHtml.includes("직업 공격에 심연 균열 잔광") ||
-    !cosmeticArchiveHtml.includes("직업 무기와 스킬에 잿불 궤적") ||
-    !cosmeticArchiveHtml.includes("직업 장비에 생명 문양과 잎 장식") ||
-    !equipmentCodexHtml.includes("등장 가능한 옵션 기본 범위") ||
+    archiveHtml.includes("meta-cosmetic-list") ||
+    !cosmeticsHtml.includes("skin-choice active") ||
+    !cosmeticsHtml.includes("직업 장비에 왕실 금장과 태양 문장") ||
+    !cosmeticsHtml.includes("직업 공격에 심연 균열 잔광") ||
+    !cosmeticsHtml.includes("직업 무기와 스킬에 잿불 궤적") ||
+    !cosmeticsHtml.includes("직업 장비에 생명 문양과 잎 장식") ||
+    !equipmentCodexHtml.includes("슬롯별 주 능력치") ||
+    !equipmentCodexHtml.includes("+5 / +10 / +15 / +20") ||
     !equipmentCodexHtml.includes("최대 체력 +7%") ||
     !runeCodexHtml.includes("X") ||
     !runeCodexHtml.includes("방어 +1.85") ||
@@ -1543,8 +1786,8 @@ async function checkClientSaveRuntimeContract() {
     !monsterCodexHtml.includes("185") ||
     !bossCodexHtml.includes("운명의 집행자") ||
     !bossCodexHtml.includes("체력 80% / 55% / 28%") ||
-    !relicCodexHtml.includes("-41.0%") ||
-    !relicCodexHtml.includes("기본 공격 쿨타임") ||
+    !relicCodexHtml.includes("+50") ||
+    !relicCodexHtml.includes("최대 스킬 가속은 500") ||
     migratedDashItem.special !== "crit_amp" ||
     migratedDashItem.affixes.some((affix) => affix.id === "dash") ||
     new Set(migratedDashItem.affixes.map((affix) => affix.id)).size !== migratedDashItem.affixes.length ||
@@ -1564,7 +1807,7 @@ async function checkClientSaveRuntimeContract() {
     bossItemBonuses.prophet_censer.regenBonus < 0.35 ||
     bossItemBonuses.regent_engine.damageMul < 1.1 ||
     bossItemBonuses.regent_engine.areaMul < 1.14 ||
-    bossItemBonuses.regent_engine.skillCooldownMul > 0.92 ||
+    bossItemBonuses.regent_engine.skillHaste < 8 ||
     bossItemBonuses.abyss_crown.damageMul < 1.12 ||
     bossItemBonuses.abyss_crown.bossDamageMul < 1.25 ||
     bossItemBonuses.abyss_crown.bossFinisherMul !== 1.45 ||
@@ -1573,7 +1816,7 @@ async function checkClientSaveRuntimeContract() {
     !bossCraft.changed ||
     craftedBossItem?.rarity !== "mythic" ||
     craftedBossItem?.enhance !== 5 ||
-    craftedBossItem?.affixes?.length !== 5 ||
+    craftedBossItem?.affixes?.length !== 1 ||
     craftedBossItem?.special !== "warden_oath" ||
     bossCraft.progress.inventory.bossMaterials.iron_warden !== 0 ||
     bossCraft.progress.currencies.abyssShards !== 780 ||
@@ -1603,7 +1846,7 @@ async function checkClientSaveRuntimeContract() {
     noDown: true
   });
   if (
-    result.version !== 3 ||
+    result.version !== 4 ||
     result.statistics.runs !== 1 ||
     result.statistics.victories !== 1 ||
     result.statistics.highestChapter !== 2 ||
@@ -1611,7 +1854,7 @@ async function checkClientSaveRuntimeContract() {
     result.currencies.abyssShards <= 0 ||
     result.account.xp <= 0 ||
     result.records.highestAbyssDepth !== 2 ||
-    result.records.highestAscension !== 4 ||
+    result.records.highestAscension !== 3 ||
     result.records.classBestAscension.mage !== 3 ||
     result.inventory.items.length !== 0 ||
     result.inventory.runes.length === 0 ||
@@ -1760,12 +2003,12 @@ async function checkClientSaveRuntimeContract() {
     inventory: {
       items: [{
         id: "forge-contract-item",
-        baseId: "vanguard_blade",
+        baseId: "hunter_talisman",
         rarity: "rare",
         itemLevel: 10,
         enhance: 10,
         rerolls: 0,
-        lockedAffixIndex: 1,
+        lockedAffixIndex: -1,
         affixes: [
           { id: "power", value: 0.08 },
           { id: "vitality", value: 0.09 },
@@ -1775,21 +2018,45 @@ async function checkClientSaveRuntimeContract() {
       runes: [],
       bossMaterials: {},
     },
-    equipment: { warrior: { weapon: "forge-contract-item", armor: "", amulet: "", core: "", runes: [] } },
+    equipment: { warrior: { weapon: "", armor: "", amulet: "forge-contract-item", core: "", runes: [] } },
   });
-  if (forgeBase.inventory.items[0].lockedAffixIndices.join(",") !== "1") {
-    throw new Error("legacy affix lock migration failed");
-  }
-  const secondLock = manager.performProgressionAction(forgeBase, {
-    action: "lock-affix", classId: "warrior", itemId: "forge-contract-item", affixIndex: 0,
+  const makeMilestoneProgress = (enhance) => manager.normalizeProgress({
+    inventory: {
+      items: [{ id: "milestone-weapon", baseId: "vanguard_blade", rarity: "common", itemLevel: 10, enhance, affixes: [{ id: "vitality", value: 0.2 }] }],
+      runes: [], bossMaterials: {},
+    },
+    equipment: { warrior: { weapon: "milestone-weapon", armor: "", amulet: "", core: "", runes: [] } },
   });
-  const lockedItem = secondLock.progress.inventory.items[0];
-  if (!secondLock.changed || lockedItem.lockedAffixIndices.join(",") !== "0,1") {
-    throw new Error("multi affix lock failed");
+  const milestoneFour = makeMilestoneProgress(4);
+  const milestoneFive = makeMilestoneProgress(5);
+  const mythicWeaponProgress = manager.normalizeProgress({
+    inventory: { items: [{ id: "mythic-weapon", baseId: "vanguard_blade", rarity: "mythic", itemLevel: 10, enhance: 4 }], runes: [], bossMaterials: {} },
+    equipment: { warrior: { weapon: "mythic-weapon", armor: "", amulet: "", core: "", runes: [] } },
+  });
+  const weaponFour = milestoneFour.inventory.items[0];
+  const bonusFour = manager.calculateEquipmentBonuses(milestoneFour, "warrior");
+  const bonusFive = manager.calculateEquipmentBonuses(milestoneFive, "warrior");
+  const mythicWeaponBonus = manager.calculateEquipmentBonuses(mythicWeaponProgress, "warrior");
+  const mythicGearHtml = manager.renderProgressionPanel(manager.performProgressionAction(mythicWeaponProgress, { action: "unequip-slot", classId: "warrior", slot: "weapon" }).progress, { activeTab: "gear", classId: "warrior", embedded: true });
+  const armorPrimary = manager.normalizeProgress({ inventory: { items: [{ id: "armor-primary-contract", baseId: "vanguard_plate", rarity: "rare", itemLevel: 10, affixes: [{ id: "power", value: 1 }] }] } }).inventory.items[0]?.affixes?.[0];
+  const milestoneBonusActivated = bonusFive.maxHpMul > bonusFour.maxHpMul || bonusFive.armorBonus > bonusFour.armorBonus || bonusFive.regenBonus > bonusFour.regenBonus;
+  if (
+    weaponFour.affixes.length !== 1 || weaponFour.affixes[0].id !== "attack_flat" ||
+    !["armor_flat", "health_flat"].includes(armorPrimary?.id) ||
+    weaponFour.milestoneAffixes.length !== 0 || milestoneFive.inventory.items[0].milestoneAffixes.length !== 1 ||
+    bonusFive.attackBonus <= bonusFour.attackBonus || !milestoneBonusActivated ||
+    bonusFour.bossDamageMul !== 1 || mythicWeaponBonus.attackBonus < bonusFour.attackBonus * 1.8 || mythicWeaponBonus.bossDamageMul <= 1.2 ||
+    !mythicGearHtml.includes('data-rarity="mythic"') || !mythicGearHtml.includes("주 능력 210%")
+  ) {
+    throw new Error("slot primary stat, fixed enhancement, milestone, or rarity special contract failed");
   }
-  const beforeReforge = JSON.stringify(lockedItem.affixes);
-  const dustBefore = secondLock.progress.currencies.reforgingDust;
-  const reforge = manager.performProgressionAction(secondLock.progress, {
+  const accessoryItem = forgeBase.inventory.items[0];
+  if (accessoryItem.affixes.length !== 1 || accessoryItem.lockedAffixIndices.length) {
+    throw new Error("accessory primary affix migration failed");
+  }
+  const beforeReforge = JSON.stringify(accessoryItem.affixes);
+  const dustBefore = forgeBase.currencies.reforgingDust;
+  const reforge = manager.performProgressionAction(forgeBase, {
     action: "reforge-item", classId: "warrior", itemId: "forge-contract-item",
   });
   const previewItem = reforge.progress.inventory.items[0];
@@ -1797,10 +2064,9 @@ async function checkClientSaveRuntimeContract() {
     !reforge.changed ||
     !previewItem.reforgePreview ||
     JSON.stringify(previewItem.affixes) !== beforeReforge ||
-    previewItem.reforgePreview.affixes.length !== previewItem.affixes.length ||
-    dustBefore - reforge.progress.currencies.reforgingDust < 48
+    previewItem.reforgePreview.affixes.length !== previewItem.affixes.length
   ) {
-    throw new Error("reforge preview and lock surcharge failed");
+    throw new Error(`accessory reforge preview failed: changed=${reforge.changed} preview=${Boolean(previewItem.reforgePreview)} before=${beforeReforge} after=${JSON.stringify(previewItem.affixes)} dust=${dustBefore}->${reforge.progress.currencies.reforgingDust}`);
   }
   const appliedReforge = manager.performProgressionAction(reforge.progress, {
     action: "apply-reforge", classId: "warrior", itemId: "forge-contract-item",
@@ -1821,7 +2087,7 @@ async function checkClientSaveRuntimeContract() {
     throw new Error("probabilistic enhancement failed");
   }
   const forgeHtml = manager.renderProgressionPanel(reforge.progress, { activeTab: "forge", classId: "warrior", embedded: true });
-  const unequippedForgeBase = manager.performProgressionAction(forgeBase, { action: "unequip-slot", classId: "warrior", slot: "weapon" }).progress;
+  const unequippedForgeBase = manager.performProgressionAction(forgeBase, { action: "unequip-slot", classId: "warrior", slot: "amulet" }).progress;
   const gearHtml = manager.renderProgressionPanel(unequippedForgeBase, { activeTab: "gear", classId: "warrior", embedded: true });
   const inventoryFilterProgress = manager.normalizeProgress({
     inventory: {
@@ -1849,20 +2115,23 @@ async function checkClientSaveRuntimeContract() {
   const equippedGearHtml = manager.renderProgressionPanel(forgeBase, { activeTab: "gear", classId: "warrior", embedded: true });
   if (
     !forgeHtml.includes("재련 결과 비교") ||
+    forgeHtml.includes("미확정") ||
     !forgeHtml.includes('data-progression-action="apply-reforge"') ||
     !gearHtml.includes("meta-affix-stat") ||
     !setSearchHtml.includes("바람 병기") ||
     setSearchHtml.includes("선봉대 판금") ||
     !runeSearchHtml.includes("정밀 룬") ||
     runeSearchHtml.includes("수호 룬") ||
-    !runeLoadoutHtml.includes("장착 중 · 슬롯 1") ||
-    !runeLoadoutHtml.includes("현재 등급 효과") ||
+    !runeLoadoutHtml.includes("슬롯 1") ||
+    !runeLoadoutHtml.includes("현재 효과") ||
     !runeLoadoutHtml.includes('data-rune-id="free-ward-rune" data-rune-slot="1">장착</button>') ||
     runeLoadoutHtml.includes('data-rune-id="equipped-precision-rune" data-rune-slot="1"') ||
     !equippedGearHtml.includes('class="meta-equipped-card"') ||
     !equippedGearHtml.includes('data-equipped-item-id="forge-contract-item"') ||
     !equippedGearHtml.includes("거인 사냥") ||
-    !equippedGearHtml.includes("2세트 · 최대 체력 +7%") ||
+    !equippedGearHtml.includes("meta-special-bonuses") ||
+    !equippedGearHtml.includes("보스 피해") ||
+    !equippedGearHtml.includes("2세트 · 치명타 +4%") ||
     !equippedGearHtml.includes('data-progression-action="unequip-slot"')
   ) {
     throw new Error(`forge UI missing: compare=${forgeHtml.includes("재련 결과 비교")} apply=${forgeHtml.includes('data-progression-action="apply-reforge"')} stats=${gearHtml.includes("meta-affix-stat")}`);
@@ -1871,30 +2140,29 @@ async function checkClientSaveRuntimeContract() {
     throw new Error("client personal mission migration failed");
   }
 
-  const sharedUnlock = manager.recordRunResult(manager.defaultProgress, {
+  const sharedClear = manager.recordRunResult(manager.defaultProgress, {
     outcome: "victory",
-    resultKey: "shared-ascension-unlock",
-    ascensionLevel: 9,
-    unlockedAscensionLevel: 10,
+    resultKey: "shared-ascension-clear",
+    ascensionLevel: 5,
     stagesCleared: 1,
     highestLevel: 1,
     classId: "warrior",
   });
-  const failedUnlock = manager.recordRunResult(manager.defaultProgress, {
+  const failedClear = manager.recordRunResult(manager.defaultProgress, {
     outcome: "defeat",
-    resultKey: "failed-ascension-unlock",
-    ascensionLevel: 9,
+    resultKey: "failed-ascension-clear",
+    ascensionLevel: 5,
     stagesCleared: 1,
     highestLevel: 1,
     classId: "warrior",
   });
-  if (sharedUnlock.records.highestAscension !== 10 || failedUnlock.records.highestAscension !== 0) {
-    throw new Error("client sequential ascension unlock failed");
+  if (sharedClear.records.highestAscension !== 5 || failedClear.records.highestAscension !== 0) {
+    throw new Error("client ascension clear record failed");
   }
 
   const exported = manager.exportUserProgress(result);
   const imported = manager.importUserProgress(exported);
-  if (imported.statistics.totalScore !== 1234 || imported.statistics.totalRelics !== 6 || imported.version !== 3) {
+  if (imported.statistics.totalScore !== 1234 || imported.statistics.totalRelics !== 6 || imported.version !== 4) {
     throw new Error("client save runtime import/export failed");
   }
 
@@ -1920,7 +2188,7 @@ async function checkClientSaveRuntimeContract() {
     bestClear: { outcome: "defeat", chapter: 1, stage: 2, cleared: false, completedAt: null }
   }));
   const migrated = manager.loadUserProgress();
-  if (migrated.version !== 3 || migrated.statistics.runs !== 2 || migrated.statistics.totalScore !== 77 || !storage.has(manager.PROGRESS_KEY)) {
+  if (migrated.version !== 4 || migrated.statistics.runs !== 2 || migrated.statistics.totalScore !== 77 || !storage.has(manager.PROGRESS_KEY)) {
     throw new Error("client save runtime v1 migration failed");
   }
 
@@ -1930,7 +2198,11 @@ async function checkClientSaveRuntimeContract() {
 async function checkClientUiControllerRuntimeContract() {
   const indexSource = fs.readFileSync("public/index.html", "utf8");
   const uiSource = fs.readFileSync("public/ui-benchmark.css", "utf8");
+  const stylesSource = fs.readFileSync("public/styles.css", "utf8");
   const clientSource = fs.readFileSync("public/client.js", "utf8");
+  const progressionSource = fs.readFileSync("public/client-progression.js", "utf8");
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const skillEffectsSource = fs.readFileSync("public/pixi-skill-effects.js", "utf8");
   if (
     !indexSource.includes("Material+Symbols+Rounded") ||
     !indexSource.includes('data-icon="settings"') ||
@@ -1945,7 +2217,17 @@ async function checkClientUiControllerRuntimeContract() {
     !uiSource.includes("button.meta-codex-entry.selected") ||
     !clientSource.includes('closest("[data-codex-entry]")') ||
     !clientSource.includes("renderCodexEntryDetail") ||
-    !clientSource.includes("runAscension.textContent")
+    !clientSource.includes("runAscension.textContent") ||
+    !clientSource.includes("selectionEnd = Number.isFinite(options.selectionEnd)") ||
+    !clientSource.includes("renderProgressionSearchResults(key)") ||
+    !clientSource.includes("currentList.replaceChildren(...nextList.childNodes)") ||
+    !progressionSource.includes('data-inventory-section="items"') ||
+    !progressionSource.includes('data-inventory-section="runes"') ||
+    !stylesSource.includes(".meta-filter-search") ||
+    !stylesSource.includes("margin: 0 !important") ||
+    !uiSource.includes("grid-template-columns: minmax(58px, 1fr) 36px 36px") ||
+    !serverSource.includes("rangeRadius: projectile.splash") ||
+    !skillEffectsSource.includes("effectRadius * (burst ? 1 : 0.42)")
   ) {
     throw new Error("Google Material Symbols UI contract failed");
   }
@@ -2083,7 +2365,7 @@ function checkWebSocket() {
       gearBonuses: {
         damageMul: 1.12,
         maxHpMul: 1.1,
-        skillCooldownMul: 0.92,
+        skillHaste: 8,
         wallBounceBonus: 1,
         poisonStackCapBonus: 1,
         lowHpShieldRatio: 0.18,
@@ -2846,11 +3128,15 @@ Promise.resolve()
   .then(checkServerCollisionContract)
   .then(checkBossPatternContract)
   .then(checkDefensePushbackContract)
+  .then(checkBotSurvivalContract)
   .then(checkHostileProjectileContract)
   .then(checkWarriorUpgradeContract)
   .then(checkEngineerBalanceContract)
+  .then(checkSkillHasteContract)
   .then(checkSoloBalanceContract)
   .then(checkSurvivalModeContract)
+  .then(checkExperienceCurveContract)
+  .then(checkAscensionDifficultyContract)
   .then(checkLongTermProgressionContract)
   .then(checkServerAccountStoreContract)
   .then(checkHttp)

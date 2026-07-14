@@ -212,13 +212,7 @@ export function recordRunResult(progress: unknown, result: RunResultRecord): Use
   next.currencies.abyssShards += earnedShards;
   next.records.highestAbyssDepth = Math.max(next.records.highestAbyssDepth, abyssDepth);
   if (outcome === "victory") {
-    const unlockedAscensionLevel = clampedWholeNumber(
-      result.unlockedAscensionLevel,
-      Math.min(MAX_ASCENSION_LEVEL, ascensionLevel + 1),
-      0,
-      MAX_ASCENSION_LEVEL,
-    );
-    next.records.highestAscension = Math.max(next.records.highestAscension, unlockedAscensionLevel);
+    next.records.highestAscension = Math.max(next.records.highestAscension, ascensionLevel);
   }
   if (resultKey) next.records.lastRunKey = resultKey;
   applyAccountXp(next, earnedAccountXp);
@@ -253,7 +247,7 @@ export function calculateRunRewards(result: RunResultRecord): {
   const progressReward = Math.floor(stagesCleared * 5 + highestLevel * 2 + totalRelics * 3 + Math.sqrt(totalScore) * 0.42);
   const victoryReward = outcome === "victory" ? 45 : 0;
   const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
-  const ascensionMultiplier = 1 + ascensionLevel * 0.1;
+  const ascensionMultiplier = [1, 1.5, 2, 2.75, 3.75, 5][ascensionLevel] || 1;
   const earnedShards = Math.max(2, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier));
   return {
     earnedShards,

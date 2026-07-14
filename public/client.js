@@ -91,6 +91,7 @@ const settingsAccountSync = document.querySelector("#settingsAccountSync");
 const settingsAccountId = document.querySelector("#settingsAccountId");
 const accountCopyRecoveryButton = document.querySelector("#accountCopyRecoveryButton");
 const accountNewGuestButton = document.querySelector("#accountNewGuestButton");
+const accountResetButton = document.querySelector("#accountResetButton");
 const accountRecoveryInput = document.querySelector("#accountRecoveryInput");
 const accountRecoverButton = document.querySelector("#accountRecoverButton");
 const accountSettingsMessage = document.querySelector("#accountSettingsMessage");
@@ -98,6 +99,8 @@ const accountSettingsSection = document.querySelector("#accountSettingsSection")
 const runContext = document.querySelector("#runContext");
 const runTimer = document.querySelector("#runTimer");
 const runTimerMax = document.querySelector("#runTimerMax");
+const runTimePhase = document.querySelector("#runTimePhase");
+const runTimelineFill = document.querySelector("#runTimelineFill");
 const runAscension = document.querySelector("#runAscension");
 
 let socket = null;
@@ -137,8 +140,12 @@ const progressionInventoryUi = {
   runeSort: "tier",
   selectedItemIds: new Set(),
 };
+let progressionSearchCompositionActive = false;
+let progressionSearchRenderTimer = 0;
 let pendingProgressionAction = null;
 let pendingProgressionScrollTop = null;
+let pendingProgressionScrollAnchor = null;
+let progressionPointerScrollSnapshot = null;
 let progressionScrollLockTop = null;
 let progressionScrollLockUntil = 0;
 let progressionScrollRestoreToken = 0;
@@ -226,6 +233,7 @@ const LOBBY_VIEW_META = Object.freeze({
   gear: { kicker: "ARSENAL", title: "장비와 룬" },
   forge: { kicker: "FORGE", title: "대장간" },
   archive: { kicker: "RECORDS", title: "원정 기록" },
+  cosmetics: { kicker: "APPEARANCE", title: "외형 설정" },
   challenges: { kicker: "MISSIONS", title: "개인 임무" },
   training: { kicker: "TRAINING", title: "훈련 설정" }
 });
@@ -235,12 +243,21 @@ const masteryNodeDefs = Object.freeze(
     { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
     { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
     { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
-    { id: "cooldown", label: "쿨타임 감소", description: "기본 공격과 스킬의 쿨타임이 감소합니다." },
+    { id: "attackSpeed", label: "공격 속도", description: "기본 공격 속도가 증가합니다." },
+    { id: "cooldown", label: "스킬 가속", description: "스킬 가속이 증가합니다. 최대 500까지 합산됩니다." },
     { id: "critDamage", label: "치명타 피해", description: "치명타로 주는 피해가 증가합니다." },
     { id: "area", label: "범위", description: "범위 공격과 폭발의 크기가 증가합니다." }
   ]
 );
-const MAX_ASCENSION_LEVEL = saveBridge.MAX_ASCENSION_LEVEL || 25;
+const MAX_ASCENSION_LEVEL = saveBridge.MAX_ASCENSION_LEVEL || 5;
+const ASCENSION_DIFFICULTY_PROFILES = Object.freeze([
+  Object.freeze({ hpMul: 1, damageMul: 1, speedMul: 1, spawnMul: 1, cadenceMul: 1, eliteBonus: 0, rewardMul: 1 }),
+  Object.freeze({ hpMul: 1.5, damageMul: 1.15, speedMul: 1.04, spawnMul: 1.12, cadenceMul: 0.94, eliteBonus: 0.06, rewardMul: 1.5 }),
+  Object.freeze({ hpMul: 2, damageMul: 1.28, speedMul: 1.08, spawnMul: 1.24, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
+  Object.freeze({ hpMul: 2.6, damageMul: 1.42, speedMul: 1.12, spawnMul: 1.38, cadenceMul: 0.82, eliteBonus: 0.2, rewardMul: 2.75 }),
+  Object.freeze({ hpMul: 3.3, damageMul: 1.58, speedMul: 1.17, spawnMul: 1.52, cadenceMul: 0.75, eliteBonus: 0.3, rewardMul: 3.75 }),
+  Object.freeze({ hpMul: 4.2, damageMul: 1.78, speedMul: 1.23, spawnMul: 1.68, cadenceMul: 0.68, eliteBonus: 0.42, rewardMul: 5 }),
+]);
 const defaultSettings = Object.freeze(clientRuntime.defaultSettings || {
   version: SETTINGS_VERSION,
   graphicsQuality: "high",
@@ -621,7 +638,7 @@ lobbyWorkspaceNav?.addEventListener("click", (event) => {
   const nextView = String(button.dataset.lobbyView || "loadout");
   if (!LOBBY_VIEW_META[nextView]) return;
   selectedLobbyView = nextView;
-  if (["gear", "forge", "archive", "challenges"].includes(nextView)) selectedProgressionTab = nextView;
+  if (["gear", "forge", "archive", "cosmetics", "challenges"].includes(nextView)) selectedProgressionTab = nextView;
   renderedLobbyClassDetailKey = "";
   renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
 });
@@ -666,8 +683,18 @@ function getProgressionInventoryUiSnapshot() {
 function lockProgressionScroll(scrollTop = lobbyClassDetail?.scrollTop) {
   if (!Number.isFinite(scrollTop)) return null;
   progressionScrollLockTop = scrollTop;
-  progressionScrollLockUntil = performance.now() + 900;
+  progressionScrollLockUntil = performance.now() + 1800;
   return scrollTop;
+}
+
+function captureProgressionScrollAnchor(actionPayload, sourceElement = null) {
+  if (!lobbyClassDetail || !actionPayload?.itemId) return null;
+  const card = sourceElement?.closest?.("[data-forge-item-id]")
+    || lobbyClassDetail.querySelector(`[data-forge-item-id="${cssEscape(actionPayload.itemId)}"]`);
+  if (!card) return null;
+  const viewportRect = lobbyClassDetail.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  return { itemId: String(actionPayload.itemId), viewportOffset: cardRect.top - viewportRect.top };
 }
 
 function getLockedProgressionScrollTop(scrollTop = null) {
@@ -676,13 +703,21 @@ function getLockedProgressionScrollTop(scrollTop = null) {
   return Number.isFinite(progressionScrollLockTop) ? progressionScrollLockTop : null;
 }
 
-function restoreProgressionScroll(scrollTop = null) {
+function restoreProgressionScroll(scrollTop = null, anchor = pendingProgressionScrollAnchor) {
   const target = getLockedProgressionScrollTop(scrollTop);
   if (!lobbyClassDetail || target === null) return;
   const token = ++progressionScrollRestoreToken;
   const apply = () => {
-    if (token !== progressionScrollRestoreToken || !["gear", "forge", "archive", "challenges"].includes(selectedLobbyView)) return;
+    if (token !== progressionScrollRestoreToken || !["gear", "forge", "archive", "cosmetics", "challenges"].includes(selectedLobbyView)) return;
     lobbyClassDetail.scrollTop = target;
+    if (anchor?.itemId && selectedLobbyView === "forge") {
+      const card = lobbyClassDetail.querySelector(`[data-forge-item-id="${cssEscape(anchor.itemId)}"]`);
+      if (card) {
+        const viewportRect = lobbyClassDetail.getBoundingClientRect();
+        const cardOffset = card.getBoundingClientRect().top - viewportRect.top;
+        lobbyClassDetail.scrollTop += cardOffset - anchor.viewportOffset;
+      }
+    }
   };
   apply();
   requestAnimationFrame(() => {
@@ -691,24 +726,50 @@ function restoreProgressionScroll(scrollTop = null) {
   });
   setTimeout(apply, 90);
   setTimeout(apply, 240);
+  setTimeout(apply, 520);
+  setTimeout(apply, 900);
 }
 
 function renderProgressionUiState(options = {}) {
   const scrollTop = getLockedProgressionScrollTop(options.scrollTop);
   const focusFilter = String(options.focusFilter || "");
   const selectionStart = Number.isFinite(options.selectionStart) ? options.selectionStart : null;
+  const selectionEnd = Number.isFinite(options.selectionEnd) ? options.selectionEnd : selectionStart;
   renderedLobbyClassDetailKey = "";
   renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
   restoreProgressionScroll(scrollTop);
   if (focusFilter && lobbyClassDetail) {
-    requestAnimationFrame(() => {
-      const filter = lobbyClassDetail.querySelector(`[data-progression-filter="${cssEscape(focusFilter)}"]`);
-      filter?.focus({ preventScroll: true });
-      if (selectionStart !== null && typeof filter?.setSelectionRange === "function") {
-        filter.setSelectionRange(selectionStart, selectionStart);
-      }
-    });
+    const filter = lobbyClassDetail.querySelector(`[data-progression-filter="${cssEscape(focusFilter)}"]`);
+    filter?.focus({ preventScroll: true });
+    if (selectionStart !== null && typeof filter?.setSelectionRange === "function") {
+      filter.setSelectionRange(selectionStart, selectionEnd);
+    }
   }
+}
+
+function renderProgressionSearchResults(filterKey) {
+  if (!lobbyClassDetail || selectedLobbyView !== "gear" || !saveBridge.renderProgressionPanel) return;
+  const sectionName = filterKey === "runeQuery" ? "runes" : "items";
+  const currentSection = lobbyClassDetail.querySelector(`[data-inventory-section="${sectionName}"]`);
+  if (!currentSection) return;
+
+  const template = document.createElement("template");
+  template.innerHTML = saveBridge.renderProgressionPanel(userProgress, {
+    classId: getSelf()?.classId || selectedClass,
+    activeTab: "gear",
+    leaderboards: state?.room?.challengeLeaderboard || [],
+    embedded: true,
+    inventoryUi: getProgressionInventoryUiSnapshot(),
+  });
+  const nextSection = template.content.querySelector(`[data-inventory-section="${sectionName}"]`);
+  if (!nextSection) return;
+
+  const currentList = currentSection.querySelector(sectionName === "runes" ? ".meta-rune-list" : ".meta-item-list");
+  const nextList = nextSection.querySelector(sectionName === "runes" ? ".meta-rune-list" : ".meta-item-list");
+  const currentCount = currentSection.querySelector(".meta-section-head > span");
+  const nextCount = nextSection.querySelector(".meta-section-head > span");
+  if (currentList && nextList) currentList.replaceChildren(...nextList.childNodes);
+  if (currentCount && nextCount) currentCount.replaceChildren(...nextCount.cloneNode(true).childNodes);
 }
 
 function pruneProgressionSelection() {
@@ -773,14 +834,23 @@ function showProgressionFeedback(message, action = null) {
 
 function submitProgressionAction(actionPayload, sourceElement = null) {
   if (!saveBridge.performProgressionAction) return false;
+  const pointerSnapshot = progressionPointerScrollSnapshot
+    && performance.now() - progressionPointerScrollSnapshot.capturedAt < 1200
+    && progressionPointerScrollSnapshot.itemId === String(actionPayload?.itemId || "")
+      ? progressionPointerScrollSnapshot
+      : null;
+  progressionPointerScrollSnapshot = null;
   pendingProgressionAction = { ...actionPayload };
-  pendingProgressionScrollTop = lockProgressionScroll();
+  pendingProgressionScrollAnchor = pointerSnapshot?.anchor || captureProgressionScrollAnchor(actionPayload, sourceElement);
+  pendingProgressionScrollTop = lockProgressionScroll(pointerSnapshot?.scrollTop ?? lobbyClassDetail?.scrollTop);
+  sourceElement?.blur?.();
   if (accountServerManaged) {
     const sent = sendClientMessage({ type: "accountProgressAction", actionPayload });
     if (sent) flashLobbyTestControl(sourceElement || lobbyClassDetail);
     else {
       pendingProgressionAction = null;
       pendingProgressionScrollTop = null;
+      pendingProgressionScrollAnchor = null;
     }
     return sent;
   }
@@ -793,8 +863,24 @@ function submitProgressionAction(actionPayload, sourceElement = null) {
   if (result.changed) showProgressionFeedback(result.message || "변경 사항이 적용되었습니다.", actionPayload);
   pendingProgressionAction = null;
   pendingProgressionScrollTop = null;
+  pendingProgressionScrollAnchor = null;
   return Boolean(result.changed);
 }
+
+lobbyClassDetail?.addEventListener("pointerdown", (event) => {
+  const button = event.target.closest("[data-progression-action]");
+  const itemId = String(button?.dataset.itemId || "");
+  if (!button || !itemId || !button.closest("[data-forge-item-id]")) {
+    progressionPointerScrollSnapshot = null;
+    return;
+  }
+  progressionPointerScrollSnapshot = {
+    itemId,
+    scrollTop: lobbyClassDetail.scrollTop,
+    anchor: captureProgressionScrollAnchor({ itemId }, button),
+    capturedAt: performance.now(),
+  };
+}, { capture: true });
 
 lobbyClassDetail?.addEventListener("click", async (event) => {
   if (!canSendMessage()) return;
@@ -866,7 +952,7 @@ lobbyClassDetail?.addEventListener("click", async (event) => {
     const action = progressionButton.dataset.progressionAction || "";
     if (action === "tab") {
       selectedProgressionTab = progressionButton.dataset.tab || "gear";
-      if (["gear", "forge", "archive", "challenges"].includes(selectedProgressionTab)) {
+      if (["gear", "forge", "archive", "cosmetics", "challenges"].includes(selectedProgressionTab)) {
         selectedLobbyView = selectedProgressionTab;
       }
       renderedLobbyClassDetailKey = "";
@@ -912,11 +998,10 @@ lobbyClassDetail?.addEventListener("click", async (event) => {
   const ascensionButton = event.target.closest("[data-ascension-delta]");
   if (ascensionButton) {
     if (state?.selfId !== state?.room?.hostId) return;
-    const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
     selectedAscensionLevel = clamp(
       selectedAscensionLevel + Number(ascensionButton.dataset.ascensionDelta || 0),
       0,
-      unlockedAscension,
+      MAX_ASCENSION_LEVEL,
     );
     renderedLobbyClassDetailKey = "";
     renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
@@ -1028,11 +1113,30 @@ lobbyClassDetail?.addEventListener("input", (event) => {
   const key = filter.dataset.progressionFilter;
   if (!(key in progressionInventoryUi) || key === "selectedItemIds") return;
   progressionInventoryUi[key] = filter.value;
-  renderProgressionUiState({
-    scrollTop: lobbyClassDetail.scrollTop,
-    focusFilter: key,
-    selectionStart: filter.selectionStart,
-  });
+  if (event.isComposing || progressionSearchCompositionActive) return;
+  clearTimeout(progressionSearchRenderTimer);
+  progressionSearchRenderTimer = window.setTimeout(() => {
+    renderProgressionSearchResults(key);
+  }, 180);
+});
+
+lobbyClassDetail?.addEventListener("compositionstart", (event) => {
+  if (!event.target.closest('input[type="search"][data-progression-filter]')) return;
+  progressionSearchCompositionActive = true;
+  clearTimeout(progressionSearchRenderTimer);
+});
+
+lobbyClassDetail?.addEventListener("compositionend", (event) => {
+  const filter = event.target.closest('input[type="search"][data-progression-filter]');
+  if (!filter) return;
+  progressionSearchCompositionActive = false;
+  const key = filter.dataset.progressionFilter;
+  if (!(key in progressionInventoryUi) || key === "selectedItemIds") return;
+  progressionInventoryUi[key] = filter.value;
+  clearTimeout(progressionSearchRenderTimer);
+  progressionSearchRenderTimer = window.setTimeout(() => {
+    renderProgressionSearchResults(key);
+  }, 180);
 });
 
 accountManageButton?.addEventListener("click", () => {
@@ -1119,6 +1223,26 @@ accountNewGuestButton?.addEventListener("click", async () => {
     accountBridge.clearCredentials?.();
     const session = await accountBridge.createGuest(userProgress, nameInput?.value || "Player");
     applyServerAccountSession(session, "새 서버 계정을 만들고 로컬 진행도를 이전했습니다.");
+  });
+});
+
+accountResetButton?.addEventListener("click", async () => {
+  if (!accountServerManaged || !accountSession?.ok || accountSyncState === "loading") return;
+  const confirmed = await requestProgressionConfirmation({
+    title: "계정 진행도를 초기화할까요?",
+    message: "계정 레벨, 재화, 영구 성장, 장비와 룬, 도감, 업적, 칭호와 스킨 기록이 모두 삭제됩니다. 계정 ID와 복구 키는 유지되며 이 작업은 되돌릴 수 없습니다.",
+    confirmLabel: "모두 초기화",
+    danger: true,
+  });
+  if (!confirmed) return;
+  await runAccountOperation(async () => {
+    const session = await accountBridge.reset(accountSession);
+    applyServerAccountSession(session, "계정 진행도를 초기 상태로 되돌렸습니다.");
+    selectedAscensionLevel = 0;
+    progressionInventoryUi.selectedItemIds.clear();
+    if (state?.room?.status === "lobby") {
+      sendClientMessage({ type: "setGrowthLoadout", growthLoadout: getSelectedGrowthLoadout(getSelf()?.classId || selectedClass) });
+    }
   });
 });
 
@@ -1417,12 +1541,16 @@ async function connect(options = {}) {
       if (message.progress) applyServerProgress(message.progress, message.account);
       accountSyncState = "synced";
       accountServerManaged = true;
-      if (message.message) setAccountSettingsMessage(message.message, message.reason === "action-rejected");
-      if (message.reason === "action-applied") showProgressionFeedback(message.message || "변경 사항이 적용되었습니다.", pendingProgressionAction);
+      const progressionActionResponse = String(message.reason || "").startsWith("action-");
+      if (message.message && !progressionActionResponse) setAccountSettingsMessage(message.message);
+      if (["action-applied", "action-rejected", "action-unchanged"].includes(message.reason)) {
+        showProgressionFeedback(message.message || (message.reason === "action-applied" ? "변경 사항이 적용되었습니다." : "변경 사항을 적용하지 못했습니다."), pendingProgressionAction);
+      }
       if (message.reason === "action-applied" || message.reason === "action-rejected" || message.reason === "action-unchanged") {
         progressionScrollLockUntil = Math.max(progressionScrollLockUntil, performance.now() + 350);
         pendingProgressionAction = null;
         pendingProgressionScrollTop = null;
+        pendingProgressionScrollAnchor = null;
       }
       renderAccountStatus();
       return;
@@ -1593,10 +1721,9 @@ function applyServerProgress(progress, account = null) {
   if (accountSession && account) {
     accountSession.account = { ...(accountSession.account || {}), ...account };
   }
-  const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0) || 0, 0, MAX_ASCENSION_LEVEL);
   selectedAscensionLevel = state
-    ? clamp(Number(selectedAscensionLevel || 0), 0, unlockedAscension)
-    : unlockedAscension;
+    ? clamp(Number(selectedAscensionLevel || 0), 0, MAX_ASCENSION_LEVEL)
+    : clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
   renderedLobbyClassDetailKey = "";
   if (state?.room?.status === "lobby") {
     renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
@@ -1643,6 +1770,7 @@ function renderAccountStatus() {
   }
   if (accountNewGuestButton) accountNewGuestButton.disabled = busy || ready;
   if (accountRecoverButton) accountRecoverButton.disabled = busy;
+  if (accountResetButton) accountResetButton.disabled = busy || !ready;
 }
 
 function setAccountSettingsMessage(message, error = false) {
@@ -1731,8 +1859,7 @@ function recordUserRunResult(result = {}) {
 function getSelectedAscensionLevel() {
   const roomAscension = clamp(Math.floor(Number(state?.room?.ascensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
   if (state?.room?.status === "lobby" && state?.selfId && state.selfId !== state.room.hostId) return roomAscension;
-  const unlockedAscension = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
-  return clamp(Math.floor(Number(selectedAscensionLevel || 0)), 0, unlockedAscension);
+  return clamp(Math.floor(Number(selectedAscensionLevel || 0)), 0, MAX_ASCENSION_LEVEL);
 }
 
 function getSelectedGrowthLoadout(classId = selectedClass) {
@@ -1801,7 +1928,8 @@ function getGrowthRenderKey(classId) {
   const progressionKey = saveBridge.getProgressionRenderKey
     ? saveBridge.getProgressionRenderKey(userProgress, classId, selectedProgressionTab)
     : "";
-  const inventoryUiKey = JSON.stringify({ ...progressionInventoryUi, selectedItemIds: [...progressionInventoryUi.selectedItemIds].sort() });
+  const { itemQuery: _itemQuery, runeQuery: _runeQuery, ...inventoryUiRenderState } = progressionInventoryUi;
+  const inventoryUiKey = JSON.stringify({ ...inventoryUiRenderState, selectedItemIds: [...progressionInventoryUi.selectedItemIds].sort() });
   return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|H${state?.room?.hostId || ""}|${nodeKey}|${progressionKey}|${inventoryUiKey}`;
 }
 
@@ -1911,7 +2039,8 @@ function combinePermanentBonuses(accountBonuses = {}, masteryBonuses = {}, equip
     maxHpMul: multiply("maxHpMul"),
     regenBonus: add("regenBonus"),
     speedMul: multiply("speedMul"),
-    skillCooldownMul: multiply("skillCooldownMul"),
+    attackSpeed: Math.min(500, add("attackSpeed")),
+    skillHaste: Math.min(500, add("skillHaste")),
     armorBonus: add("armorBonus"),
     critChanceBonus: add("critChanceBonus"),
     critDamageMul: multiply("critDamageMul"),
@@ -1922,28 +2051,20 @@ function combinePermanentBonuses(accountBonuses = {}, masteryBonuses = {}, equip
 function renderAscensionRunSetup(self = null) {
   if (self?.spectator) return "";
   const level = getSelectedAscensionLevel();
-  const unlocked = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
+  const bestClear = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
   const isHost = Boolean(state?.selfId && state.selfId === state?.room?.hostId);
-  const overcap = Math.max(0, level - 5);
-  const hpMul = 1 + level * 0.18 + overcap * 0.06;
-  const damageMul = 1 + level * 0.06 + overcap * 0.012;
-  const speedMul = 1 + Math.min(0.45, level * 0.025 + overcap * 0.006);
-  const spawnMul = 1 + level * 0.07 + overcap * 0.025;
-  const rewardMul = 1 + level * 0.1;
-  const eliteBonus = Math.min(0.55, level * 0.035 + overcap * 0.006);
+  const profile = ASCENSION_DIFFICULTY_PROFILES[level] || ASCENSION_DIFFICULTY_PROFILES[0];
   const milestone = level <= 0
     ? "기본 난이도. 추가 규칙 없이 원정을 시작합니다."
     : level === 1
-      ? "적 체력·피해·속도·출현량이 동시에 상승합니다."
+      ? "강화된 적이 더 많이 등장하며 공격 주기가 6% 짧아집니다."
       : level === 2
-        ? "정예 비율과 적의 공격 빈도가 크게 상승합니다."
+        ? "정예 출현율이 크게 오르고 공격 주기가 12% 짧아집니다."
         : level === 3
-          ? "플레이어가 받는 모든 회복량이 35% 감소합니다."
+          ? "플레이어 회복량이 35% 감소하고 적 압박이 급격히 강해집니다."
           : level === 4
             ? "보스가 주기적으로 추가 투사체 고리 패턴을 사용합니다."
-            : level === 5
-              ? "맵에 충돌 지형이 생성되고 적 투사체 속도가 16% 증가합니다."
-              : "6단계부터 체력·출현량·공격 빈도 상승 폭이 더 커지고 보스 탄막도 강화됩니다.";
+            : "최고 난이도. 적 투사체가 25% 빨라지고 보스 탄막 주기가 강화됩니다.";
   return `<section class="run-ascension-setup" aria-label="원정 승천 난이도">
     <div class="run-ascension-main">
       <span>원정 난이도</span>
@@ -1951,19 +2072,20 @@ function renderAscensionRunSetup(self = null) {
       <small>${escapeHtml(milestone)}</small>
     </div>
     <div class="run-ascension-stats" aria-label="현재 승천 누적 효과">
-      <span>적 체력 <b>×${hpMul.toFixed(2)}</b></span>
-      <span>적 피해 <b>×${damageMul.toFixed(2)}</b></span>
-      <span>적 속도 <b>×${speedMul.toFixed(2)}</b></span>
-      <span>출현량 <b>×${spawnMul.toFixed(2)}</b></span>
-      <span>정예 <b>+${Math.round(eliteBonus * 100)}%p</b></span>
-      <span>보상 <b>×${rewardMul.toFixed(2)}</b></span>
+      <span>적 체력 <b>×${profile.hpMul.toFixed(2)}</b></span>
+      <span>적 피해 <b>×${profile.damageMul.toFixed(2)}</b></span>
+      <span>적 속도 <b>×${profile.speedMul.toFixed(2)}</b></span>
+      <span>출현량 <b>×${profile.spawnMul.toFixed(2)}</b></span>
+      <span>공격 주기 <b>×${profile.cadenceMul.toFixed(2)}</b></span>
+      <span>정예 <b>+${Math.round(profile.eliteBonus * 100)}%p</b></span>
+      <span>보상 <b>×${profile.rewardMul.toFixed(2)}</b></span>
     </div>
     <div class="run-ascension-control-wrap">
-      <small>해금 ${unlocked}/${MAX_ASCENSION_LEVEL} · 승리 시 ${Math.min(MAX_ASCENSION_LEVEL, level + 1)}단계 해금</small>
+      <small>전 단계 즉시 선택 가능 · 최고 클리어 승천 ${bestClear}</small>
       ${isHost ? `<div class="growth-ascension-controls" aria-label="승천 단계 선택">
         <button type="button" data-ascension-delta="-1" aria-label="승천 단계 내리기" ${level <= 0 ? "disabled" : ""}>-</button>
         <b>${level}</b>
-        <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${level >= unlocked ? "disabled" : ""}>+</button>
+        <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${level >= MAX_ASCENSION_LEVEL ? "disabled" : ""}>+</button>
       </div>` : `<small class="growth-ascension-host-only">방장만 변경 가능</small>`}
     </div>
   </section>`;
@@ -1975,7 +2097,8 @@ function renderGrowthBonusChips(classId, bonuses, includeDefense = false) {
     ["체력", formatSignedPercent((bonuses.maxHpMul || 1) - 1)],
     ["체젠", `${formatSignedFlat(bonuses.regenBonus || 0)}/s`],
     ["속도", formatSignedPercent((bonuses.speedMul || 1) - 1)],
-    ["쿨감", formatSignedPercent(1 - (bonuses.skillCooldownMul || 1))],
+    ["공격 속도", formatSignedFlat(bonuses.attackSpeed || 0)],
+    ["스킬 가속", formatSignedFlat(bonuses.skillHaste || 0)],
     ...(includeDefense ? [["방어", formatSignedFlat(bonuses.armorBonus || 0)], ["치명타", formatSignedPercent(bonuses.critChanceBonus || 0)]] : []),
     ["치명 피해", formatSignedPercent((bonuses.critDamageMul || 1) - 1)],
     ["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)]
@@ -1991,7 +2114,8 @@ function getMasteryPreviewLabel(nodeId, classId, before, after) {
     maxHp: ["최대 체력", (after.maxHpMul || 1) - (before.maxHpMul || 1)],
     regen: ["체력 재생", (after.regenBonus || 0) - (before.regenBonus || 0), "flat", "/s"],
     moveSpeed: ["이동 속도", (after.speedMul || 1) - (before.speedMul || 1)],
-    cooldown: ["쿨타임 감소", (before.skillCooldownMul || 1) - (after.skillCooldownMul || 1)],
+    attackSpeed: ["공격 속도", (after.attackSpeed || 0) - (before.attackSpeed || 0), "flat"],
+    cooldown: ["스킬 가속", (after.skillHaste || 0) - (before.skillHaste || 0), "flat"],
     critDamage: ["치명타 피해", (after.critDamageMul || 1) - (before.critDamageMul || 1)],
     area: ["범위", (after.areaMul || 1) - (before.areaMul || 1)],
   };
@@ -2408,6 +2532,7 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
   const subtitles = {
     growth: "모든 직업에 공용 적용 · 장비 합산 수치는 선택한 직업 기준",
     archive: `계정 Lv.${Number(progress.account?.level || 1)} · 원정과 수집 기록`,
+    cosmetics: "보유 칭호와 스킨 · 선택한 외형은 모든 직업에 적용",
     challenges: "일일·주간 개인 임무 · 모든 원정에서 자동 누적"
   };
   if (lobbyWorkspaceSubtitle) {
@@ -2427,6 +2552,7 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
     gear: [["장착", `${equippedCount}/7`], ["보관", inventoryCount]],
     forge: [["강화석", Number(progress.currencies?.enhancementStones || 0).toLocaleString()], ["재련 가루", Number(progress.currencies?.reforgingDust || 0).toLocaleString()]],
     archive: [["최고 심연", Number(progress.records?.highestAbyssDepth || 0)], ["업적", Object.keys(progress.achievements || {}).length]],
+    cosmetics: [["칭호", Number(progress.titles?.length || 0)], ["스킨", Number(progress.skins?.length || 0)]],
     challenges: [["일일", `${Math.min(Number(dailyMission.progress || 0), Number(dailyMission.target || 1))}/${Number(dailyMission.target || 1)}`], ["주간", `${Math.min(Number(weeklyMission.progress || 0), Number(weeklyMission.target || 1))}/${Number(weeklyMission.target || 1)}`]],
     training: [["직업", classMeta.label], ["모드", "로비 테스트"]]
   };
@@ -2465,7 +2591,7 @@ function renderLobbyClassDetail(classId, self = null) {
     lobbyClassDetail.innerHTML = renderGrowthMasteryPanel(self, classId);
     return;
   }
-  if (["gear", "forge", "archive", "challenges"].includes(selectedLobbyView)) {
+  if (["gear", "forge", "archive", "cosmetics", "challenges"].includes(selectedLobbyView)) {
     lobbyClassDetail.innerHTML = saveBridge.renderProgressionPanel
       ? saveBridge.renderProgressionPanel(userProgress, {
           classId,
@@ -2711,7 +2837,7 @@ function renderLobbyTestCustomizer(self) {
       <div class="lobby-test-section">
         <div class="lobby-test-label">
           <span>스킬 강화</span>
-          <small>기본 스킬은 고정, 강화만 토글</small>
+          <small>선택 가능한 강화만 표시</small>
         </div>
         <div class="lobby-test-skill-groups">
           ${renderLobbySkillGroups(baseSkills, skills)}
@@ -2743,20 +2869,12 @@ function renderLobbySkillGroups(baseSkills, skills) {
   }
 
   const renderedBaseGroups = (baseSkills || [])
-    .map((baseSkill) => renderLobbySkillGroup(baseSkill, groups.get(String(baseSkill.slot || "").toLowerCase()) || []))
+    .map((baseSkill) => renderLobbySkillGroup(groups.get(String(baseSkill.slot || "").toLowerCase()) || []))
     .join("");
   const orphanUpgrades = groups.get("up") || [];
   const renderedOrphans = orphanUpgrades.length
     ? `
       <article class="lobby-test-skill-group">
-        <div class="lobby-test-base-skill">
-          <span class="lobby-test-slot fixed">UP</span>
-          <span class="lobby-test-base-copy">
-            <strong>기타 강화</strong>
-            <em>기본 스킬 정보 없이 받은 강화</em>
-          </span>
-          <span class="lobby-test-fixed-state">강화</span>
-        </div>
         <div class="lobby-test-upgrade-list">
           ${orphanUpgrades.map(renderLobbySkillTestItem).join("")}
         </div>
@@ -2768,20 +2886,12 @@ function renderLobbySkillGroups(baseSkills, skills) {
     : `<div class="lobby-test-empty-upgrades">표시할 강화가 없음</div>`;
 }
 
-function renderLobbySkillGroup(baseSkill, upgrades) {
-  const slotLabel = String(baseSkill.slot || "?").toUpperCase();
+function renderLobbySkillGroup(upgrades) {
+  if (!upgrades.length) return "";
   return `
     <article class="lobby-test-skill-group">
-      <div class="lobby-test-base-skill" title="${escapeHtml(baseSkill.text || "")}">
-        <span class="lobby-test-slot fixed">${escapeHtml(slotLabel)}</span>
-        <span class="lobby-test-base-copy">
-          <strong>${escapeHtml(baseSkill.name || `${slotLabel} Skill`)}</strong>
-          <em>기본 스킬 · 항상 ON</em>
-        </span>
-        <span class="lobby-test-fixed-state">고정 ON</span>
-      </div>
       <div class="lobby-test-upgrade-list">
-        ${upgrades.length ? upgrades.map(renderLobbySkillTestItem).join("") : `<div class="lobby-test-empty-upgrades">강화 없음</div>`}
+        ${upgrades.map(renderLobbySkillTestItem).join("")}
       </div>
     </article>
   `;
@@ -3761,7 +3871,7 @@ function renderResult(nextState) {
     ["계정 XP", `+${rewards.earnedAccountXp || 0}`],
     ["심연", `${rewards.abyssDepth || 0}층`],
     ["승천", `${rewards.ascensionLevel || 0}`],
-    ...(victory ? [["승천 해금", `${Number(result.unlockedAscensionLevel ?? Math.min(MAX_ASCENSION_LEVEL, Number(rewards.ascensionLevel || 0) + 1))}단계`]] : []),
+    ...(victory ? [["승천 기록", `${Number(result.highestAscensionCleared ?? rewards.ascensionLevel ?? 0)}단계 클리어`]] : []),
     ["최고 레벨", `${result.highestLevel || 1}`],
     ["점수", `${result.totalScore || 0}`],
     ["유물", formatRelicCount({ relicCount: result.totalRelics, relicMaxCount: result.totalRelicMax })],
@@ -3913,6 +4023,27 @@ function renderRunContextHud(nextState) {
   const elapsed = Math.max(0, Math.min(duration, Number(survival?.elapsed || 0)));
   if (runTimer) runTimer.textContent = formatDuration(elapsed);
   if (runTimerMax) runTimerMax.textContent = `/ ${formatDuration(duration)}`;
+  if (runTimelineFill) runTimelineFill.style.width = `${(elapsed / duration) * 100}%`;
+
+  const bossActive = Boolean(survival?.bossActive);
+  const executionPending = Boolean(survival?.executionPending);
+  const executionBossActive = Boolean(survival?.executionBossActive);
+  const nextBossAt = Math.max(elapsed, Number(survival?.nextBossAt || duration));
+  const nextBossIn = Math.max(0, nextBossAt - elapsed);
+  const bossImminent = !bossActive && !executionPending && !executionBossActive && nextBossIn <= 20;
+  runContext.classList.toggle("boss-active", bossActive);
+  runContext.classList.toggle("boss-imminent", bossImminent);
+  runContext.classList.toggle("execution-pending", executionPending);
+  runContext.classList.toggle("execution-active", executionBossActive);
+  if (runTimePhase) {
+    runTimePhase.textContent = executionBossActive
+      ? "운명 집행 중"
+      : executionPending
+        ? "최후의 적 출현 임박"
+        : bossActive
+          ? "보스 전투 중"
+          : `다음 보스 ${formatDuration(nextBossIn)}`;
+  }
   if (runAscension) runAscension.textContent = `승천 ${Math.max(0, Number(room.ascensionLevel || 0))}`;
 }
 
@@ -3976,6 +4107,7 @@ function formatDuration(seconds) {
 }
 
 function renderBanner(nextState) {
+  centerBanner.classList.remove("lethal-cast");
   if (nextState.room.status === "lobby") {
     centerBanner.textContent = nextState.room.allReady
       ? "전원 준비 완료 · 방장 시작 가능"
@@ -4012,6 +4144,14 @@ function renderBanner(nextState) {
 
   if (nextState.room.status === "gameover") {
     centerBanner.classList.add("hidden");
+    return;
+  }
+
+  const lethalCaster = (nextState.enemies || []).find((enemy) => Number(enemy.lethalCastTime || 0) > 0);
+  if (lethalCaster) {
+    centerBanner.classList.add("lethal-cast");
+    centerBanner.textContent = `즉사 패턴 시전 ${Number(lethalCaster.lethalCastTime).toFixed(1)}초 · 파란 안전지대로 이동`;
+    centerBanner.classList.remove("hidden");
     return;
   }
 
@@ -12979,6 +13119,24 @@ function drawEnemyBar(enemy, x, y) {
   const width = enemy.radius * 2.1;
   const barY = y - enemy.radius - 13;
   drawHealthShieldGauge(x - width / 2, barY, width, 5, enemy.hp, enemy.maxHp, enemy.barrier, "#c85d56");
+  if (enemy.type === "boss" && Number(enemy.phaseTransitionTime || 0) > 0) {
+    ctx.save();
+    ctx.strokeStyle = enemy.phaseAuraColor || enemy.color || "#f8fafc";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - width / 2, barY + 2.5);
+    ctx.lineTo(x + width / 2, barY + 2.5);
+    ctx.stroke();
+    ctx.font = "900 11px Inter, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#05070a";
+    ctx.strokeText("페이즈 전환", x, barY - 3);
+    ctx.fillStyle = "#f8fafc";
+    ctx.fillText("페이즈 전환", x, barY - 3);
+    ctx.restore();
+  }
 }
 
 function drawHealthShieldGauge(x, y, width, height, hp, maxHp, shield = 0, hpColor = "#c85d56") {

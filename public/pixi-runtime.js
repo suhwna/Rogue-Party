@@ -272,6 +272,32 @@
     return Math.max(0, Number(effectsLength || 0) - Math.max(0, Number(effectBudget || 0)));
   }
 
+  const PRIMARY_EFFECT_KINDS = new Set(["slash", "spin", "dash", "warning", "meteor", "trap", "shot", "chain", "arcane", "freeze", "slow"]);
+
+  function effectRetentionPriority(effect) {
+    const kind = String(effect?.kind || "");
+    const style = String(effect?.style || "");
+    if (kind === "damage" || kind === "heal" || kind === "xp" || (kind === "poison" && effect?.value)) return 0;
+    if (kind === "impact") {
+      return style === "critical_hit" || style === "heavy_hit" || style === "cleave_execute" ? 2 : 1;
+    }
+    const radius = Math.max(0, Number(effect?.rangeRadius || effect?.radius || 0));
+    return (PRIMARY_EFFECT_KINDS.has(kind) ? 3 : 2) + (radius >= 140 ? 1 : 0);
+  }
+
+  function selectEffectsForBudget(effects, effectBudget) {
+    if (!Array.isArray(effects) || effects.length === 0) return [];
+    const budget = Math.max(0, Math.floor(Number(effectBudget || 0)));
+    if (budget <= 0) return [];
+    if (effects.length <= budget) return effects;
+    return effects
+      .map((effect, index) => ({ effect, index, priority: effectRetentionPriority(effect) }))
+      .sort((a, b) => b.priority - a.priority || b.index - a.index)
+      .slice(0, budget)
+      .sort((a, b) => a.index - b.index)
+      .map((entry) => entry.effect);
+  }
+
   window.RoguePixiRuntime = Object.freeze({
     EFFECT_DRAW_BUDGET,
     POOL_TRIM_INTERVAL_MS,
@@ -288,6 +314,8 @@
     createLayer,
     createLayerSet,
     clearLayerSet,
-    effectStartIndex
+    effectStartIndex,
+    effectRetentionPriority,
+    selectEffectsForBudget
   });
 })();
