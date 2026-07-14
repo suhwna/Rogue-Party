@@ -77,7 +77,6 @@ export interface RoomStageSummaryLike {
 export interface RoomStageSummaryViewOptions {
   readonly activeRisk: unknown;
   readonly stageModifier?: unknown;
-  readonly waveTrait: unknown;
   readonly stageKind: string;
   readonly stage: unknown;
 }
@@ -87,7 +86,6 @@ export interface RoomStageSummaryView {
   readonly riskChoices: readonly unknown[];
   readonly activeRisk: unknown;
   readonly stageModifier: unknown;
-  readonly waveTrait: unknown;
   readonly threatLevel: number;
   readonly stageKind: string;
   readonly stage: unknown;
@@ -422,6 +420,7 @@ export interface PlayerVitalsLike {
   readonly hp: number;
   readonly maxHp: number;
   readonly shield: number;
+  readonly poisonStacks?: number;
   readonly speedMul: number;
   readonly hitIFrameTimer?: number;
   readonly tauntGuardTimer?: number;
@@ -439,6 +438,8 @@ export interface PlayerVitalsView {
   readonly hp: number;
   readonly maxHp: number;
   readonly shield: number;
+  readonly poisonStacks: number;
+  readonly poisonMaxStacks: number;
   readonly hitIFrameTime: number;
   readonly sizeScale: number;
   readonly tauntGuardTime: number;
@@ -699,7 +700,6 @@ export function roomStageSummaryView(
     riskChoices: [],
     activeRisk: options.activeRisk,
     stageModifier: options.stageModifier ?? options.activeRisk,
-    waveTrait: options.waveTrait,
     threatLevel: round2(room.threatLevel || 1),
     stageKind: options.stageKind,
     stage: options.stage,
@@ -953,6 +953,8 @@ export function playerVitalsView(player: PlayerVitalsLike, options: PlayerVitals
     hp: Math.ceil(player.hp),
     maxHp: player.maxHp,
     shield: Math.ceil(player.shield),
+    poisonStacks: Math.max(0, Math.min(3, Math.floor(player.poisonStacks || 0))),
+    poisonMaxStacks: 3,
     hitIFrameTime: round2(player.hitIFrameTimer || 0),
     sizeScale: round2(options.sizeScale),
     tauntGuardTime: round2(player.tauntGuardTimer || 0),

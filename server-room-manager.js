@@ -8,6 +8,7 @@ function createRoomState(code, defaults = {}) {
     hazards: [],
     relicChests: [],
     xpOrbs: [],
+    fieldPickups: [],
     pendingReinforcements: [],
     effects: [],
     wave: 1,
@@ -28,7 +29,6 @@ function createRoomState(code, defaults = {}) {
     hostId: null,
     riskChoices: [],
     activeRisk: defaults.activeRisk,
-    waveTrait: defaults.waveTrait,
     mapWalls: [],
     mapWallsKey: "",
     mapEdgeWalls: [],
@@ -92,6 +92,7 @@ function prepareRoomForGameover(room) {
   room.hazards = [];
   room.relicChests = [];
   room.xpOrbs = [];
+  room.fieldPickups = [];
   room.pendingReinforcements = [];
   room.riskChoices = [];
   room.mapChoices = [];
@@ -115,6 +116,7 @@ function clearStageCombatObjects(room) {
   room.hazards = [];
   room.relicChests = [];
   room.xpOrbs = [];
+  room.fieldPickups = [];
 }
 
 module.exports = {

@@ -9,4 +9,3 @@ export * from "./risks";
 export * from "./skills";
 export * from "./skillUpgrades";
 export * from "./stages";
-export * from "./waveTraits";

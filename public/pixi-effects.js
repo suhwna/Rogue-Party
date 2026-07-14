@@ -565,6 +565,22 @@
     if (effect.kind !== "warning") return false;
     const style = styleText(rawStyle, effect);
     if (style.includes("sniper_lock") || style.includes("charge_predict") || style.includes("spit_cast")) return true;
+    if (style.includes("boss_arrival")) {
+      const tint = style.includes("execution") ? "#ef4444" : color || "#f97316";
+      const collapseRadius = radius * (1.08 - progress * 0.34);
+      const z = effect.y + 70;
+      renderer.drawGfxRuneRing(effect.x, effect.y, collapseRadius, tint, 0.3 + alpha * 0.38, z, -progress * 4.5, 12);
+      renderer.drawGfxCircle(effect.x, effect.y, radius * (0.34 + progress * 0.2), "#000000", alpha * 0.14, tint, alpha * 0.42, 4, z + 3, "add", 24);
+      for (let i = 0; i < 8; i += 1) {
+        const angle = (Math.PI * 2 * i) / 8 + progress * 0.55;
+        const outerX = effect.x + Math.cos(angle) * collapseRadius;
+        const outerY = effect.y + Math.sin(angle) * collapseRadius;
+        const innerX = effect.x + Math.cos(angle) * radius * 0.34;
+        const innerY = effect.y + Math.sin(angle) * radius * 0.34;
+        renderer.drawGfxLine(outerX, outerY, innerX, innerY, 3, tint, alpha * 0.28, z + 5 + i, "add");
+      }
+      return true;
+    }
     const danger = style.includes("poison") ? "#a3ff4f" : style.includes("sniper") || style.includes("lock") ? "#ff2d55" : color || "#ff4d6d";
     const z = effect.y + 42;
     drawCrosshair(renderer, effect.x, effect.y, radius * (0.98 - progress * 0.06), danger, 0.32 + alpha * 0.36, z, progress * 1.6);
@@ -640,6 +656,35 @@
   function renderExplosionEffect(renderer, effect, progress, alpha, radius, color, rawStyle) {
     if (effect.kind !== "explosion" && effect.kind !== "death") return false;
     const style = styleText(rawStyle, effect);
+    if (style.includes("boss_beam_fire")) {
+      const angle = Number(effect.angle) || 0;
+      const length = Math.max(80, Number(effect.length) || radius * 8);
+      const width = Math.max(10, Number(effect.radius) || radius);
+      const ux = Math.cos(angle);
+      const uy = Math.sin(angle);
+      const half = length / 2;
+      const x1 = effect.x - ux * half;
+      const y1 = effect.y - uy * half;
+      const x2 = effect.x + ux * half;
+      const y2 = effect.y + uy * half;
+      const tint = color || "#ef4444";
+      const flash = Math.max(0, 1 - progress * 1.18);
+      const z = effect.y + 96;
+      renderer.drawGfxLine(x1, y1, x2, y2, width * 2.2, "#22050b", alpha * 0.5 * flash, z - 4, "normal");
+      renderer.drawGfxLine(x1, y1, x2, y2, width * 1.58, tint, alpha * 0.84 * flash, z - 2, "add");
+      renderer.drawGfxLine(x1, y1, x2, y2, Math.max(5, width * 0.34), "#fff1f2", alpha * 0.96 * flash, z + 1, "add");
+      renderer.drawGfxLine(x1, y1, x2, y2, Math.max(2, width * 0.1), "#ffffff", alpha * flash, z + 3, "add");
+      renderer.drawGfxCircle(x1, y1, width * 0.72, "#3f0712", alpha * 0.38 * flash, tint, alpha * 0.7 * flash, 3, z + 4, "add", 14);
+      renderer.drawGfxImpactBurst(x2, y2, width * 0.82, tint, alpha * 0.52 * flash, z + 6, progress * 2.4, 8);
+      return true;
+    }
+    if (style.includes("boss_arrival_sacrifice")) {
+      const tint = color || "#f97316";
+      const z = effect.y + 92;
+      renderer.drawGfxCircle(effect.x, effect.y, radius * (0.9 - progress * 0.62), "#000000", alpha * 0.2, tint, alpha * 0.5, 4, z, "add", 20);
+      renderer.drawGfxSparkSpray(effect.x, effect.y, radius * (0.7 + progress * 0.2), tint, alpha * 0.42, z + 4, 10, -progress * 4);
+      return true;
+    }
     const poison = style.includes("poison") || style.includes("splitter");
     const fire = style.includes("fire") || style.includes("bomber") || style.includes("blast") || style.includes("meteor");
     const tint = poison ? "#a3ff4f" : fire ? "#f97316" : color || "#f8fafc";

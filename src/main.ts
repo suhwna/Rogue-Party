@@ -10,7 +10,6 @@ import { getRiskById } from "./data/risks";
 import { getPrimarySkillName, getSkillDefinition } from "./data/skills";
 import { getSkillChoiceWeight, getSkillUpgradeById } from "./data/skillUpgrades";
 import { getStageNodeMeta } from "./data/stages";
-import { pickWaveTraitForWave } from "./data/waveTraits";
 import { defaultActionMap } from "./input/ActionMap";
 import { getReconnectDelay } from "./net/ReconnectPolicy";
 import { defaultSettings } from "./settings/SettingsManager";
@@ -68,7 +67,6 @@ window.__rogueModernizationSmoke = {
     defenseGlyph: getStageNodeMeta("defense").glyph,
     chargerUnlocksAtFive: isEnemyTypeUnlocked("charger", 5),
     shamanRole: getEnemyDefinition("shaman").role,
-    fifthWaveTrait: pickWaveTraitForWave(5).id,
     swarmSpawnMul: getRiskById("swarm_contract").spawnMul,
     warriorPrimary: getPrimarySkillName("warrior"),
     rangerRSkill: getSkillDefinition("ranger", "r")?.name,

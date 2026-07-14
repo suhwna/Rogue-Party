@@ -9,6 +9,7 @@
   const pixiEnemies = window.RoguePixiEnemies || {};
   const pixiPlayers = window.RoguePixiPlayers || {};
   const pixiEffects = window.RoguePixiEffects || {};
+  const pixiSkinEffects = window.RoguePixiSkinEffects || {};
   const pixiSkillEffects = window.RoguePixiSkillEffects || {};
   const pixiParticles = window.RoguePixiParticles || {};
   const styleClassifier = window.RogueEffectStyle || {};
@@ -432,6 +433,7 @@
       this.getScreenShake = options.getScreenShake;
       this.getMouse = options.getMouse;
       this.getCamera = options.getCamera;
+      this.preview = Boolean(options.preview);
       this.ready = false;
       this.failed = false;
       this.textures = pixiRuntime.createTextureRegistry
@@ -473,14 +475,14 @@
           };
       this.diagnostics.lastEffectRenderer = null;
       this.diagnostics.effectRenderTrace = [];
-      window.__rogueRendererStats = this.diagnostics;
+      if (!this.preview) window.__rogueRendererStats = this.diagnostics;
       this.particleEngine = pixiParticles.createParticleEngine
         ? pixiParticles.createParticleEngine({
             quality: this.quality,
             budget: this.getParticleBudget()
           })
         : null;
-      this.init();
+      this.readyPromise = this.init();
     }
 
     async init() {
@@ -493,8 +495,9 @@
       try {
         this.app = new PIXI.Application();
         await this.app.init({
-          width: Math.max(320, this.canvas.clientWidth || 1280),
-          height: Math.max(320, this.canvas.clientHeight || 720),
+          ...(this.preview ? { canvas: this.canvas } : {}),
+          width: Math.max(this.preview ? 1 : 320, this.canvas.clientWidth || this.canvas.width || 1280),
+          height: Math.max(this.preview ? 1 : 320, this.canvas.clientHeight || this.canvas.height || 720),
           backgroundAlpha: 0,
           antialias: false,
           autoDensity: true,
@@ -505,10 +508,12 @@
 
         this.app.stage.sortableChildren = true;
         this.view = this.app.canvas;
-        this.view.className = "pixi-game-canvas";
+        this.view.className = this.preview ? "meta-codex-actor-preview pixi-codex-actor-preview" : "pixi-game-canvas";
         this.view.dataset.rendererPreference = this.rendererPreference;
-        this.canvas.insertAdjacentElement("afterend", this.view);
-        this.canvas.closest(".stage")?.classList.add("pixi-enabled");
+        if (!this.preview) {
+          this.canvas.insertAdjacentElement("afterend", this.view);
+          this.canvas.closest(".stage")?.classList.add("pixi-enabled");
+        }
         this.diagnostics.rendererType =
           this.app.renderer?.type ||
           this.app.renderer?.name ||
@@ -587,8 +592,9 @@
 
     resize(width, height) {
       if (!this.ready) return;
-      const nextW = Math.max(320, Math.round(width));
-      const nextH = Math.max(320, Math.round(height));
+      const minimum = this.preview ? 1 : 320;
+      const nextW = Math.max(minimum, Math.round(width));
+      const nextH = Math.max(minimum, Math.round(height));
       if (this.app.renderer.width !== nextW || this.app.renderer.height !== nextH) {
         this.app.renderer.resize(nextW, nextH);
       }
@@ -625,8 +631,10 @@
       } catch (error) {
         console.warn("Pixi renderer cleanup failed", error);
       }
-      this.view?.remove();
-      this.canvas.closest(".stage")?.classList.remove("pixi-enabled");
+      if (!this.preview) {
+        this.view?.remove();
+        this.canvas.closest(".stage")?.classList.remove("pixi-enabled");
+      }
     }
 
     prepareTextures() {
@@ -1685,6 +1693,25 @@
       return true;
     }
 
+    renderCodexActor(enemy, now, viewW, viewH) {
+      if (!this.ready || !enemy || !pixiEnemies.renderEnemy) return false;
+      this.spritePool.begin();
+      this.textPool.begin();
+      this.graphicsPool.begin();
+      this.clearLayers();
+      this.root.position.set(0, 0);
+      this.world.position.set(0, 0);
+      this.rect(this.layers.floor, viewW / 2, viewH / 2, viewW, viewH, "#080b0d", 1);
+      this.drawGfxCircle(viewW / 2, viewH * 0.7, Math.max(30, enemy.radius * 1.55), "#020617", 0.42, enemy.color || "#7e9fb2", 0.12, 1, 1, "normal", 22);
+      const actor = { ...enemy, x: viewW / 2, y: viewH * 0.62 };
+      const visuals = { enemies: new Map([[String(actor.id), { x: actor.x, y: actor.y }]]) };
+      pixiEnemies.renderEnemy(this, actor, now, visuals, { w: viewW, h: viewH });
+      this.spritePool.end();
+      this.textPool.end();
+      this.graphicsPool.end();
+      return true;
+    }
+
     updateDiagnostics(now, dt) {
       this.perfFrameCount += 1;
       this.diagnostics.frameMs = Math.round(dt * 10000) / 10;
@@ -2021,6 +2048,16 @@
         this.sprite("chest", this.layers.pickup, chest.x, chest.y + Math.sin(now / 220) * 2, scale, scale, "#facc15", 1).zIndex = chest.y;
         this.ring(chest.x, chest.y, (chest.radius || 22) * 1.7, "#facc15", 0.18 + Math.sin(now / 180) * 0.05, 2);
       }
+      for (const pickup of state.fieldPickups || []) {
+        if (pickup.type === "equipment") {
+          const bob = Math.sin(now / 170 + Number(pickup.id || 0)) * 2;
+          this.sprite("chest", this.layers.pickup, pickup.x, pickup.y + bob, 0.66, 0.66, "#fbbf24", 1).zIndex = pickup.y;
+          continue;
+        }
+        const health = pickup.type === "health_potion";
+        const tint = health ? "#4ade80" : "#67e8f9";
+        this.sprite(health ? "fx-flask" : "xp", this.layers.pickup, pickup.x, pickup.y + Math.sin(now / 170 + Number(pickup.id || 0)) * 2, 0.72, 0.72, tint, 0.96).zIndex = pickup.y;
+      }
     }
 
     renderProjectiles(projectiles, now) {
@@ -2171,7 +2208,7 @@
         if (enemy.elite) this.drawEliteBodyMutation(pos.x, pos.y, enemy.radius, enemy.affix || "", pos.y + 1);
         drawEnemyStatusGraphics(this, enemy, pos, now, pos.y + (enemy.type === "boss" ? 80 : 20));
         drawEnemyStatusPips(this, enemy, pos, pos.y + (enemy.type === "boss" ? 80 : 20));
-        this.bar(pos.x, pos.y - enemy.radius * 1.45 - 20, enemy.radius * 2.05, 5, enemy.hp / enemy.maxHp, "#ef4444");
+        this.healthShieldBar(pos.x, pos.y - enemy.radius * 1.45 - 20, enemy.radius * 2.05, 5, enemy.hp, enemy.maxHp, enemy.barrier, "#ef4444");
       }
     }
 
@@ -2275,8 +2312,10 @@
           this.renderEngineerLaserChargeHud(player, cx, cy, mechaRadius, now, pos.y + 64);
         }
         if (player.id === selfId) {
-          this.bar(pos.x, pos.y - 56 * scaleBase, 86, 8, player.hp / player.maxHp, "#ef4444");
-          if (player.shield > 0) this.bar(pos.x, pos.y - 46 * scaleBase, 86, 4, player.shield / Math.max(1, player.maxHp * 0.45), "#93c5fd");
+          this.healthShieldBar(pos.x, pos.y - 56 * scaleBase, 86, 8, player.hp, player.maxHp, player.shield, "#ef4444");
+          const dashMax = Math.max(0.1, Number(player.stats?.dashCooldownMax || 1.35));
+          const dashRatio = player.dashReady ? 1 : Math.max(0, Math.min(1, 1 - Number(player.dashCooldown || 0) / dashMax));
+          this.bar(pos.x, pos.y - 45 * scaleBase, 86, 4, dashRatio, "#8aa8bd");
         }
       }
     }
@@ -2374,6 +2413,10 @@
           text.scale.set(1 + (effect.critical ? 0.24 : 0.1) * Math.max(0, 1 - progress * 3));
           text.zIndex = effect.y + 100;
           this.noteEffectRenderer("pixi-renderer:floating-text-fallback", effect, style);
+          continue;
+        }
+        if (pixiSkinEffects.renderSkillEffectOverride?.(this, effect, progress, alpha, radius, now)) {
+          this.noteEffectRenderer("pixi-skin-effects:skill-override", effect, style);
           continue;
         }
         const styledEffectKey = style || effect.kind || "";
@@ -3881,7 +3924,7 @@
       const angle = Number(effect.angle || 0);
       const side = Number(effect.swingSide || 1) >= 0 ? 1 : -1;
       const reachFromRadius = Math.max(64, Number(effect.radius || radius || 84) / 1.18);
-      const reach = Math.max(74, Math.min(142, Number(effect.reach || reachFromRadius)));
+      const reach = Math.max(74, Number(effect.reach || reachFromRadius));
       const originX = Number.isFinite(effect.originX) ? effect.originX : effect.x - Math.cos(angle) * reach * 0.48;
       const originY = Number.isFinite(effect.originY) ? effect.originY : effect.y - Math.sin(angle) * reach * 0.48;
       if (!Number.isFinite(originX) || !Number.isFinite(originY)) return false;
@@ -3899,11 +3942,11 @@
       const z = originY + Math.sin(angle) * reach * 0.64 + 108;
       const activeAlpha = alpha * fade;
 
-      this.drawGfxCleaveRibbon(originX, originY, reach * 0.42, reach * 0.86, trailAngle, bladeAngle, palette.tint, activeAlpha * 0.055, palette.edge, activeAlpha * 0.16, 2, z - 2, "add", 10);
-      this.drawGfxArc(originX, originY, reach * 0.82, trailAngle + 0.03 * side, bladeAngle - 0.03 * side, 5, palette.blade, activeAlpha * 0.34, z + 1, "add", 9);
-      this.drawGfxGreatsword(originX, originY, bladeAngle, reach * (0.78 + peak * 0.04), palette.tint, activeAlpha * 0.86, z + 8, false);
-      const tipX = originX + Math.cos(bladeAngle) * reach * 0.84;
-      const tipY = originY + Math.sin(bladeAngle) * reach * 0.84;
+      this.drawGfxCleaveRibbon(originX, originY, reach * 0.42, reach * 1.02, trailAngle, bladeAngle, palette.tint, activeAlpha * 0.055, palette.edge, activeAlpha * 0.16, 2, z - 2, "add", 10);
+      this.drawGfxArc(originX, originY, reach, trailAngle + 0.03 * side, bladeAngle - 0.03 * side, 5, palette.blade, activeAlpha * 0.34, z + 1, "add", 9);
+      this.drawGfxGreatsword(originX, originY, bladeAngle, reach * (0.9 + peak * 0.04), palette.tint, activeAlpha * 0.86, z + 8, false);
+      const tipX = originX + Math.cos(bladeAngle) * reach * 0.98;
+      const tipY = originY + Math.sin(bladeAngle) * reach * 0.98;
       this.drawGfxSparkSpray(tipX, tipY, reach * 0.18, palette.edge, activeAlpha * 0.22, z + 12, 5, progress * 2.8, bladeAngle, Math.PI * 0.48);
       return true;
     }
@@ -4485,6 +4528,22 @@
       this.rect(this.layers.ui, x - width / 2 + (width * safeRatio) / 2, y, width * safeRatio, height, fill, 0.96).zIndex = y + 1000;
     }
 
+    healthShieldBar(x, y, width, height, hp, maxHp, shield = 0, hpFill = "#ff4d6d") {
+      const safeMaxHp = Math.max(1, Number(maxHp) || 1);
+      const hpRatio = Math.max(0, Math.min(1, Number(hp) / safeMaxHp || 0));
+      const shieldRatio = Math.max(0, Math.min(1, Number(shield) / safeMaxHp || 0));
+      const hpWidth = width * hpRatio;
+      const shieldWidth = width * shieldRatio;
+      this.rect(this.layers.ui, x, y, width + 4, height + 4, "#050505", 0.72).zIndex = y + 999;
+      if (hpWidth > 0) this.rect(this.layers.ui, x - width / 2 + hpWidth / 2, y, hpWidth, height, hpFill, 0.96).zIndex = y + 1000;
+      if (shieldWidth > 0) {
+        const shieldHeight = Math.max(2, Math.round(height * 0.38));
+        const shieldY = y - (height - shieldHeight) / 2;
+        this.rect(this.layers.ui, x, shieldY, width, shieldHeight + 1, "#07151d", 0.8).zIndex = y + 1001;
+        this.rect(this.layers.ui, x - width / 2 + shieldWidth / 2, shieldY, shieldWidth, shieldHeight, "#67e8f9", 0.98).zIndex = y + 1002;
+      }
+    }
+
     drawEliteBodyMutation(x, y, radius, affix, zIndex) {
       const color = this.eliteAffixColor(affix, "#facc15");
       const dark = "#111827";
@@ -4535,6 +4594,21 @@
 
     visualPosition(map, entity) {
       return map?.get(String(entity.id)) || entity;
+    }
+
+    isWorldVisible(entity, padding = 120) {
+      if (!entity || !Number.isFinite(entity.x) || !Number.isFinite(entity.y)) return false;
+      const camera = this.getCamera?.();
+      if (!camera) return true;
+      const screen = this.app?.renderer?.screen;
+      const width = Number(screen?.width || this.app?.renderer?.width || this.canvas?.clientWidth || 1280);
+      const height = Number(screen?.height || this.app?.renderer?.height || this.canvas?.clientHeight || 720);
+      return (
+        entity.x >= camera.x - width / 2 - padding &&
+        entity.x <= camera.x + width / 2 + padding &&
+        entity.y >= camera.y - height / 2 - padding &&
+        entity.y <= camera.y + height / 2 + padding
+      );
     }
 
     px(ctx, x, y, w, h, color) {

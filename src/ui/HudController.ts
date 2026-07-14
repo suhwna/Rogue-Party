@@ -12,7 +12,6 @@ export interface HudRoomState {
   wave?: number;
   objective?: { label?: string };
   stage?: { label?: string };
-  waveTrait?: { name?: string };
   survival?: {
     active?: boolean;
     elapsed?: number;
@@ -31,7 +30,7 @@ export function formatStageLabel(state: HudGameState): string {
   const room = state.room ?? {};
   const chapter = room.chapter ?? room.floor ?? 1;
   const wave = room.wave ?? 1;
-  const stageName = room.objective?.label ?? room.stage?.label ?? room.waveTrait?.name ?? "";
+  const stageName = room.objective?.label ?? room.stage?.label ?? "";
 
   if (room.status === "lobby") return "LOBBY";
   if (room.survival?.active) {
@@ -52,7 +51,7 @@ export function formatStageLabel(state: HudGameState): string {
   if (room.status === "combat" || room.status === "choice") {
     return `CH ${chapter} · STAGE ${wave} · ${stageName || "NORMAL"}`;
   }
-  return `CH ${chapter} · STAGE ${wave}${room.waveTrait ? ` · ${room.waveTrait.name}` : ""}`;
+  return `CH ${chapter} · STAGE ${wave}`;
 }
 
 export class HudController {

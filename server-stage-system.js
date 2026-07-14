@@ -41,11 +41,9 @@ function pickVoteWinner(available, counts, random = Math.random) {
 }
 
 function getMapNodeView(room, node, options = {}) {
-  const getTrait = options.getTrait || (() => null);
   const getModifier = options.getModifier || (() => null);
   const getBossProfile = options.getBossProfile || (() => null);
   const stageNodeMetaView = options.stageNodeMetaView || ((value) => value);
-  const waveTraitView = options.waveTraitView || ((value) => value);
   const riskView = options.riskView || ((value) => value);
   const bossProfileView = options.bossProfileView || ((value) => value);
   const voteCounts = options.voteCounts || countMapVotes(room.mapVotes);
@@ -58,7 +56,6 @@ function getMapNodeView(room, node, options = {}) {
     kind: node.kind,
     resolvedKind: node.resolvedKind || "",
     stage: stageNodeMetaView(node),
-    trait: waveTraitView(getTrait(node)),
     modifier: riskView(getModifier(node)),
     boss: bossProfileView(bossProfile),
     votes: voteCounts[node.id] || 0
@@ -95,7 +92,6 @@ function ensureMapProgression(room, options = {}) {
 
 function applyMapNodeStart(room, node, options = {}) {
   const resolveRandomStageKind = options.resolveRandomStageKind || (() => "");
-  const getTrait = options.getTrait || (() => null);
   const getModifier = options.getModifier || (() => null);
   const getBossProfile = options.getBossProfile || (() => null);
   if (node.kind === "random") {
@@ -103,21 +99,19 @@ function applyMapNodeStart(room, node, options = {}) {
   } else {
     node.resolvedKind = "";
   }
-  const trait = getTrait(node);
   const modifier = getModifier(node);
   const gameplayKind = getNodeGameplayKind(node);
   const bossProfile = gameplayKind === "boss" ? getBossProfile(node) : null;
   room.currentMapNodeId = node.id;
   room.activeMapNode = node;
   room.activeRisk = modifier;
-  room.waveTrait = trait;
   room.stageIndex += 1;
   room.wave = room.stageIndex;
   room.mapChoices = [];
   room.mapVotes = {};
   room.mapDeadline = 0;
   if (!room.mapPath.includes(node.id)) room.mapPath.push(node.id);
-  return { trait, modifier, gameplayKind, bossProfile };
+  return { modifier, gameplayKind, bossProfile };
 }
 
 function isFinalStageCleared(room) {

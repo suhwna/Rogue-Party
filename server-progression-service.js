@@ -66,7 +66,7 @@ function sanitizeImportedProgress(progress) {
       entry.nodes[nodeId] = clampInteger(entry.nodes[nodeId], 0, MAX_MASTERY_NODE_LEVEL);
       spent += entry.nodes[nodeId];
     }
-    entry.points = Math.max(spent, clampInteger(entry.points, spent, MAX_MASTERY_NODE_LEVEL * 4));
+    entry.points = Math.max(spent, clampInteger(entry.points, spent, MAX_MASTERY_NODE_LEVEL * 7));
   }
   return normalizeProgress(next);
 }
@@ -79,7 +79,7 @@ function performAction(progress, payload = {}) {
       progress: normalizeProgress(result.progress),
       changed: Boolean(result.spent),
       affectsLoadout: Boolean(result.spent),
-      message: result.spent ? "숙련 투자가 저장되었습니다." : "숙련 투자 조건을 충족하지 못했습니다.",
+      message: result.spent ? "공용 성장 투자가 모든 직업에 적용되었습니다." : "공용 성장 투자 조건을 충족하지 못했습니다.",
     };
   }
   const result = manager.performProgressionAction(progress, payload);
@@ -93,6 +93,18 @@ function performAction(progress, payload = {}) {
 
 function recordRunResult(progress, result) {
   return normalizeProgress(manager.recordRunResult(progress, result));
+}
+
+function grantEquipmentDrop(progress, drop) {
+  const result = manager.grantEquipmentDrop(progress, drop);
+  return {
+    progress: normalizeProgress(result.progress),
+    item: clone(result.item),
+  };
+}
+
+function getEquipmentDropPreview(drop) {
+  return clone(manager.getEquipmentDropPreview(drop));
 }
 
 function recordWorldDiscoveries(progress, state) {
@@ -120,7 +132,9 @@ function clampInteger(value, min, max) {
 module.exports = {
   SAVE_VERSION: manager.SAVE_VERSION,
   getDefaultProgress,
+  getEquipmentDropPreview,
   getGrowthLoadout,
+  grantEquipmentDrop,
   normalizeProgress,
   performAction,
   recordRunResult,

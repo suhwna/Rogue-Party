@@ -24,9 +24,9 @@ function getHostileProjectileCap(options = {}) {
   const playerCount = Math.max(1, options.playerCount || 1);
   const chapter = Math.max(1, options.chapter || 1);
   const stageKind = options.stageKind || "combat";
-  const bossBonus = stageKind === "boss" ? 5 : 0;
+  const bossBonus = stageKind === "boss" ? 10 : 0;
   const cap = Math.round(14 + playerCount * 4 + chapter * 1.5 + bossBonus);
-  return Math.min(stageKind === "boss" ? 38 : 30, cap);
+  return Math.min(stageKind === "boss" ? 48 : 30, cap);
 }
 
 function countHostileProjectiles(projectiles) {
@@ -418,7 +418,8 @@ function deferSpecialPattern(enemy, channel) {
 }
 
 function setSpecialPatternTimer(enemy, channel, seconds) {
-  const value = Math.max(0.18, seconds) * Math.max(0.78, enemy.cadenceMul || 1);
+  const cadenceFloor = enemy.executionBoss ? 0.42 : 0.78;
+  const value = Math.max(0.18, seconds) * Math.max(cadenceFloor, enemy.cadenceMul || 1);
   if (channel === "elite") {
     enemy.eliteSpecialTimer = Math.max(enemy.eliteSpecialTimer || 0, value);
     return;
@@ -443,15 +444,17 @@ function getBasicPatternWindow(enemy, channel) {
   if (channel.includes("charge")) return enemy.miniBoss ? 1.55 : 1.85;
   if (channel.includes("shot")) return enemy.miniBoss ? 1.65 : 1.95;
   if (enemy.miniBoss) return 1.38;
-  if (enemy.bossPhase >= 3) return 1.55;
-  if (enemy.bossPhase >= 2) return 1.7;
-  return 1.85;
+  if (enemy.executionBoss) return enemy.bossPhase >= 4 ? 0.72 : enemy.bossPhase >= 3 ? 0.82 : 0.92;
+  if (enemy.bossPhase >= 3) return 1.08;
+  if (enemy.bossPhase >= 2) return 1.22;
+  return 1.42;
 }
 
 function getSpecialPatternCooldownMultiplier(enemy, channel) {
   if (channel === "elite") return 1.22;
   if (enemy.miniBoss) return 1.3;
-  return enemy.bossPhase >= 3 ? 1.18 : 1.26;
+  if (enemy.executionBoss) return enemy.bossPhase >= 4 ? 0.68 : enemy.bossPhase >= 3 ? 0.74 : 0.82;
+  return enemy.bossPhase >= 3 ? 0.9 : enemy.bossPhase >= 2 ? 0.98 : 1.05;
 }
 
 function getEliteSpecialCooldown(enemy) {

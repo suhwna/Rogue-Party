@@ -12,11 +12,11 @@ export interface BossProfile {
   readonly speedMul: number;
   readonly radiusMul?: number;
   readonly xpMul?: number;
-  readonly traitId?: string;
   readonly modifierId?: string;
   readonly pattern: string;
   readonly patternTags?: readonly string[];
   readonly signaturePatterns?: readonly string[];
+  readonly phasePatterns?: Readonly<Record<number, readonly string[]>>;
   readonly phaseTitles?: readonly string[];
   readonly telegraph?: {
     readonly primary: number;
@@ -44,11 +44,15 @@ export const CHAPTER_BOSSES = {
     speedMul: 1.08,
     radiusMul: 1.16,
     xpMul: 1.25,
-    traitId: "boss_gate",
     modifierId: "safe_path",
     pattern: "charge",
     patternTags: ["charge_lane", "shockwave", "blade_beam"],
-    signaturePatterns: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break"],
+    signaturePatterns: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break", "iron_sweeping_arc", "iron_fortress_gap", "iron_furnace_refuge"],
+    phasePatterns: {
+      1: ["iron_cross_shock", "iron_beam_fan", "iron_ground_break"],
+      2: ["iron_ground_break", "iron_sweeping_arc", "iron_furnace_refuge", "iron_cross_shock", "iron_beam_fan"],
+      3: ["iron_furnace_refuge", "iron_fortress_gap", "iron_sweeping_arc", "iron_ground_break", "iron_cross_shock", "iron_beam_fan"],
+    },
     phaseTitles: ["Armored Guard", "Broken Plating", "Overheated Core"],
     telegraph: { primary: 1.3, special: 1.65, phase: 1.8 },
     patternMix: { basic: 0.7, special: 0.24, punish: 0.06 },
@@ -66,11 +70,15 @@ export const CHAPTER_BOSSES = {
     speedMul: 0.98,
     radiusMul: 1.22,
     xpMul: 1.45,
-    traitId: "boss_gate",
     modifierId: "safe_path",
     pattern: "summon",
     patternTags: ["summon", "acid_pool", "barrier_rite"],
-    signaturePatterns: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross"],
+    signaturePatterns: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross", "hive_safe_bloom", "hive_venom_fan", "hive_spore_maelstrom"],
+    phasePatterns: {
+      1: ["hive_bloom_adds", "hive_acid_ring", "hive_ritual_cross"],
+      2: ["hive_safe_bloom", "hive_spore_maelstrom", "hive_acid_ring", "hive_venom_fan", "hive_bloom_adds"],
+      3: ["hive_spore_maelstrom", "hive_venom_fan", "hive_safe_bloom", "hive_ritual_cross", "hive_acid_ring", "hive_bloom_adds"],
+    },
     phaseTitles: ["Quiet Chant", "Blooming Rite", "Hungering Hive"],
     telegraph: { primary: 1.35, special: 1.75, phase: 2.0 },
     patternMix: { basic: 0.68, special: 0.26, punish: 0.06 },
@@ -88,11 +96,15 @@ export const CHAPTER_BOSSES = {
     speedMul: 1.05,
     radiusMul: 1.32,
     xpMul: 1.7,
-    traitId: "boss_gate",
     modifierId: "safe_path",
     pattern: "void",
     patternTags: ["void_beam", "prediction_snipe", "blast_grid"],
-    signaturePatterns: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring"],
+    signaturePatterns: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring", "void_mirror_volley", "void_collapse", "void_final_eclipse"],
+    phasePatterns: {
+      1: ["void_reposition_snipe", "void_cross_laser", "void_orb_ring"],
+      2: ["void_mirror_volley", "void_cross_laser", "void_final_eclipse", "void_reposition_snipe", "void_collapse"],
+      3: ["void_final_eclipse", "void_collapse", "void_mirror_volley", "void_orb_ring", "void_cross_laser", "void_reposition_snipe"],
+    },
     phaseTitles: ["Distant Crown", "Fractured Orbit", "Regent Unbound"],
     telegraph: { primary: 1.45, special: 1.85, phase: 2.15 },
     patternMix: { basic: 0.66, special: 0.27, punish: 0.07 },

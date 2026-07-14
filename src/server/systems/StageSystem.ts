@@ -5,7 +5,6 @@ export interface StageNodeLike {
   readonly kind?: string;
   readonly resolvedKind?: string;
   readonly depth?: number;
-  readonly traitId?: string;
   readonly modifierId?: string;
   readonly bossId?: string;
   readonly nextIds?: readonly string[];
@@ -41,7 +40,6 @@ export interface RoomWithMutableMapNodeStart<TNode extends StageNodeLike = Stage
   currentMapNodeId: string | null;
   activeMapNode: TNode | null;
   activeRisk: unknown;
-  waveTrait: unknown;
   stageIndex: number;
   wave: number;
   mapChoices: unknown[];
@@ -97,11 +95,9 @@ export function pickVoteWinner<TNode extends StageNodeLike>(
 }
 
 export interface StageMapNodeViewOptions<TNode extends StageNodeLike> {
-  readonly getTrait: (node: TNode) => unknown;
   readonly getModifier: (node: TNode) => unknown;
   readonly getBossProfile: (node: TNode) => unknown;
   readonly stageNodeMetaView: (node: TNode) => unknown;
-  readonly waveTraitView: (trait: unknown) => unknown;
   readonly riskView: (modifier: unknown) => unknown;
   readonly bossProfileView: (bossProfile: unknown) => unknown;
   readonly voteCounts?: Record<string, number>;
@@ -115,7 +111,6 @@ export interface StageMapNodeView {
   readonly kind: string | undefined;
   readonly resolvedKind: string;
   readonly stage: unknown;
-  readonly trait: unknown;
   readonly modifier: unknown;
   readonly boss: unknown;
   readonly votes: number;
@@ -136,7 +131,6 @@ export function getMapNodeView<TNode extends StageNodeLike>(
     kind: node.kind,
     resolvedKind: node.resolvedKind || "",
     stage: options.stageNodeMetaView(node),
-    trait: options.waveTraitView(options.getTrait(node)),
     modifier: options.riskView(options.getModifier(node)),
     boss: options.bossProfileView(bossProfile),
     votes: voteCounts[node.id] ?? 0,
@@ -185,13 +179,11 @@ export function ensureMapProgression<TNode extends StageNodeLike>(
 
 export interface ApplyMapNodeStartOptions<TNode extends StageNodeLike> {
   readonly resolveRandomStageKind: (node: TNode) => string;
-  readonly getTrait: (node: TNode) => unknown;
   readonly getModifier: (node: TNode) => unknown;
   readonly getBossProfile: (node: TNode) => unknown;
 }
 
 export interface ApplyMapNodeStartResult {
-  readonly trait: unknown;
   readonly modifier: unknown;
   readonly gameplayKind: string;
   readonly bossProfile: unknown;
@@ -207,21 +199,19 @@ export function applyMapNodeStart<TNode extends StageNodeLike>(
   } else {
     (node as { resolvedKind?: string }).resolvedKind = "";
   }
-  const trait = options.getTrait(node);
   const modifier = options.getModifier(node);
   const gameplayKind = getNodeGameplayKind(node);
   const bossProfile = gameplayKind === "boss" ? options.getBossProfile(node) : null;
   room.currentMapNodeId = node.id;
   room.activeMapNode = node;
   room.activeRisk = modifier;
-  room.waveTrait = trait;
   room.stageIndex += 1;
   room.wave = room.stageIndex;
   room.mapChoices = [];
   room.mapVotes = {};
   room.mapDeadline = 0;
   if (!room.mapPath.includes(node.id)) room.mapPath.push(node.id);
-  return { trait, modifier, gameplayKind, bossProfile };
+  return { modifier, gameplayKind, bossProfile };
 }
 
 export interface StageClearRoomLike<TNode extends StageNodeLike = StageNodeLike> {

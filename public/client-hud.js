@@ -11,7 +11,6 @@
     return (
       (room.objective && room.objective.label) ||
       (room.stage && room.stage.label) ||
-      (room.waveTrait && room.waveTrait.name) ||
       ""
     );
   }
@@ -41,7 +40,7 @@
     if (room.status === "combat" || room.status === "choice") {
       return `CH ${chapter} · STAGE ${wave} · ${stageName || "NORMAL"}`;
     }
-    return `CH ${chapter} · STAGE ${wave}${room.waveTrait ? ` · ${room.waveTrait.name}` : ""}`;
+    return `CH ${chapter} · STAGE ${wave}`;
   }
 
   function create(options) {

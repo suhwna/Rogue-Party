@@ -1,5 +1,6 @@
 (() => {
   const styleClassifier = window.RogueEffectStyle || {};
+  const skinEffects = window.RoguePixiSkinEffects || {};
 
   function projectileStyle(projectile) {
     return projectile.style || projectile.classId || "";
@@ -354,93 +355,131 @@
     );
   }
 
-  function drawHostileProjectile(renderer, projectile, z, now) {
+  function hostileProjectileBasis(projectile) {
     const angle = projectile.angle || 0;
-    const r = Math.max(7, projectile.radius || 7);
-    const style = String(projectile.style || "").toLowerCase();
-    const sniper = style.includes("sniper");
-    const toxic = Boolean(projectile.poison) || style.includes("venom") || style.includes("spit");
-    const ux = Math.cos(angle);
-    const uy = Math.sin(angle);
-    const px = -uy;
-    const py = ux;
-    const pulse = 0.78 + Math.sin(now / 75 + Number(projectile.id || 0)) * 0.14;
-    const tailLength = sniper ? 5.4 : 4.2;
-    const tailX = projectile.x - ux * r * tailLength;
-    const tailY = projectile.y - uy * r * tailLength;
-    const backX = projectile.x - ux * r * 0.9;
-    const backY = projectile.y - uy * r * 0.9;
-    const tipX = projectile.x + ux * r * (sniper ? 3.05 : 2.55);
-    const tipY = projectile.y + uy * r * (sniper ? 3.05 : 2.55);
-    const coreColor = toxic ? "#bef264" : "#fff1f2";
+    return {
+      angle,
+      r: Math.max(7, projectile.radius || 7),
+      ux: Math.cos(angle),
+      uy: Math.sin(angle),
+      px: -Math.sin(angle),
+      py: Math.cos(angle),
+    };
+  }
 
-    renderer.drawGfxLine(tailX, tailY, projectile.x + ux * r * 0.45, projectile.y + uy * r * 0.45, r * (sniper ? 1.5 : 1.25), "#450a0a", 0.3 * pulse, z - 4, "normal");
-    renderer.drawGfxLine(tailX, tailY, tipX, tipY, Math.max(4, r * 0.48), "#ff2d55", 0.48 * pulse, z - 2, "add");
-    renderer.drawGfxLine(projectile.x - ux * r * 2.6, projectile.y - uy * r * 2.6, tipX, tipY, Math.max(2, r * 0.18), coreColor, 0.72 * pulse, z + 3, "add");
+  function drawHostileSpit(renderer, projectile, z, now) {
+    const { r, ux, uy, px, py } = hostileProjectileBasis(projectile);
+    const venom = String(projectile.style || "").toLowerCase().includes("venom");
+    const phase = now / 95 + Number(projectile.id || 0) * 0.7;
+    const dark = venom ? "#173c2b" : "#29450f";
+    const body = venom ? "#34d399" : "#84cc16";
+    const core = venom ? "#a7f3d0" : "#d9f99d";
 
-    for (let i = 0; i < 2; i += 1) {
-      const cx = projectile.x - ux * r * (1.6 + i * 1.2);
-      const cy = projectile.y - uy * r * (1.6 + i * 1.2);
-      const size = r * (0.62 - i * 0.08);
-      renderer.drawGfxPath(
-        [
-          { x: cx + ux * size * 0.45, y: cy + uy * size * 0.45 },
-          { x: cx - ux * size * 0.35 + px * size, y: cy - uy * size * 0.35 + py * size },
-          { x: cx - ux * size * 0.05, y: cy - uy * size * 0.05 },
-          { x: cx - ux * size * 0.35 - px * size, y: cy - uy * size * 0.35 - py * size },
-        ],
-        "#ff2d55",
-        0.48 - i * 0.1,
-        "#fecaca",
-        0.26,
-        1.4,
-        z - 1 + i,
-        "add"
+    for (let i = 1; i <= 3; i += 1) {
+      const wobble = Math.sin(phase - i * 1.1) * r * 0.28;
+      const size = r * (0.42 - i * 0.075);
+      renderer.drawGfxCircle(
+        projectile.x - ux * r * (1.15 + i * 0.78) + px * wobble,
+        projectile.y - uy * r * (1.15 + i * 0.78) + py * wobble,
+        size,
+        body,
+        0.34 - i * 0.055,
+        core,
+        0,
+        0,
+        z - i,
+        "normal",
+        10
       );
     }
 
-    renderer.drawGfxCircle(projectile.x, projectile.y, r * 1.32, "#2b0710", 0.5, "#ff2d55", 0.62, 2.6, z - 1, "normal", 14);
     renderer.drawGfxPath(
       [
-        { x: tipX, y: tipY },
-        { x: projectile.x - ux * r * 0.2 + px * r * 0.82, y: projectile.y - uy * r * 0.2 + py * r * 0.82 },
-        { x: backX + px * r * 0.42, y: backY + py * r * 0.42 },
-        { x: projectile.x - ux * r * 1.25, y: projectile.y - uy * r * 1.25 },
-        { x: backX - px * r * 0.42, y: backY - py * r * 0.42 },
-        { x: projectile.x - ux * r * 0.2 - px * r * 0.82, y: projectile.y - uy * r * 0.2 - py * r * 0.82 },
+        { x: projectile.x + ux * r * 1.18, y: projectile.y + uy * r * 1.18 },
+        { x: projectile.x + px * r * 0.82, y: projectile.y + py * r * 0.82 },
+        { x: projectile.x - ux * r * 0.84 + px * r * 0.38, y: projectile.y - uy * r * 0.84 + py * r * 0.38 },
+        { x: projectile.x - ux * r * 1.08, y: projectile.y - uy * r * 1.08 },
+        { x: projectile.x - ux * r * 0.62 - px * r * 0.58, y: projectile.y - uy * r * 0.62 - py * r * 0.58 },
+        { x: projectile.x - px * r * 0.9, y: projectile.y - py * r * 0.9 },
       ],
-      "#2b0710",
+      dark,
       0.96,
-      "#ff2d55",
-      0.92,
-      3.2,
+      body,
+      0.95,
+      2.2,
       z,
       "normal"
     );
-    renderer.drawGfxCircle(projectile.x - ux * r * 0.08, projectile.y - uy * r * 0.08, r * 0.48, coreColor, 0.9, "#ffffff", 0.72, 1.8, z + 5, "add", 10);
+    renderer.drawGfxCircle(projectile.x + ux * r * 0.18 - px * r * 0.2, projectile.y + uy * r * 0.18 - py * r * 0.2, r * 0.34, core, 0.86, "#ffffff", 0, 0, z + 2, "add", 9);
+  }
 
-    if (projectile.splash) {
-      const splash = Math.max(r * 2, Number(projectile.splash) || 0);
-      renderer.drawGfxCircle(projectile.x, projectile.y, splash, "#450a0a", 0.035, "#ff2d55", 0.36, 3, z + 6, "normal", 36);
-      for (let i = 0; i < 4; i += 1) {
-        const a = Math.PI / 4 + (Math.PI * 2 * i) / 4;
-        renderer.drawGfxLine(
-          projectile.x + Math.cos(a) * splash * 0.84,
-          projectile.y + Math.sin(a) * splash * 0.84,
-          projectile.x + Math.cos(a) * splash * 1.02,
-          projectile.y + Math.sin(a) * splash * 1.02,
-          4,
-          "#ff2d55",
-          0.56,
-          z + 7 + i,
-          "normal"
-        );
-      }
+  function drawHostileSniper(renderer, projectile, z) {
+    const { r, ux, uy, px, py } = hostileProjectileBasis(projectile);
+    const tailX = projectile.x - ux * r * 5.8;
+    const tailY = projectile.y - uy * r * 5.8;
+    const tipX = projectile.x + ux * r * 2.2;
+    const tipY = projectile.y + uy * r * 2.2;
+    renderer.drawGfxLine(tailX, tailY, tipX, tipY, Math.max(5, r * 0.72), "#3f0711", 0.48, z - 2, "normal");
+    renderer.drawGfxLine(tailX, tailY, tipX, tipY, Math.max(2, r * 0.22), "#fb7185", 0.92, z, "add");
+    renderer.drawGfxPath(
+      [
+        { x: tipX, y: tipY },
+        { x: projectile.x - ux * r * 0.45 + px * r * 0.48, y: projectile.y - uy * r * 0.45 + py * r * 0.48 },
+        { x: projectile.x - ux * r * 1.35, y: projectile.y - uy * r * 1.35 },
+        { x: projectile.x - ux * r * 0.45 - px * r * 0.48, y: projectile.y - uy * r * 0.45 - py * r * 0.48 },
+      ],
+      "#4c0519",
+      1,
+      "#fecdd3",
+      0.9,
+      1.6,
+      z + 2,
+      "normal"
+    );
+  }
+
+  function drawHostileShuriken(renderer, projectile, z, now) {
+    const r = Math.max(8, projectile.radius || 7);
+    const rotation = now / 72 + Number(projectile.id || 0) * 0.9;
+    const points = [];
+    for (let i = 0; i < 8; i += 1) {
+      const angle = rotation + (Math.PI * i) / 4;
+      const size = i % 2 === 0 ? r * 1.55 : r * 0.42;
+      points.push({ x: projectile.x + Math.cos(angle) * size, y: projectile.y + Math.sin(angle) * size });
     }
+    renderer.drawGfxCircle(projectile.x, projectile.y, r * 1.7, "#7f1d1d", 0.12, "#ef4444", 0, 0, z - 2, "add", 16);
+    renderer.drawGfxPath(points, "#1f1724", 1, "#f87171", 0.92, 2, z, "normal");
+    renderer.drawGfxCircle(projectile.x, projectile.y, r * 0.34, "#fca5a5", 0.96, "#fff1f2", 0.8, 1, z + 2, "normal", 8);
+  }
+
+  function drawHostileOrb(renderer, projectile, z, now) {
+    const { r, ux, uy } = hostileProjectileBasis(projectile);
+    const pulse = 0.9 + Math.sin(now / 110 + Number(projectile.id || 0)) * 0.08;
+    renderer.drawGfxLine(projectile.x - ux * r * 2.5, projectile.y - uy * r * 2.5, projectile.x, projectile.y, Math.max(3, r * 0.42), "#ef4444", 0.22, z - 2, "add");
+    renderer.drawGfxCircle(projectile.x, projectile.y, r * pulse, "#3f0a12", 0.96, "#ef4444", 0.9, 2.2, z, "normal", 12);
+    renderer.drawGfxCircle(projectile.x + ux * r * 0.18, projectile.y + uy * r * 0.18, r * 0.32, "#fee2e2", 0.9, "#ffffff", 0, 0, z + 2, "add", 8);
+  }
+
+  function drawHostileProjectile(renderer, projectile, z, now) {
+    const style = String(projectile.style || "").toLowerCase();
+    if (style.includes("spit") || style.includes("venom") || projectile.poison) {
+      drawHostileSpit(renderer, projectile, z, now);
+      return;
+    }
+    if (style.includes("sniper")) {
+      drawHostileSniper(renderer, projectile, z);
+      return;
+    }
+    if (style.includes("shuriken")) {
+      drawHostileShuriken(renderer, projectile, z, now);
+      return;
+    }
+    drawHostileOrb(renderer, projectile, z, now);
   }
 
   function renderProjectiles(renderer, projectiles, now) {
     for (const projectile of projectiles) {
+      if (renderer.isWorldVisible?.(projectile, Math.max(96, Number(projectile.splash || 0) + 32)) === false) continue;
       const tags = classifyProjectile(projectile);
       const tint = projectileTint(projectile, tags);
       const angle = projectile.angle || 0;
@@ -449,7 +488,10 @@
       projectileSpriteKey(renderer, projectile, tags);
       projectileScale(projectile, tags);
 
-      if (isHostileProjectile(projectile, tags)) {
+      const skinOverride = !isHostileProjectile(projectile, tags) && skinEffects.renderProjectileOverride?.(renderer, projectile, now, tags);
+      if (skinOverride) {
+        // A skin may replace the complete projectile silhouette and its splash preview.
+      } else if (isHostileProjectile(projectile, tags)) {
         drawHostileProjectile(renderer, projectile, z, now);
       } else if (tags.laser) {
         drawMechaLaserProjectile(renderer, projectile, tint, z, now);
@@ -485,7 +527,7 @@
         renderer.drawGfxCircle(projectile.x, projectile.y, radius, "#07111f", 0.54, tint, 0.74, 3, z, "add", 14);
       }
 
-      if (projectile.splash && projectile.classId !== "mage" && !isHostileProjectile(projectile, tags)) {
+      if (projectile.splash && projectile.classId !== "mage" && !isHostileProjectile(projectile, tags) && !skinOverride) {
         renderer.drawGfxCircle(projectile.x, projectile.y, projectile.splash, "#000000", 0, tags.missile ? "#fb923c" : "#67e8f9", tags.missile ? 0.14 : 0.1, 2, z + 5, "add", 28);
       }
     }

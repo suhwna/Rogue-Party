@@ -30,7 +30,7 @@
       });
     }
 
-    function renderClassDetail(meta) {
+    function renderClassDetail(meta, classId = "warrior", runSetupHtml = "") {
       if (!meta) return "";
       return `
         <div class="lobby-class-detail-head">
@@ -45,11 +45,16 @@
           ${(meta.skills || [])
             .map(
               ([key, name, detail]) =>
-                `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
+                `<button type="button" class="lobby-skill-tag" data-preview-skill="${escapeHtml(String(key).toLowerCase())}"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
                   detail ? `<small>${escapeHtml(detail)}</small>` : ""
-                }</span></span>`
+                }</span></button>`
             )
             .join("")}
+        </div>
+        ${runSetupHtml}
+        <div class="lobby-skill-preview">
+          <video data-lobby-skill-preview src="/assets/skill-previews/${escapeHtml(classId)}-q.webm" autoplay muted loop playsinline preload="auto" aria-label="선택한 스킬 실제 인게임 영상 미리보기"></video>
+          <span>선택 스킬 자동 재생</span>
         </div>
       `;
     }

@@ -154,6 +154,7 @@ function sessionView(account, extras = {}) {
     account: {
       id: account.id,
       displayName: account.displayName,
+      role: account.role === "admin" ? "admin" : "user",
       revision: account.revision,
       createdAt: account.createdAt,
       updatedAt: account.updatedAt,

@@ -697,12 +697,25 @@
     if (enemy.statusEffects?.includes("barrier") || enemy.barrier > 0) renderer.drawGfxCircle(pos.x, pos.y, enemy.radius * 1.58, "#000000", 0, "#67e8f9", 0.42, 3, z + 35, "add", 22);
     drawEnemyStatusGraphics(renderer, enemy, pos, now, z);
     drawEnemyStatusPips(renderer, enemy, pos, z);
-    renderer.bar(pos.x, pos.y - enemy.radius * 1.45 - 20, enemy.radius * 2.05, enemy.executionBoss ? 8 : 5, enemy.hp / enemy.maxHp, enemy.executionBoss ? "#dc2626" : "#ff4d6d");
+    renderer.healthShieldBar(
+      pos.x,
+      pos.y - enemy.radius * 1.45 - 20,
+      enemy.radius * 2.05,
+      enemy.executionBoss ? 8 : 5,
+      enemy.hp,
+      enemy.maxHp,
+      enemy.barrier,
+      enemy.executionBoss ? "#dc2626" : "#ff4d6d"
+    );
   }
 
   function renderEnemies(renderer, enemies, now, world) {
     const visuals = renderer.getVisuals();
-    for (const enemy of enemies) renderEnemy(renderer, enemy, now, visuals, world);
+    for (const enemy of enemies) {
+      const pos = renderer.visualPosition(visuals.enemies, enemy);
+      if (renderer.isWorldVisible?.(pos, Math.max(140, Number(enemy.radius || 0) * 4)) === false) continue;
+      renderEnemy(renderer, enemy, now, visuals, world);
+    }
   }
 
   window.RoguePixiEnemies = Object.freeze({

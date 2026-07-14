@@ -96,13 +96,9 @@ const accountRecoverButton = document.querySelector("#accountRecoverButton");
 const accountSettingsMessage = document.querySelector("#accountSettingsMessage");
 const accountSettingsSection = document.querySelector("#accountSettingsSection");
 const runContext = document.querySelector("#runContext");
-const runPhaseKicker = document.querySelector("#runPhaseKicker");
-const runObjectiveTitle = document.querySelector("#runObjectiveTitle");
-const runObjectiveText = document.querySelector("#runObjectiveText");
 const runTimer = document.querySelector("#runTimer");
 const runTimerMax = document.querySelector("#runTimerMax");
-const runProgressBar = document.querySelector("#runProgressBar");
-const runModifiers = document.querySelector("#runModifiers");
+const runAscension = document.querySelector("#runAscension");
 
 let socket = null;
 let selectedClass = "warrior";
@@ -130,8 +126,27 @@ let renderedMapBoardKey = "";
 let renderedLobbyClassDetailKey = "";
 let renderedLobbyArenaKey = "";
 let selectedProgressionTab = "gear";
+const progressionInventoryUi = {
+  itemQuery: "",
+  itemSlot: "all",
+  itemRarity: "all",
+  itemClass: "compatible",
+  itemSort: "power",
+  runeQuery: "",
+  runeTier: "all",
+  runeSort: "tier",
+  selectedItemIds: new Set(),
+};
+let pendingProgressionAction = null;
+let pendingProgressionScrollTop = null;
+let progressionScrollLockTop = null;
+let progressionScrollLockUntil = 0;
+let progressionScrollRestoreToken = 0;
 let selectedLobbyView = "loadout";
 let lobbyArenaFocused = false;
+let lobbyPreviewSkillSlot = "q";
+// Retained for the dormant legacy preview helper; active previews use recorded gameplay video.
+let lobbyPreviewStartedAt = performance.now();
 let localMapVote = "";
 let localMapVoteAt = 0;
 let screenShake = 0;
@@ -216,10 +231,13 @@ const LOBBY_VIEW_META = Object.freeze({
 });
 const masteryNodeDefs = Object.freeze(
   saveBridge.MASTERY_NODE_DEFS || [
-    { id: "attack", label: "공격", description: "피해량이 완만하게 증가합니다." },
-    { id: "survival", label: "생존", description: "최대 체력과 일부 방어 능력이 증가합니다." },
-    { id: "speed", label: "속도", description: "이동 속도와 스킬 회전율이 좋아집니다." },
-    { id: "special", label: "직업 특화", description: "직업 고유 강점이 조금씩 강화됩니다." }
+    { id: "damage", label: "공격력", description: "모든 공격의 피해량이 증가합니다." },
+    { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
+    { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
+    { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
+    { id: "cooldown", label: "쿨타임 감소", description: "기본 공격과 스킬의 쿨타임이 감소합니다." },
+    { id: "critDamage", label: "치명타 피해", description: "치명타로 주는 피해가 증가합니다." },
+    { id: "area", label: "범위", description: "범위 공격과 폭발의 크기가 증가합니다." }
   ]
 );
 const MAX_ASCENSION_LEVEL = saveBridge.MAX_ASCENSION_LEVEL || 25;
@@ -263,7 +281,8 @@ const visuals = {
   projectiles: new Map(),
   hazards: new Map(),
   chests: new Map(),
-  xpOrbs: new Map()
+  xpOrbs: new Map(),
+  fieldPickups: new Map()
 };
 const floatingEffects = [];
 const seenEffectIds = new Set();
@@ -566,7 +585,7 @@ function renderTopHud(nextState) {
     hudController.renderTop(nextState);
     return;
   }
-  const stageLabel = nextState.room.objective?.label || nextState.room.stage?.label || nextState.room.waveTrait?.name || "";
+  const stageLabel = nextState.room.objective?.label || nextState.room.stage?.label || "";
   roomCodeEl.textContent = nextState.room.code;
   if (nextState.room.survival?.active) {
     const elapsed = formatDuration(nextState.room.survival.elapsed || 0);
@@ -585,9 +604,7 @@ function renderTopHud(nextState) {
         ? `CH ${nextState.room.chapter || nextState.room.floor} · MAP`
         : nextState.room.status === "advancement"
           ? `STAGE ${nextState.room.wave} · LEVEL UP`
-          : `CH ${nextState.room.chapter || nextState.room.floor} · STAGE ${nextState.room.wave}${
-              nextState.room.waveTrait ? ` · ${nextState.room.waveTrait.name}` : ""
-            }`;
+          : `CH ${nextState.room.chapter || nextState.room.floor} · STAGE ${nextState.room.wave}`;
   if (nextState.room.status === "combat" || nextState.room.status === "choice") {
     waveEl.textContent = `CH ${nextState.room.chapter || nextState.room.floor} · STAGE ${nextState.room.wave} · ${stageLabel || "NORMAL"}`;
   }
@@ -632,6 +649,7 @@ lobbyArenaClassGrid?.addEventListener("click", (event) => {
 function requestLobbyClassChange(classId) {
   if (!canSendMessage()) return;
   selectedClass = classDescriptions[classId] ? classId : "warrior";
+  lobbyPreviewSkillSlot = "q";
   clearLobbyTestPending();
   const growthLoadout = getSelectedGrowthLoadout(selectedClass);
   if (lastJoinPayload) {
@@ -641,8 +659,208 @@ function requestLobbyClassChange(classId) {
   sendClientMessage({ type: "changeClass", classId: selectedClass, growthLoadout });
 }
 
-lobbyClassDetail?.addEventListener("click", (event) => {
+function getProgressionInventoryUiSnapshot() {
+  return { ...progressionInventoryUi, selectedItemIds: [...progressionInventoryUi.selectedItemIds] };
+}
+
+function lockProgressionScroll(scrollTop = lobbyClassDetail?.scrollTop) {
+  if (!Number.isFinite(scrollTop)) return null;
+  progressionScrollLockTop = scrollTop;
+  progressionScrollLockUntil = performance.now() + 900;
+  return scrollTop;
+}
+
+function getLockedProgressionScrollTop(scrollTop = null) {
+  if (Number.isFinite(scrollTop)) return scrollTop;
+  if (performance.now() > progressionScrollLockUntil) return null;
+  return Number.isFinite(progressionScrollLockTop) ? progressionScrollLockTop : null;
+}
+
+function restoreProgressionScroll(scrollTop = null) {
+  const target = getLockedProgressionScrollTop(scrollTop);
+  if (!lobbyClassDetail || target === null) return;
+  const token = ++progressionScrollRestoreToken;
+  const apply = () => {
+    if (token !== progressionScrollRestoreToken || !["gear", "forge", "archive", "challenges"].includes(selectedLobbyView)) return;
+    lobbyClassDetail.scrollTop = target;
+  };
+  apply();
+  requestAnimationFrame(() => {
+    apply();
+    requestAnimationFrame(apply);
+  });
+  setTimeout(apply, 90);
+  setTimeout(apply, 240);
+}
+
+function renderProgressionUiState(options = {}) {
+  const scrollTop = getLockedProgressionScrollTop(options.scrollTop);
+  const focusFilter = String(options.focusFilter || "");
+  const selectionStart = Number.isFinite(options.selectionStart) ? options.selectionStart : null;
+  renderedLobbyClassDetailKey = "";
+  renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+  restoreProgressionScroll(scrollTop);
+  if (focusFilter && lobbyClassDetail) {
+    requestAnimationFrame(() => {
+      const filter = lobbyClassDetail.querySelector(`[data-progression-filter="${cssEscape(focusFilter)}"]`);
+      filter?.focus({ preventScroll: true });
+      if (selectionStart !== null && typeof filter?.setSelectionRange === "function") {
+        filter.setSelectionRange(selectionStart, selectionStart);
+      }
+    });
+  }
+}
+
+function pruneProgressionSelection() {
+  const existing = new Set((userProgress.inventory?.items || []).map((item) => item.id));
+  for (const itemId of progressionInventoryUi.selectedItemIds) {
+    if (!existing.has(itemId)) progressionInventoryUi.selectedItemIds.delete(itemId);
+  }
+}
+
+function requestProgressionConfirmation({ title, message, confirmLabel = "확인", danger = false }) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    let settled = false;
+    overlay.className = "progression-confirm-overlay";
+    overlay.innerHTML = `<section class="progression-confirm" role="alertdialog" aria-modal="true" aria-labelledby="progression-confirm-title"><span class="material-symbols-rounded" aria-hidden="true">${danger ? "warning" : "check_circle"}</span><div><h3 id="progression-confirm-title"></h3><p></p></div><footer><button type="button" data-confirm-cancel>취소</button><button type="button" class="${danger ? "danger" : "primary"}" data-confirm-accept></button></footer></section>`;
+    overlay.querySelector("h3").textContent = title;
+    overlay.querySelector("p").textContent = message;
+    overlay.querySelector("[data-confirm-accept]").textContent = confirmLabel;
+    const finish = (accepted) => {
+      if (settled) return;
+      settled = true;
+      overlay.classList.add("closing");
+      setTimeout(() => overlay.remove(), 120);
+      resolve(accepted);
+    };
+    overlay.addEventListener("click", (confirmEvent) => {
+      if (confirmEvent.target === overlay || confirmEvent.target.closest("[data-confirm-cancel]")) finish(false);
+      else if (confirmEvent.target.closest("[data-confirm-accept]")) finish(true);
+    }, { once: false });
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => overlay.classList.add("open"));
+    overlay.querySelector("[data-confirm-cancel]").focus();
+  });
+}
+
+function showProgressionFeedback(message, action = null) {
+  if (!message) return;
+  const failed = /실패/.test(message);
+  const comparing = action?.action === "reforge-item";
+  document.querySelectorAll(".progression-feedback-toast").forEach((toast) => toast.remove());
+  const toast = document.createElement("div");
+  toast.className = `progression-feedback-toast${failed ? " failed" : ""}`;
+  toast.innerHTML = `<span class="material-symbols-rounded" aria-hidden="true">${failed ? "cancel" : comparing ? "compare_arrows" : "check_circle"}</span><strong></strong>`;
+  toast.querySelector("strong").textContent = message;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  setTimeout(() => { toast.classList.remove("show"); setTimeout(() => toast.remove(), 180); }, 1900);
+
+  let target = null;
+  if (action?.action === "equip-item" && action.itemId) target = lobbyClassDetail?.querySelector(`[data-equipped-item-id="${cssEscape(action.itemId)}"]`);
+  if (action?.action === "equip-rune" && action.runeId) target = lobbyClassDetail?.querySelector(`[data-equipped-rune-id="${cssEscape(action.runeId)}"]`);
+  if (action?.action === "spend-mastery" && action.nodeId) target = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(action.nodeId)}"]`)?.closest(".growth-node");
+  if (["enhance-item", "reforge-item", "apply-reforge", "cancel-reforge", "lock-affix"].includes(action?.action) && action.itemId) {
+    target = lobbyClassDetail?.querySelector(`[data-forge-item-id="${cssEscape(action.itemId)}"]`);
+  }
+  target ||= lobbyClassDetail?.querySelector(action?.action === "spend-mastery" ? ".growth-summary" : ".meta-bonus-strip");
+  if (target) {
+    target.classList.remove("progression-applied", "progression-failed");
+    requestAnimationFrame(() => target.classList.add(failed ? "progression-failed" : "progression-applied"));
+  }
+}
+
+function submitProgressionAction(actionPayload, sourceElement = null) {
+  if (!saveBridge.performProgressionAction) return false;
+  pendingProgressionAction = { ...actionPayload };
+  pendingProgressionScrollTop = lockProgressionScroll();
+  if (accountServerManaged) {
+    const sent = sendClientMessage({ type: "accountProgressAction", actionPayload });
+    if (sent) flashLobbyTestControl(sourceElement || lobbyClassDetail);
+    else {
+      pendingProgressionAction = null;
+      pendingProgressionScrollTop = null;
+    }
+    return sent;
+  }
+  const result = saveBridge.performProgressionAction(userProgress, actionPayload);
+  userProgress = result.progress || userProgress;
+  saveUserProgress();
+  pruneProgressionSelection();
+  renderProgressionUiState({ scrollTop: pendingProgressionScrollTop });
+  if (result.affectsLoadout) sendGrowthLoadout(actionPayload.classId);
+  if (result.changed) showProgressionFeedback(result.message || "변경 사항이 적용되었습니다.", actionPayload);
+  pendingProgressionAction = null;
+  pendingProgressionScrollTop = null;
+  return Boolean(result.changed);
+}
+
+lobbyClassDetail?.addEventListener("click", async (event) => {
   if (!canSendMessage()) return;
+  const previewSkillButton = event.target.closest("[data-preview-skill]");
+  if (previewSkillButton) {
+    const slot = String(previewSkillButton.dataset.previewSkill || "").toLowerCase();
+    if (!["q", "e", "r", "f"].includes(slot) || getSelf()?.spectator) return;
+    lobbyPreviewSkillSlot = slot;
+    lobbyClassDetail.querySelectorAll("[data-preview-skill]").forEach((button) => button.classList.toggle("previewing", button === previewSkillButton));
+    const previewVideo = lobbyClassDetail.querySelector("video[data-lobby-skill-preview]");
+    if (previewVideo) {
+      previewVideo.src = `/assets/skill-previews/${selectedClass}-${slot}.webm`;
+      previewVideo.load();
+      previewVideo.play().catch(() => {});
+    }
+    previewSkillButton.blur();
+    return;
+  }
+  const codexEntryButton = event.target.closest("[data-codex-entry]");
+  if (codexEntryButton && saveBridge.renderCodexEntryDetail) {
+    const inspector = lobbyClassDetail.querySelector(".meta-codex-inspector");
+    if (!inspector) return;
+    lobbyClassDetail.querySelectorAll("[data-codex-entry]").forEach((button) => {
+      const selected = button === codexEntryButton;
+      button.classList.toggle("selected", selected);
+      button.setAttribute("aria-pressed", String(selected));
+    });
+    inspector.innerHTML = saveBridge.renderCodexEntryDetail(
+      codexEntryButton.dataset.codexKind,
+      codexEntryButton.dataset.codexId,
+      codexEntryButton.dataset.codexDiscovered === "true",
+    );
+    inspector.scrollTop = 0;
+    const workspace = codexEntryButton.closest(".meta-codex-workspace");
+    const workspaceRect = workspace?.getBoundingClientRect();
+    const viewportRect = lobbyClassDetail.getBoundingClientRect();
+    if (workspaceRect && (workspaceRect.top < viewportRect.top || workspaceRect.bottom > viewportRect.bottom)) {
+      lobbyClassDetail.scrollTop += workspaceRect.top - viewportRect.top;
+    }
+    return;
+  }
+  const selectVisibleButton = event.target.closest("[data-select-visible-items]");
+  if (selectVisibleButton) {
+    const visibleIds = [...lobbyClassDetail.querySelectorAll("[data-inventory-select]")].map((input) => input.dataset.itemId).filter(Boolean);
+    const shouldSelect = visibleIds.some((itemId) => !progressionInventoryUi.selectedItemIds.has(itemId));
+    for (const itemId of visibleIds) {
+      if (shouldSelect) progressionInventoryUi.selectedItemIds.add(itemId);
+      else progressionInventoryUi.selectedItemIds.delete(itemId);
+    }
+    renderProgressionUiState();
+    return;
+  }
+  const bulkSalvageButton = event.target.closest("[data-bulk-salvage]");
+  if (bulkSalvageButton) {
+    const itemIds = [...progressionInventoryUi.selectedItemIds];
+    if (!itemIds.length) return;
+    const accepted = await requestProgressionConfirmation({
+      title: "선택한 장비를 분해할까요?",
+      message: `장착하지 않은 장비 ${itemIds.length}개가 제거되고 강화 재료로 전환됩니다. 이 작업은 되돌릴 수 없습니다.`,
+      confirmLabel: `${itemIds.length}개 분해`,
+      danger: true,
+    });
+    if (!accepted) return;
+    submitProgressionAction({ action: "salvage-items", classId: getSelf()?.classId || selectedClass, itemIds }, bulkSalvageButton);
+    return;
+  }
   const progressionButton = event.target.closest("[data-progression-action]");
   if (progressionButton) {
     const action = progressionButton.dataset.progressionAction || "";
@@ -671,18 +889,17 @@ lobbyClassDetail?.addEventListener("click", (event) => {
         title: progressionButton.dataset.title,
         skin: progressionButton.dataset.skin,
       };
-      if (accountServerManaged) {
-        sendClientMessage({ type: "accountProgressAction", actionPayload });
-        flashLobbyTestControl(progressionButton);
-        return;
+      if (action === "salvage-item") {
+        const item = (userProgress.inventory?.items || []).find((entry) => entry.id === actionPayload.itemId);
+        const accepted = await requestProgressionConfirmation({
+          title: "장비를 분해할까요?",
+          message: `${item?.name || "선택한 장비"}가 제거되고 강화 재료로 전환됩니다. 이 작업은 되돌릴 수 없습니다.`,
+          confirmLabel: "분해",
+          danger: true,
+        });
+        if (!accepted) return;
       }
-      const result = saveBridge.performProgressionAction(userProgress, actionPayload);
-      userProgress = result.progress || userProgress;
-      saveUserProgress();
-      renderedLobbyClassDetailKey = "";
-      renderLobbyClassDetail(classId, getSelf());
-      flashLobbyTestControl(progressionButton);
-      if (result.affectsLoadout) sendGrowthLoadout(classId);
+      submitProgressionAction(actionPayload, progressionButton);
     }
     return;
   }
@@ -780,6 +997,42 @@ resultStartButton.addEventListener("click", () => {
 
 settingsButton?.addEventListener("click", () => {
   openSettings();
+});
+
+lobbyClassDetail?.addEventListener("change", (event) => {
+  const selection = event.target.closest("[data-inventory-select]");
+  if (selection) {
+    const itemId = selection.dataset.itemId;
+    if (selection.checked) progressionInventoryUi.selectedItemIds.add(itemId);
+    else progressionInventoryUi.selectedItemIds.delete(itemId);
+    selection.closest(".meta-item")?.classList.toggle("selected", selection.checked);
+    const bulkButton = lobbyClassDetail.querySelector("[data-bulk-salvage]");
+    const count = progressionInventoryUi.selectedItemIds.size;
+    if (bulkButton) bulkButton.disabled = count === 0;
+    const countLabel = bulkButton?.querySelector("[data-selected-item-count]");
+    if (countLabel) countLabel.textContent = String(count);
+    return;
+  }
+  const filter = event.target.closest("[data-progression-filter]");
+  if (!filter) return;
+  if (filter.matches('input[type="search"]')) return;
+  const key = filter.dataset.progressionFilter;
+  if (!(key in progressionInventoryUi) || key === "selectedItemIds") return;
+  progressionInventoryUi[key] = filter.value;
+  renderProgressionUiState({ scrollTop: lobbyClassDetail.scrollTop });
+});
+
+lobbyClassDetail?.addEventListener("input", (event) => {
+  const filter = event.target.closest('input[type="search"][data-progression-filter]');
+  if (!filter) return;
+  const key = filter.dataset.progressionFilter;
+  if (!(key in progressionInventoryUi) || key === "selectedItemIds") return;
+  progressionInventoryUi[key] = filter.value;
+  renderProgressionUiState({
+    scrollTop: lobbyClassDetail.scrollTop,
+    focusFilter: key,
+    selectionStart: filter.selectionStart,
+  });
 });
 
 accountManageButton?.addEventListener("click", () => {
@@ -1018,7 +1271,7 @@ function renderRoomList(rooms) {
       const accent = room.status === "lobby" ? "joinable" : "running";
       return `
         <button class="room-card ${accent} ${full ? "full" : ""}" type="button" data-room="${escapeHtml(room.code)}" ${full ? "disabled" : ""}>
-          <span class="room-card-mark" aria-hidden="true">${full ? "■" : "△"}</span>
+          <span class="material-symbols-rounded room-card-mark" aria-hidden="true">${full ? "block" : "meeting_room"}</span>
           <span>
             <strong>${escapeHtml(room.code)}</strong>
             <small>${escapeHtml(room.hostName || "NO HOST")} · ${escapeHtml(status)}</small>
@@ -1052,6 +1305,7 @@ function resetToRoomEntry(message = "") {
   visuals.hazards.clear();
   visuals.chests.clear();
   visuals.xpOrbs.clear();
+  visuals.fieldPickups.clear();
   floatingEffects.length = 0;
   seenEffectIds.clear();
   lobbyPanel?.classList.add("hidden");
@@ -1164,6 +1418,12 @@ async function connect(options = {}) {
       accountSyncState = "synced";
       accountServerManaged = true;
       if (message.message) setAccountSettingsMessage(message.message, message.reason === "action-rejected");
+      if (message.reason === "action-applied") showProgressionFeedback(message.message || "변경 사항이 적용되었습니다.", pendingProgressionAction);
+      if (message.reason === "action-applied" || message.reason === "action-rejected" || message.reason === "action-unchanged") {
+        progressionScrollLockUntil = Math.max(progressionScrollLockUntil, performance.now() + 350);
+        pendingProgressionAction = null;
+        pendingProgressionScrollTop = null;
+      }
       renderAccountStatus();
       return;
     }
@@ -1329,6 +1589,7 @@ function applyServerAccountSession(session, message = "서버 진행도와 동�
 function applyServerProgress(progress, account = null) {
   userProgress = normalizeProgress(progress);
   saveUserProgress();
+  pruneProgressionSelection();
   if (accountSession && account) {
     accountSession.account = { ...(accountSession.account || {}), ...account };
   }
@@ -1339,6 +1600,7 @@ function applyServerProgress(progress, account = null) {
   renderedLobbyClassDetailKey = "";
   if (state?.room?.status === "lobby") {
     renderLobbyClassDetail(getSelf()?.classId || selectedClass, getSelf());
+    restoreProgressionScroll(pendingProgressionScrollTop);
   }
   renderAccountStatus();
 }
@@ -1499,14 +1761,17 @@ function sendGrowthLoadout(classId = selectedClass) {
   return sendClientMessage({ type: "setGrowthLoadout", growthLoadout });
 }
 
-function spendMasteryNode(classId = selectedClass, nodeId = "attack") {
+function spendMasteryNode(classId = selectedClass, nodeId = "damage") {
   if (accountServerManaged) {
     const sent = sendClientMessage({
       type: "accountProgressAction",
       actionPayload: { action: "spend-mastery", classId, nodeId },
     });
     const button = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(nodeId)}"]`);
-    if (sent) flashLobbyTestControl(button || lobbyClassDetail);
+    if (sent) {
+      pendingProgressionAction = { action: "spend-mastery", classId, nodeId };
+      flashLobbyTestControl(button || lobbyClassDetail);
+    }
     return sent;
   }
   if (!saveBridge.spendMasteryPoint) return false;
@@ -1518,6 +1783,7 @@ function spendMasteryNode(classId = selectedClass, nodeId = "attack") {
   renderLobbyClassDetail(self?.classId || classId, self);
   if (result.spent) {
     sendGrowthLoadout(classId);
+    showProgressionFeedback("영구 성장 수치가 적용되었습니다.", { action: "spend-mastery", classId, nodeId });
   }
   const button = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(nodeId)}"]`);
   flashLobbyTestControl(button || lobbyClassDetail);
@@ -1535,7 +1801,8 @@ function getGrowthRenderKey(classId) {
   const progressionKey = saveBridge.getProgressionRenderKey
     ? saveBridge.getProgressionRenderKey(userProgress, classId, selectedProgressionTab)
     : "";
-  return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|H${state?.room?.hostId || ""}|${nodeKey}|${progressionKey}`;
+  const inventoryUiKey = JSON.stringify({ ...progressionInventoryUi, selectedItemIds: [...progressionInventoryUi.selectedItemIds].sort() });
+  return `${currency}|${accountLevel}:${accountXp}|A${getSelectedAscensionLevel()}|H${state?.room?.hostId || ""}|${nodeKey}|${progressionKey}|${inventoryUiKey}`;
 }
 
 function renderGrowthMasteryPanel(self, classId) {
@@ -1548,8 +1815,12 @@ function renderGrowthMasteryPanel(self, classId) {
   const accountXp = Number(progress.account?.xp || 0);
   const xpToNext = saveBridge.getAccountXpToNext ? saveBridge.getAccountXpToNext(accountLevel) : 100 + accountLevel * 40;
   const xpPct = clamp01(accountXp / Math.max(1, xpToNext));
-  const maxReachedAscension = clamp(Number(progress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
-  const isHost = Boolean(state?.selfId && state.selfId === state?.room?.hostId);
+  const accountBonuses = loadout.accountBonuses || (saveBridge.calculateAccountLevelBonuses ? saveBridge.calculateAccountLevelBonuses(accountLevel) : {});
+  const masteryBonuses = loadout.bonuses || {};
+  const equipmentBonuses = saveBridge.calculateEquipmentBonuses
+    ? saveBridge.calculateEquipmentBonuses(progress, safeClassId)
+    : {};
+  const combinedBonuses = combinePermanentBonuses(accountBonuses, masteryBonuses, equipmentBonuses);
   const nodeRows = masteryNodeDefs
     .map((node) => {
       const level = Number(loadout.nodes?.[node.id] || 0);
@@ -1587,7 +1858,7 @@ function renderGrowthMasteryPanel(self, classId) {
       <div class="growth-mastery-head">
         <div>
           <strong>성장 / 숙련</strong>
-          <span>영구 적용 · 초기화 없음 · 점감 성장</span>
+          <span>모든 직업 공용 · 투자 즉시 전체 캐릭터에 적용</span>
         </div>
         <div class="growth-shards">
           <small>심연 파편</small>
@@ -1599,46 +1870,116 @@ function renderGrowthMasteryPanel(self, classId) {
         <i><b style="width:${Math.round(xpPct * 100)}%"></b></i>
         <em>${accountXp}/${xpToNext} XP</em>
       </div>
-      <div class="growth-bonus-list">
-        ${renderGrowthBonusChips(safeClassId, loadout.bonuses || {})}
+      <div class="growth-total-head">
+        <div>
+          <strong>통합 영구 증가치</strong>
+          <span>${escapeHtml(classDescriptions[safeClassId]?.label || safeClassId)} · 계정 + 공용 성장 + 장비</span>
+        </div>
+        <b>합산 보너스</b>
       </div>
+      <div class="growth-bonus-list growth-total-bonuses">
+        ${renderGrowthBonusChips(safeClassId, combinedBonuses, true)}
+      </div>
+      <details class="growth-bonus-breakdown">
+        <summary><span>출처별 상세</span><small>계정 · 공용 성장 · 장비</small></summary>
+        <div class="growth-bonus-source">
+          <strong>계정 레벨</strong>
+          <div class="growth-bonus-list">${renderGrowthBonusChips(safeClassId, accountBonuses, true)}</div>
+        </div>
+        <div class="growth-bonus-source">
+          <strong>모든 직업 공용 성장</strong>
+          <div class="growth-bonus-list">${renderGrowthBonusChips(safeClassId, masteryBonuses, true)}</div>
+        </div>
+        <div class="growth-bonus-source">
+          <strong>착용 장비 · 룬</strong>
+          <div class="growth-bonus-list">${renderGrowthBonusChips(safeClassId, equipmentBonuses, true)}</div>
+        </div>
+      </details>
       <div class="growth-node-list">
         ${nodeRows}
-      </div>
-      <div class="growth-ascension">
-        <div>
-          <strong>승천 ${getSelectedAscensionLevel()}</strong>
-          <span>해금 ${maxReachedAscension}단계 · 클리어 시 참가자 모두 ${Math.min(MAX_ASCENSION_LEVEL, getSelectedAscensionLevel() + 1)}단계 해금</span>
-        </div>
-        ${isHost ? `<div class="growth-ascension-controls" aria-label="승천 단계 선택">
-          <button type="button" data-ascension-delta="-1" aria-label="승천 단계 내리기" ${getSelectedAscensionLevel() <= 0 ? "disabled" : ""}>-</button>
-          <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${getSelectedAscensionLevel() >= maxReachedAscension ? "disabled" : ""}>+</button>
-        </div>` : `<small class="growth-ascension-host-only">방장만 변경 가능</small>`}
       </div>
     </section>
   `;
 }
 
-function renderGrowthBonusChips(classId, bonuses) {
+function combinePermanentBonuses(accountBonuses = {}, masteryBonuses = {}, equipmentBonuses = {}) {
+  const sources = [accountBonuses, masteryBonuses, equipmentBonuses];
+  const multiply = (key) => sources.reduce((total, bonuses) => total * (Number(bonuses?.[key]) || 1), 1);
+  const add = (key) => sources.reduce((total, bonuses) => total + (Number(bonuses?.[key]) || 0), 0);
+  return {
+    damageMul: multiply("damageMul"),
+    maxHpMul: multiply("maxHpMul"),
+    regenBonus: add("regenBonus"),
+    speedMul: multiply("speedMul"),
+    skillCooldownMul: multiply("skillCooldownMul"),
+    armorBonus: add("armorBonus"),
+    critChanceBonus: add("critChanceBonus"),
+    critDamageMul: multiply("critDamageMul"),
+    areaMul: multiply("areaMul"),
+  };
+}
+
+function renderAscensionRunSetup(self = null) {
+  if (self?.spectator) return "";
+  const level = getSelectedAscensionLevel();
+  const unlocked = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
+  const isHost = Boolean(state?.selfId && state.selfId === state?.room?.hostId);
+  const overcap = Math.max(0, level - 5);
+  const hpMul = 1 + level * 0.18 + overcap * 0.06;
+  const damageMul = 1 + level * 0.06 + overcap * 0.012;
+  const speedMul = 1 + Math.min(0.45, level * 0.025 + overcap * 0.006);
+  const spawnMul = 1 + level * 0.07 + overcap * 0.025;
+  const rewardMul = 1 + level * 0.1;
+  const eliteBonus = Math.min(0.55, level * 0.035 + overcap * 0.006);
+  const milestone = level <= 0
+    ? "기본 난이도. 추가 규칙 없이 원정을 시작합니다."
+    : level === 1
+      ? "적 체력·피해·속도·출현량이 동시에 상승합니다."
+      : level === 2
+        ? "정예 비율과 적의 공격 빈도가 크게 상승합니다."
+        : level === 3
+          ? "플레이어가 받는 모든 회복량이 35% 감소합니다."
+          : level === 4
+            ? "보스가 주기적으로 추가 투사체 고리 패턴을 사용합니다."
+            : level === 5
+              ? "맵에 충돌 지형이 생성되고 적 투사체 속도가 16% 증가합니다."
+              : "6단계부터 체력·출현량·공격 빈도 상승 폭이 더 커지고 보스 탄막도 강화됩니다.";
+  return `<section class="run-ascension-setup" aria-label="원정 승천 난이도">
+    <div class="run-ascension-main">
+      <span>원정 난이도</span>
+      <strong>승천 ${level}</strong>
+      <small>${escapeHtml(milestone)}</small>
+    </div>
+    <div class="run-ascension-stats" aria-label="현재 승천 누적 효과">
+      <span>적 체력 <b>×${hpMul.toFixed(2)}</b></span>
+      <span>적 피해 <b>×${damageMul.toFixed(2)}</b></span>
+      <span>적 속도 <b>×${speedMul.toFixed(2)}</b></span>
+      <span>출현량 <b>×${spawnMul.toFixed(2)}</b></span>
+      <span>정예 <b>+${Math.round(eliteBonus * 100)}%p</b></span>
+      <span>보상 <b>×${rewardMul.toFixed(2)}</b></span>
+    </div>
+    <div class="run-ascension-control-wrap">
+      <small>해금 ${unlocked}/${MAX_ASCENSION_LEVEL} · 승리 시 ${Math.min(MAX_ASCENSION_LEVEL, level + 1)}단계 해금</small>
+      ${isHost ? `<div class="growth-ascension-controls" aria-label="승천 단계 선택">
+        <button type="button" data-ascension-delta="-1" aria-label="승천 단계 내리기" ${level <= 0 ? "disabled" : ""}>-</button>
+        <b>${level}</b>
+        <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${level >= unlocked ? "disabled" : ""}>+</button>
+      </div>` : `<small class="growth-ascension-host-only">방장만 변경 가능</small>`}
+    </div>
+  </section>`;
+}
+
+function renderGrowthBonusChips(classId, bonuses, includeDefense = false) {
   const chips = [
     ["피해", formatSignedPercent((bonuses.damageMul || 1) - 1)],
     ["체력", formatSignedPercent((bonuses.maxHpMul || 1) - 1)],
+    ["체젠", `${formatSignedFlat(bonuses.regenBonus || 0)}/s`],
     ["속도", formatSignedPercent((bonuses.speedMul || 1) - 1)],
-    ["쿨감", formatSignedPercent(1 - (bonuses.skillCooldownMul || 1))]
+    ["쿨감", formatSignedPercent(1 - (bonuses.skillCooldownMul || 1))],
+    ...(includeDefense ? [["방어", formatSignedFlat(bonuses.armorBonus || 0)], ["치명타", formatSignedPercent(bonuses.critChanceBonus || 0)]] : []),
+    ["치명 피해", formatSignedPercent((bonuses.critDamageMul || 1) - 1)],
+    ["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)]
   ];
-  if (classId === "warrior") {
-    chips.push(["방어", formatSignedFlat(bonuses.armorBonus || 0)]);
-    chips.push(["도발", formatSignedPercent((bonuses.tauntRangeMul || 1) - 1)]);
-  } else if (classId === "ranger") {
-    chips.push(["치명", formatSignedPercent(bonuses.critChanceBonus || 0)]);
-    chips.push(["화살", formatSignedPercent((bonuses.projectileSpeedMul || 1) - 1)]);
-  } else if (classId === "mage") {
-    chips.push(["스킬", formatSignedPercent((bonuses.skillDamageMul || 1) - 1)]);
-    chips.push(["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)]);
-  } else if (classId === "engineer") {
-    chips.push(["설치물", formatSignedPercent((bonuses.constructDamageMul || 1) - 1)]);
-    chips.push(["드론", formatSignedPercent(1 - (bonuses.droneCooldownMul || 1))]);
-  }
   return chips
     .map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`)
     .join("");
@@ -1646,22 +1987,17 @@ function renderGrowthBonusChips(classId, bonuses) {
 
 function getMasteryPreviewLabel(nodeId, classId, before, after) {
   const previewByNode = {
-    attack: ["피해", (after.damageMul || 1) - (before.damageMul || 1)],
-    survival: ["체력", (after.maxHpMul || 1) - (before.maxHpMul || 1)],
-    speed: ["쿨감", (before.skillCooldownMul || 1) - (after.skillCooldownMul || 1)],
-    special: getClassSpecialPreview(classId, before, after)
+    damage: ["공격력", (after.damageMul || 1) - (before.damageMul || 1)],
+    maxHp: ["최대 체력", (after.maxHpMul || 1) - (before.maxHpMul || 1)],
+    regen: ["체력 재생", (after.regenBonus || 0) - (before.regenBonus || 0), "flat", "/s"],
+    moveSpeed: ["이동 속도", (after.speedMul || 1) - (before.speedMul || 1)],
+    cooldown: ["쿨타임 감소", (before.skillCooldownMul || 1) - (after.skillCooldownMul || 1)],
+    critDamage: ["치명타 피해", (after.critDamageMul || 1) - (before.critDamageMul || 1)],
+    area: ["범위", (after.areaMul || 1) - (before.areaMul || 1)],
   };
   const preview = previewByNode[nodeId] || ["성장", 0];
-  if (preview[2] === "flat") return `${preview[0]} ${formatSignedFlat(preview[1])}`;
+  if (preview[2] === "flat") return `${preview[0]} ${formatSignedFlat(preview[1])}${preview[3] || ""}`;
   return `${preview[0]} ${formatSignedPercent(preview[1])}`;
-}
-
-function getClassSpecialPreview(classId, before, after) {
-  if (classId === "warrior") return ["방어", (after.armorBonus || 0) - (before.armorBonus || 0), "flat"];
-  if (classId === "ranger") return ["치명", (after.critChanceBonus || 0) - (before.critChanceBonus || 0)];
-  if (classId === "mage") return ["스킬", (after.skillDamageMul || 1) - (before.skillDamageMul || 1)];
-  if (classId === "engineer") return ["설치물", (after.constructDamageMul || 1) - (before.constructDamageMul || 1)];
-  return ["특화", (after.damageMul || 1) - (before.damageMul || 1)];
 }
 
 function formatSignedPercent(value) {
@@ -2070,13 +2406,16 @@ function renderLobbyWorkspaceChrome(classId, self = null) {
 
   const classViews = new Set(["loadout", "growth", "gear", "forge", "training"]);
   const subtitles = {
+    growth: "모든 직업에 공용 적용 · 장비 합산 수치는 선택한 직업 기준",
     archive: `계정 Lv.${Number(progress.account?.level || 1)} · 원정과 수집 기록`,
     challenges: "일일·주간 개인 임무 · 모든 원정에서 자동 누적"
   };
   if (lobbyWorkspaceSubtitle) {
     lobbyWorkspaceSubtitle.textContent = self?.spectator
       ? "관전자 모드에서는 성장과 장비를 변경할 수 없습니다."
-      : classViews.has(selectedLobbyView)
+      : selectedLobbyView === "growth"
+        ? subtitles.growth
+        : classViews.has(selectedLobbyView)
         ? `${classMeta.label} · ${classMeta.role}`
         : subtitles[selectedLobbyView] || classMeta.summary;
   }
@@ -2132,9 +2471,20 @@ function renderLobbyClassDetail(classId, self = null) {
           classId,
           activeTab: selectedLobbyView,
           leaderboards: state?.room?.challengeLeaderboard || [],
-          embedded: true
+          embedded: true,
+          inventoryUi: getProgressionInventoryUiSnapshot()
         })
       : `<div class="lobby-workspace-empty"><strong>진행도 불러오는 중</strong></div>`;
+    restoreProgressionScroll();
+    if (selectedLobbyView === "archive") {
+      requestAnimationFrame(() => {
+        const workspace = lobbyClassDetail.querySelector(".meta-codex-workspace");
+        if (!workspace || selectedLobbyView !== "archive") return;
+        const workspaceRect = workspace.getBoundingClientRect();
+        const viewportRect = lobbyClassDetail.getBoundingClientRect();
+        lobbyClassDetail.scrollTop += workspaceRect.top - viewportRect.top;
+      });
+    }
     return;
   }
   if (selectedLobbyView === "training") {
@@ -2142,7 +2492,7 @@ function renderLobbyClassDetail(classId, self = null) {
     return;
   }
   if (lobbyController?.renderClassDetail) {
-    lobbyClassDetail.innerHTML = lobbyController.renderClassDetail(meta);
+    lobbyClassDetail.innerHTML = lobbyController.renderClassDetail(meta, classId, renderAscensionRunSetup(self));
     return;
   }
   lobbyClassDetail.innerHTML = `
@@ -2158,13 +2508,162 @@ function renderLobbyClassDetail(classId, self = null) {
       ${meta.skills
         .map(
           ([key, name, detail]) =>
-            `<span class="lobby-skill-tag"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
+            `<button type="button" class="lobby-skill-tag" data-preview-skill="${escapeHtml(String(key).toLowerCase())}"><b>${escapeHtml(key)}</b><span><strong>${escapeHtml(name)}</strong>${
               detail ? `<small>${escapeHtml(detail)}</small>` : ""
-            }</span></span>`
+            }</span></button>`
         )
         .join("")}
     </div>
+    <div class="lobby-skill-preview">
+      <video data-lobby-skill-preview src="/assets/skill-previews/${escapeHtml(classId)}-q.webm" autoplay muted loop playsinline preload="auto" aria-label="선택한 스킬 실제 인게임 영상 미리보기"></video>
+      <span>선택 스킬 자동 재생</span>
+    </div>
   `;
+}
+
+function syncLobbySkillPreviewSurface() {
+  const preview = lobbyClassDetail?.querySelector("[data-lobby-skill-preview]");
+  const shouldPreview = selectedLobbyView === "loadout" && !lobbyPanel?.classList.contains("hidden") && !lobbyArenaFocused && preview;
+  if (shouldPreview) {
+    lobbyClassDetail.querySelectorAll("[data-preview-skill]").forEach((button) => {
+      button.classList.toggle("previewing", button.dataset.previewSkill === lobbyPreviewSkillSlot);
+    });
+  }
+}
+
+function drawLobbyPreviewLine(ctx, x1, y1, x2, y2, color, width = 5, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLobbyPreviewRing(ctx, x, y, radius, color, width = 5, alpha = 1, start = 0, end = Math.PI * 2) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.arc(x, y, Math.max(1, radius), start, end);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLobbyPreviewActor(ctx, x, y, color, enemy = false, hit = false) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = hit ? "#ffffff" : enemy ? "#762f3a" : color;
+  ctx.strokeStyle = enemy ? "#e56b78" : "#f4e6c8";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(0, 0, enemy ? 19 : 22, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = enemy ? "#2b0f15" : "#10151b";
+  ctx.fillRect(-8, -5, 16, 5);
+  ctx.restore();
+}
+
+function drawLobbyPreviewArrow(ctx, x, y, angle, color, scale = 1, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.lineWidth = 4 * scale;
+  ctx.beginPath();
+  ctx.moveTo(-20 * scale, 0);
+  ctx.lineTo(18 * scale, 0);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(24 * scale, 0);
+  ctx.lineTo(10 * scale, -8 * scale);
+  ctx.lineTo(10 * scale, 8 * scale);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
+function renderLobbySkillPreviewDemo(now) {
+  if (selectedLobbyView !== "loadout" || lobbyArenaFocused || lobbyPanel?.classList.contains("hidden")) return;
+  const preview = lobbyClassDetail?.querySelector("canvas[data-lobby-skill-preview]");
+  if (!preview) return;
+  const ctx = preview.getContext("2d");
+  if (!ctx) return;
+  const w = preview.width;
+  const h = preview.height;
+  const phase = ((now - lobbyPreviewStartedAt) % 2600) / 2600;
+  const action = Math.max(0, Math.min(1, (phase - 0.12) / 0.58));
+  const fade = phase > 0.78 ? Math.max(0, 1 - (phase - 0.78) / 0.22) : 1;
+  const colors = { warrior: "#d8ab62", ranger: "#7fbf78", mage: "#9e8bd6", engineer: "#64c7cf" };
+  const color = colors[selectedClass] || colors.warrior;
+  const px = w * 0.27;
+  const py = h * 0.57;
+  const enemies = [[w * 0.66, h * 0.42], [w * 0.76, h * 0.58], [w * 0.67, h * 0.73], [w * 0.84, h * 0.36]];
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = "#090d11";
+  ctx.fillRect(0, 0, w, h);
+  ctx.strokeStyle = "rgba(113, 137, 151, 0.12)";
+  ctx.lineWidth = 1;
+  for (let x = 0; x < w; x += 64) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+  for (let y = 0; y < h; y += 64) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  const key = `${selectedClass}:${lobbyPreviewSkillSlot}`;
+  let actorX = px;
+  let hitAll = false;
+  if (key === "warrior:q") {
+    drawLobbyPreviewRing(ctx, px, py, 58 + action * 54, color, 15, fade, -1.3 + action * 5.4, 1.7 + action * 5.4);
+    drawLobbyPreviewRing(ctx, px, py, 42 + action * 48, "#fff1c4", 4, fade * 0.8, 0.4 + action * 5.4, 3.8 + action * 5.4);
+  } else if (key === "warrior:e") {
+    drawLobbyPreviewRing(ctx, px, py, 35 + action * 170, "#efc56f", 7, fade * (1 - action * 0.45));
+    enemies.forEach(([x, y]) => drawLobbyPreviewLine(ctx, x, y, px, py, "#c95757", 3, action * fade));
+  } else if (key === "warrior:r") {
+    actorX = px + action * w * 0.34;
+    drawLobbyPreviewLine(ctx, px - 15, py + 28, actorX - 12, py + 28, "#b68a55", 18, fade * 0.5);
+    drawLobbyPreviewRing(ctx, actorX + 26, py, 30, "#f7d787", 9, fade, -1.25, 1.25);
+    hitAll = action > 0.65;
+  } else if (key === "warrior:f") {
+    ctx.save(); ctx.globalAlpha = fade * action; ctx.fillStyle = "rgba(216,171,98,0.28)"; ctx.beginPath(); ctx.moveTo(px, py); ctx.arc(px, py, 260, -0.68, 0.68); ctx.closePath(); ctx.fill(); ctx.restore();
+    drawLobbyPreviewRing(ctx, px, py, 130 + action * 120, "#f4d28c", 12, fade, -0.68, 0.68);
+    hitAll = action > 0.45;
+  } else if (key === "ranger:q") {
+    enemies.forEach(([x, y], i) => { const t = Math.max(0, Math.min(1, action * 1.3 - i * 0.07)); drawLobbyPreviewArrow(ctx, px + (x - px) * t, py + (y - py) * t, Math.atan2(y - py, x - px), i % 2 ? "#f5a34d" : color, 0.9, fade); });
+  } else if (key === "ranger:e") {
+    drawLobbyPreviewLine(ctx, px, py, px + action * w * 0.62, py, "rgba(127,191,120,0.28)", 24, fade);
+    drawLobbyPreviewArrow(ctx, px + action * w * 0.62, py, 0, "#e8ffd8", 1.5, fade);
+    hitAll = action > 0.55;
+  } else if (key === "ranger:r") {
+    drawLobbyPreviewRing(ctx, w * 0.72, h * 0.56, 125, color, 4, 0.6);
+    enemies.forEach(([x, y], i) => drawLobbyPreviewArrow(ctx, x + 22, y - 170 + ((action * 260 + i * 48) % 220), Math.PI / 2, "#dff6cf", 0.75, fade));
+    hitAll = action > 0.2;
+  } else if (key === "ranger:f") {
+    const tx = px + action * w * 0.48; drawLobbyPreviewArrow(ctx, tx, py, 0, "#a8d85f", 1.1, fade); drawLobbyPreviewRing(ctx, w * 0.72, py + 12, action * 125, "#8eb84f", 12, fade * 0.65);
+  } else if (key === "mage:q") {
+    enemies.forEach(([x, y], i) => { const t = Math.max(0, Math.min(1, action * 1.25 - i * 0.06)); const cx = px + (x - px) * t; const cy = py + (y - py) * t - Math.sin(t * Math.PI) * (35 + i * 8); drawLobbyPreviewRing(ctx, cx, cy, 9, "#efe8ff", 6, fade); });
+  } else if (key === "mage:e") {
+    drawLobbyPreviewRing(ctx, px, py, action * 255, "#8bd7ff", 18, fade * (1 - action * 0.35)); hitAll = action > 0.5;
+  } else if (key === "mage:r") {
+    const mx = w * 0.72; const my = -60 + action * (h * 0.65); drawLobbyPreviewRing(ctx, mx, my, 34 + action * 20, "#ff974f", 18, fade); if (action > 0.72) { drawLobbyPreviewRing(ctx, mx, h * 0.65, (action - 0.72) * 520, "#ffb45c", 20, fade); hitAll = true; }
+  } else if (key === "mage:f") {
+    let last = [px, py]; enemies.forEach(([x, y], i) => { const on = action > i * 0.15; if (on) { drawLobbyPreviewLine(ctx, last[0], last[1], x, y, i % 2 ? "#f05b5b" : "#8bc8ff", 8, fade); last = [x, y]; } }); hitAll = action > 0.35;
+  } else if (key === "engineer:q") {
+    drawLobbyPreviewActor(ctx, px + 70, py + 45, "#4f7880"); drawLobbyPreviewLine(ctx, px + 70, py + 45, enemies[0][0], enemies[0][1], "#75e2e8", 7, fade * action);
+  } else if (key === "engineer:e") {
+    const dx = px + 70 + Math.sin(action * Math.PI * 2) * 45; const dy = py - 90; drawLobbyPreviewRing(ctx, dx, dy, 18, "#9ef1f3", 7, fade); enemies.slice(0, 3).forEach(([x, y]) => drawLobbyPreviewLine(ctx, dx, dy, x, y, "#65c7cf", 4, action * fade));
+  } else if (key === "engineer:r") {
+    drawLobbyPreviewRing(ctx, w * 0.72, h * 0.58, 28, "#e4c55f", 8, fade); if (action > 0.48) { drawLobbyPreviewRing(ctx, w * 0.72, h * 0.58, (action - 0.48) * 260, "#f4d66d", 18, fade); hitAll = true; }
+  } else {
+    drawLobbyPreviewRing(ctx, px, py, 46 + action * 25, "#7ce2e7", 10, fade); drawLobbyPreviewLine(ctx, px + 35, py - 10, enemies[0][0], enemies[0][1], "#8ff5f6", 10, action * fade); drawLobbyPreviewLine(ctx, px + 35, py + 10, enemies[2][0], enemies[2][1], "#8ff5f6", 10, action * fade);
+  }
+  enemies.forEach(([x, y]) => drawLobbyPreviewActor(ctx, x, y, "#9a3b48", true, hitAll));
+  drawLobbyPreviewActor(ctx, actorX, py, color);
 }
 
 function recordProgressDiscoveries(nextState) {
@@ -2571,6 +3070,7 @@ function renderSkillDock(self) {
       const cooldownRatio = slot.unlocked ? clamp01(cooldown / cooldownMax) : 1;
       const cooldownAngle = Math.round(cooldownRatio * 360);
       const cooldownText = slot.unlocked && cooldown > 0 ? cooldown.toFixed(1) : "";
+      const chargeText = Number(slot.maxCharges || 0) > 1 ? `${Math.max(0, Number(slot.charges || 0))}/${Number(slot.maxCharges)}` : "";
       const icon = slot.unlocked ? slot.icon || slot.slot : "";
       const classes = ["skill-slot", slot.unlocked ? "" : "locked", slot.ready ? "ready" : "", cooldown > 0 ? "cooling" : ""]
         .filter(Boolean)
@@ -2581,6 +3081,7 @@ function renderSkillDock(self) {
           <div class="skill-icon" aria-hidden="true">${escapeHtml(icon || "-")}</div>
           <div class="cooldown-cover"></div>
           <kbd>${escapeHtml(slot.slot)}</kbd>
+          ${chargeText ? `<span class="skill-charge">${escapeHtml(chargeText)}</span>` : ""}
           <strong>${escapeHtml(slot.unlocked ? slot.name : "LOCKED")}</strong>
           <em>${escapeHtml(cooldownText)}</em>
         </div>
@@ -2665,7 +3166,7 @@ function renderChoices(choices) {
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
             <span>${escapeHtml(choice.text)}</span>
-            <span class="choice-action-row"><span>유물 선택</span><i aria-hidden="true">›</i></span>
+            <span class="choice-action-row"><span>유물 선택</span><i class="choice-forward-icon" aria-hidden="true"></i></span>
           </span>
         </button>
       `;
@@ -2808,7 +3309,7 @@ function renderSkillChoices(choices) {
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
             <span>${escapeHtml(choice.text)}</span>
-            <span class="choice-action-row"><span>강화 선택</span><i aria-hidden="true">›</i></span>
+            <span class="choice-action-row"><span>강화 선택</span><i class="choice-forward-icon" aria-hidden="true"></i></span>
           </span>
         </button>
       `;
@@ -2893,7 +3394,7 @@ function renderMapChoices(room) {
             </span>
             <strong>${escapeHtml(title)}</strong>
             <span>${escapeHtml(description)}</span>
-            <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i>${voteLocked ? "LOCKED" : "CLICK"}</i></span>
+            <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i class="material-symbols-rounded" aria-hidden="true">${voteLocked ? "lock" : "ads_click"}</i></span>
           </button>
         `;
       })
@@ -2981,7 +3482,7 @@ function renderMapChoicesV2(room) {
           </span>
           <strong>${escapeHtml(title)}</strong>
           <span>${escapeHtml(description)}</span>
-          <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i>${voteLocked ? "LOCKED" : "CLICK"}</i></span>
+          <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i class="material-symbols-rounded" aria-hidden="true">${voteLocked ? "lock" : "ads_click"}</i></span>
         </button>
       `;
     })
@@ -3056,9 +3557,6 @@ function renderMapBoard(stageMap, selfVote, voteLocked = false) {
           const position = positions.get(node.id);
           const style = `left:${position.x}%;top:${position.y}%`;
           const votes = node.votes || 0;
-          const traitName = node.trait?.name || "";
-          const modifierName = node.modifier?.name || "";
-          const nodeCaption = node.boss ? node.boss.name : `${traitName} · ${modifierName}`;
           const stage = getStageNodeMeta(node);
           const nodeCaptionV2 = node.boss ? node.boss.name : formatStageNodeLabel(node);
       const cls = [
@@ -3148,7 +3646,6 @@ function formatStageNodeLabel(nodeOrKind) {
 function getStageNodeDescription(node) {
   const stage = getStageNodeMeta(node);
   const parts = [stage.text];
-  if (node?.trait?.name && stage.kind !== "reward" && stage.kind !== "blockade") parts.push(node.trait.name);
   if (node?.modifier?.id && node.modifier.id !== "safe_path" && !["reward", "blockade", "defense", "miniboss"].includes(stage.kind)) {
     parts.push(node.modifier.name);
   }
@@ -3169,7 +3666,7 @@ function getMapChoicesRenderKey(choices, visibleVote, serverVote, localVoteFresh
     choices
       .map(
         (choice) =>
-          `${choice.id}:${choice.kind}:${choice.votes || 0}:${choice.trait?.name || ""}:${choice.modifier?.name || ""}:${
+          `${choice.id}:${choice.kind}:${choice.votes || 0}:${choice.modifier?.name || ""}:${
             choice.boss?.id || ""
           }:${choice.stage?.label || ""}:${choice.stage?.resolvedLabel || ""}`
       )
@@ -3414,43 +3911,9 @@ function renderRunContextHud(nextState) {
   const survival = room.survival || null;
   const duration = Math.max(1, Number(survival?.duration || 540));
   const elapsed = Math.max(0, Math.min(duration, Number(survival?.elapsed || 0)));
-  const objective = room.objective || {};
-  const phase = survival?.executionBossActive
-    ? { kicker: "FATE EXECUTION", title: "운명의 집행자" }
-    : survival?.executionPending
-      ? { kicker: "FINAL PHASE", title: "운명의 관문" }
-      : survival?.bossActive
-        ? { kicker: "BOSS CHECKPOINT", title: objective.label || "체크포인트 보스" }
-        : room.abyssDecision
-          ? { kicker: "ABYSS DECISION", title: "탈출 또는 심연 진입" }
-          : room.status === "map"
-            ? { kicker: "ROUTE VOTE", title: objective.label || "다음 경로 선택" }
-            : room.status === "advancement"
-              ? { kicker: "LEVEL UP", title: "스킬 강화 선택" }
-              : { kicker: "SURVIVAL", title: objective.label || room.waveTrait?.name || "생존" };
-
-  if (runPhaseKicker) runPhaseKicker.textContent = phase.kicker;
-  if (runObjectiveTitle) runObjectiveTitle.textContent = phase.title;
-  if (runObjectiveText) runObjectiveText.textContent = objective.text || room.stage?.text || "";
-  if (runTimer) runTimer.textContent = survival ? formatDuration(elapsed) : `STAGE ${Math.max(1, Number(room.wave || 1))}`;
-  if (runTimerMax) runTimerMax.textContent = survival ? ` / ${formatDuration(duration)}` : "";
-  if (runProgressBar) {
-    const routeDepth = Math.max(0, Number(room.stageMap?.currentDepth || room.stage?.depth || 0));
-    const routeMax = Math.max(1, Number(room.stageMap?.depth || 8));
-    const progress = survival ? elapsed / duration : routeDepth / routeMax;
-    runProgressBar.style.width = `${Math.round(clamp01(progress) * 100)}%`;
-  }
-  if (runModifiers) {
-    const challengeLabels = { daily: "일일", weekly: "주간" };
-    const ruleLabels = { venom_week: "맹독 주간", ember_week: "화염 주간", construct_week: "자동화 주간" };
-    const chips = [
-      Number(room.ascensionLevel || 0) > 0 ? `승천 ${room.ascensionLevel}` : "",
-      Number(room.abyssDepth || 0) > 0 ? `심연 ${room.abyssDepth}층` : "",
-      challengeLabels[room.challengeMode] ? `${challengeLabels[room.challengeMode]} 도전` : "",
-      ruleLabels[room.challengeRuleId] || ""
-    ].filter(Boolean);
-    runModifiers.innerHTML = chips.map((label) => `<span>${escapeHtml(label)}</span>`).join("");
-  }
+  if (runTimer) runTimer.textContent = formatDuration(elapsed);
+  if (runTimerMax) runTimerMax.textContent = `/ ${formatDuration(duration)}`;
+  if (runAscension) runAscension.textContent = `승천 ${Math.max(0, Number(room.ascensionLevel || 0))}`;
 }
 
 function getDisplayedRunRewards(result) {
@@ -3570,12 +4033,6 @@ function renderBanner(nextState) {
     return;
   }
 
-  if (nextState.room.waveTrait && nextState.room.status === "combat" && nextState.room.wave <= 1) {
-    centerBanner.textContent = `${nextState.room.waveTrait.name}: ${nextState.room.waveTrait.text}`;
-    centerBanner.classList.remove("hidden");
-    return;
-  }
-
   centerBanner.classList.add("hidden");
 }
 
@@ -3586,6 +4043,7 @@ function syncVisuals(nextState) {
   syncVisualMap(visuals.hazards, nextState.hazards || []);
   syncVisualMap(visuals.chests, nextState.relicChests || []);
   syncVisualMap(visuals.xpOrbs, nextState.xpOrbs || []);
+  syncVisualMap(visuals.fieldPickups, nextState.fieldPickups || []);
 }
 
 function syncVisualMap(map, entities) {
@@ -3632,6 +4090,7 @@ function updateVisuals(dt) {
   updateEntityVisuals(visuals.hazards, state.hazards || [], 18, dt);
   updateEntityVisuals(visuals.chests, state.relicChests || [], 18, dt);
   updateEntityVisuals(visuals.xpOrbs, state.xpOrbs || [], 24, dt);
+  updateEntityVisuals(visuals.fieldPickups, state.fieldPickups || [], 24, dt);
   updateFloatingEffects(dt);
 }
 
@@ -3979,6 +4438,7 @@ function frame() {
   } else {
     ctx.clearRect(0, 0, viewW, viewH);
   }
+  syncLobbySkillPreviewSurface();
 
   animationFrameId = requestAnimationFrame(frame);
 }
@@ -4008,6 +4468,7 @@ function drawGame() {
   drawHazards();
   drawXpOrbs();
   drawChests();
+  drawFieldPickups();
   drawProjectiles();
   drawEnemies();
   drawPlayers();
@@ -7250,8 +7711,7 @@ function drawEngineerTurretHazard(x, y, hazard) {
 function drawEngineerMineHazard(x, y, hazard) {
   const style = String(hazard.style || "");
   const charged = style.includes("charged");
-  const dashMine = style.includes("dash");
-  const color = dashMine ? "#facc15" : charged ? "#c084fc" : hazard.color || classColors.engineer;
+  const color = charged ? "#c084fc" : hazard.color || classColors.engineer;
   const armed = hazard.armed || Number(hazard.armTime || 0) <= 0;
   const armTimeMax = Math.max(0.1, Number(hazard.armTimeMax || 0));
   const build = armed ? 1 : clamp01(1 - Number(hazard.armTime || 0) / armTimeMax);
@@ -7282,15 +7742,6 @@ function drawEngineerMineHazard(x, y, hazard) {
     ctx.beginPath();
     ctx.arc(0, 0, r * 1.42 * pulse, 0, Math.PI * 2);
     ctx.stroke();
-  }
-  if (dashMine) {
-    ctx.fillStyle = hexToRgba("#fde68a", armed ? 0.78 : 0.38);
-    ctx.beginPath();
-    ctx.moveTo(-r * 0.72, r * 0.24);
-    ctx.lineTo(r * 0.74, 0);
-    ctx.lineTo(-r * 0.72, -r * 0.24);
-    ctx.closePath();
-    ctx.fill();
   }
   ctx.strokeStyle = armed ? "#fef3c7" : "rgba(226,232,240,0.7)";
   ctx.lineWidth = 2;
@@ -9531,6 +9982,133 @@ function drawMeteorHazard(x, y, hazard) {
   ctx.fill();
 }
 
+function drawFieldPickups() {
+  const equipmentRarities = {
+    common: { color: "#cbd5e1", core: "#475569", rank: 0 },
+    rare: { color: "#60a5fa", core: "#1e3a8a", rank: 1 },
+    epic: { color: "#c084fc", core: "#581c87", rank: 2 },
+    legendary: { color: "#fbbf24", core: "#78350f", rank: 3 },
+    mythic: { color: "#fb7185", core: "#881337", rank: 4 },
+  };
+  for (const pickup of state.fieldPickups || []) {
+    const position = getVisualPosition(visuals.fieldPickups, pickup);
+    const x = position.x;
+    const y = position.y + Math.sin(performance.now() / 170 + Number(pickup.id || 0)) * 2;
+    ctx.save();
+    ctx.lineCap = "round";
+    if (pickup.type === "health_potion") {
+      ctx.translate(x, y);
+      ctx.rotate(-0.55);
+      ctx.fillStyle = "rgba(5, 4, 3, 0.24)";
+      ctx.beginPath();
+      ctx.ellipse(-1, 10, 14, 5.5, 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#6b4428";
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(1, 0);
+      ctx.lineTo(17, 0);
+      ctx.stroke();
+      ctx.strokeStyle = "#fff3d6";
+      ctx.lineWidth = 4.2;
+      ctx.stroke();
+      ctx.fillStyle = "#fff3d6";
+      ctx.strokeStyle = "#6b4428";
+      ctx.lineWidth = 1.3;
+      for (const knobY of [-3.4, 3.4]) {
+        ctx.beginPath();
+        ctx.arc(18, knobY, 3.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#b45309";
+      ctx.strokeStyle = "#3f1d0b";
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(-14, -3);
+      ctx.bezierCurveTo(-14, -9, -7, -13, -2, -11);
+      ctx.bezierCurveTo(4, -10, 7, -5, 5, 3);
+      ctx.bezierCurveTo(2, 9, -8, 12, -14, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeStyle = "#fbbf24";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(-11, -2);
+      ctx.quadraticCurveTo(-7, -9, 1, -7);
+      ctx.stroke();
+      ctx.rotate(0.55);
+      ctx.strokeStyle = "#86efac";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-15, -15);
+      ctx.lineTo(-9, -15);
+      ctx.moveTo(-12, -18);
+      ctx.lineTo(-12, -12);
+      ctx.stroke();
+    } else if (pickup.type === "equipment") {
+      const rarity = equipmentRarities[pickup.rarity] || equipmentRarities.common;
+      ctx.translate(x, y);
+      ctx.fillStyle = "rgba(5, 7, 10, 0.34)";
+      ctx.beginPath();
+      ctx.ellipse(0, 10, 14 + rarity.rank, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (rarity.rank > 0) {
+        ctx.strokeStyle = hexToRgba(rarity.color, 0.16 + rarity.rank * 0.035);
+        ctx.lineWidth = 4 + rarity.rank * 1.35;
+        ctx.beginPath();
+        ctx.moveTo(0, -21 - rarity.rank * 7);
+        ctx.lineTo(0, 7);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#111827";
+      ctx.strokeStyle = rarity.color;
+      ctx.lineWidth = 2.2 + rarity.rank * 0.25;
+      ctx.beginPath();
+      ctx.moveTo(-11, -6);
+      ctx.lineTo(-5, -11);
+      ctx.lineTo(0, -8);
+      ctx.lineTo(5, -11);
+      ctx.lineTo(11, -6);
+      ctx.lineTo(8, 9);
+      ctx.lineTo(0, 13);
+      ctx.lineTo(-8, 9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = rarity.core;
+      ctx.beginPath();
+      ctx.moveTo(-5.5, -3);
+      ctx.lineTo(0, 1);
+      ctx.lineTo(5.5, -3);
+      ctx.lineTo(4, 5);
+      ctx.lineTo(0, 8);
+      ctx.lineTo(-4, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = rarity.color;
+      for (let i = 0; i < rarity.rank; i += 1) {
+        const side = i % 2 === 0 ? -1 : 1;
+        const row = Math.floor(i / 2);
+        ctx.save();
+        ctx.translate(side * (15 + row * 3), -8 - row * 8);
+        ctx.rotate(Math.PI / 4);
+        ctx.fillRect(-2, -2, 4, 4);
+        ctx.restore();
+      }
+    } else {
+      ctx.strokeStyle = "#67e8f9";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(x, y - 1, 8, 0.08, Math.PI - 0.08);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
 function drawBurstRingEffect(effect, color, progress) {
   if (effect.style === "meteor_impact") {
     drawMeteorImpactEffect(effect, color, progress);
@@ -9552,7 +10130,6 @@ function drawBurstRingEffect(effect, color, progress) {
   if (
     effect.style === "engineer_missile_explosion" ||
     effect.style === "drone_kamikaze_explosion" ||
-    effect.style === "engineer_dash_mine_blast" ||
     effect.style === "engineer_charged_mine_blast"
   ) {
     drawEngineerBlastEffect(effect, color, progress);
@@ -9684,10 +10261,9 @@ function drawEngineerBlastEffect(effect, color, progress) {
   const style = String(effect.style || "");
   const missile = style.includes("missile") || style.includes("kamikaze");
   const charged = style.includes("charged");
-  const dashMine = style.includes("dash");
   const radius = effect.radius || (missile ? 132 : 108);
   const alpha = 1 - progress;
-  const outer = missile ? "#f97316" : charged ? "#c084fc" : dashMine ? "#facc15" : color;
+  const outer = missile ? "#f97316" : charged ? "#c084fc" : color;
   const core = missile ? "#fff7ed" : charged ? "#f5d0fe" : "#fef3c7";
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
@@ -10609,7 +11185,7 @@ function drawMeteorEffect(effect, color, progress) {
 }
 
 function drawTrapEffect(effect, color, progress) {
-  if (effect.style === "shock_mine" || effect.style === "charged_mine" || effect.style === "engineer_dash_mine") {
+  if (effect.style === "shock_mine" || effect.style === "charged_mine") {
     drawShockMineTrapEffect(effect, color, progress);
     return;
   }
@@ -12317,7 +12893,6 @@ function drawAim(camera) {
 
 function drawSelfGauges(x, y, player) {
   const width = 88;
-  const hpRatio = clamp01(player.hp / Math.max(1, player.maxHp));
   const dashMax = Math.max(0.1, Number(player.stats?.dashCooldownMax || 1.15));
   const dashRatio = player.dashReady ? 1 : clamp01(1 - Number(player.dashCooldown || 0) / dashMax);
   const dashMaxCharges = Math.max(1, Math.round(Number(player.dashMaxCharges || 1)));
@@ -12333,7 +12908,7 @@ function drawSelfGauges(x, y, player) {
   ctx.textBaseline = "middle";
   ctx.fillText(player.name.slice(0, 10), x, y - 8);
 
-  drawWorldGauge(x - width / 2 + 7, y + 1, width - 14, 6, hpRatio, "#c85d56", "#c9824c");
+  drawHealthShieldGauge(x - width / 2 + 7, y + 1, width - 14, 6, player.hp, player.maxHp, player.shield, "#c9824c");
   if (dashMaxCharges > 1) {
     drawDashChargeGauge(x - width / 2 + 7, y + 10, width - 14, 4, player);
   } else {
@@ -12403,12 +12978,28 @@ function drawDashChargeGauge(x, y, width, height, player) {
 function drawEnemyBar(enemy, x, y) {
   const width = enemy.radius * 2.1;
   const barY = y - enemy.radius - 13;
-  ctx.fillStyle = "rgba(17,17,15,0.72)";
-  roundRect(x - width / 2, barY, width, 5, 3);
+  drawHealthShieldGauge(x - width / 2, barY, width, 5, enemy.hp, enemy.maxHp, enemy.barrier, "#c85d56");
+}
+
+function drawHealthShieldGauge(x, y, width, height, hp, maxHp, shield = 0, hpColor = "#c85d56") {
+  const safeMaxHp = Math.max(1, Number(maxHp) || 1);
+  const hpRatio = clamp01(Number(hp) / safeMaxHp);
+  const shieldRatio = Math.max(0, Math.min(0.5, Number(shield) / safeMaxHp || 0));
+  const hpWidth = width * hpRatio;
+  const shieldWidth = width * shieldRatio;
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  roundRect(x, y, width, height, height / 2);
   ctx.fill();
-  ctx.fillStyle = "#c85d56";
-  roundRect(x - width / 2, barY, width * (enemy.hp / enemy.maxHp), 5, 3);
-  ctx.fill();
+  if (hpWidth > 0) {
+    ctx.fillStyle = hpColor;
+    roundRect(x, y, hpWidth, height, height / 2);
+    ctx.fill();
+  }
+  if (shieldWidth > 0) {
+    ctx.fillStyle = "#67e8f9";
+    roundRect(x + hpWidth, y, shieldWidth, height, height / 2);
+    ctx.fill();
+  }
 }
 
 function drawVignette() {

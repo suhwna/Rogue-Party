@@ -1,4 +1,5 @@
 (() => {
+  const skinEffects = window.RoguePixiSkinEffects || {};
   const CLASS_NEON = Object.freeze({
     novice: { color: "#d9e2ef", dark: "#111827", accent: "#94a3b8", glyph: "?" },
     warrior: { color: "#ff4d6d", dark: "#261016", accent: "#ffd166", glyph: "W" },
@@ -164,6 +165,60 @@
     drawTextGlyph(renderer, meta.glyph, pos.x, pos.y + bob + radius * 0.1, "#e0f2fe", alpha * 0.5, zIndex + 20, 11);
   }
 
+  const GEAR_RARITY_COLORS = Object.freeze({
+    common: "#cbd5e1", rare: "#38bdf8", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185",
+  });
+
+  function renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, zIndex) {
+    const gear = Array.isArray(player.gearAppearance) ? player.gearAppearance : [];
+    if (!gear.length) return;
+    const angle = Number(player.facing || 0);
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const centerY = pos.y + bob + 2;
+    const bySlot = new Map(gear.map((entry) => [entry.slot, entry]));
+    const colorFor = (entry) => GEAR_RARITY_COLORS[entry?.rarity] || GEAR_RARITY_COLORS.common;
+    const armor = bySlot.get("armor");
+    if (armor) {
+      const color = colorFor(armor);
+      for (const side of [-1, 1]) {
+        const sx = pos.x + px * side * radius * 0.76 - ux * radius * 0.08;
+        const sy = centerY + py * side * radius * 0.76 - uy * radius * 0.08;
+        renderer.drawGfxDiamond(sx, sy, radius * 0.24, color, alpha * 0.82, zIndex + 1, angle + Math.PI / 4, "#f8fafc");
+      }
+    }
+    const weapon = bySlot.get("weapon");
+    if (weapon) {
+      const color = colorFor(weapon);
+      const sx = pos.x - px * radius * 0.86 - ux * radius * 0.2;
+      const sy = centerY - py * radius * 0.86 - uy * radius * 0.2;
+      renderer.drawGfxLine(sx, sy, sx + ux * radius * 1.18, sy + uy * radius * 1.18, 3.2, color, alpha * 0.72, zIndex + 2, "add");
+      renderer.drawGfxDiamond(sx + ux * radius * 1.22, sy + uy * radius * 1.22, radius * 0.12, "#f8fafc", alpha * 0.88, zIndex + 3, angle);
+    }
+    const amulet = bySlot.get("amulet");
+    if (amulet) {
+      const color = colorFor(amulet);
+      renderer.drawGfxDiamond(pos.x + ux * radius * 0.18, centerY + uy * radius * 0.18, radius * 0.14, color, alpha * 0.9, zIndex + 4, now / 900, "#ffffff");
+    }
+    const core = bySlot.get("core");
+    if (core) {
+      const color = colorFor(core);
+      renderer.drawGfxCircle(pos.x - ux * radius * 0.52, centerY - uy * radius * 0.52, radius * 0.12, color, alpha * 0.48, "#ffffff", alpha * 0.68, 1.4, zIndex + 4, "add", 12);
+    }
+    const setCounts = gear.reduce((counts, entry) => {
+      if (entry.setId) counts[entry.setId] = (counts[entry.setId] || 0) + 1;
+      return counts;
+    }, {});
+    const completeSet = Object.entries(setCounts).find(([, count]) => count >= 4);
+    if (completeSet) {
+      const pulse = 0.74 + Math.sin(now / 420) * 0.08;
+      const bestGear = gear.slice().sort((a, b) => Object.keys(GEAR_RARITY_COLORS).indexOf(b.rarity) - Object.keys(GEAR_RARITY_COLORS).indexOf(a.rarity))[0];
+      renderer.drawGfxRuneRing(pos.x, centerY, radius * 1.24, colorFor(bestGear), alpha * pulse * 0.42, zIndex + 5, now / 1200, 4);
+    }
+  }
+
   function renderPlayerAttackEffect(renderer, player, pos, face, bob) {
     const age = Date.now() - Number(player.lastAttackAt || 0);
     if (age >= 160) return;
@@ -302,16 +357,30 @@
     }
 
     drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, z + 8);
-    renderPlayerAttackEffect(renderer, player, pos, face, bob);
+    renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, z + 29);
+    const skinAttackOverride = skinEffects.renderPlayerAttackOverride?.(renderer, player, pos, radius, now, bob, z);
+    if (!skinAttackOverride) renderPlayerAttackEffect(renderer, player, pos, face, bob);
+    skinEffects.renderPlayerBodyEffect?.(renderer, player, pos, radius, now, bob, z);
 
     if (player.shield > 0) renderer.drawGfxCircle(pos.x, pos.y + bob + 2, radius * 1.42, "#000000", 0, "#67e8f9", 0.46, 4, z + 30, "add", 26);
+    const poisonStacks = Math.max(0, Math.min(3, Math.floor(Number(player.poisonStacks || 0))));
+    for (let i = 0; i < poisonStacks; i += 1) {
+      const dotX = pos.x + (i - (poisonStacks - 1) / 2) * 10;
+      const dotY = pos.y - radius * 1.72 + Math.sin(now / 150 + i) * 1.4;
+      renderer.drawGfxCircle(dotX, dotY, 4.2, "#365314", 0.82, "#a3ff4f", 0.9, 1.5, z + 34 + i, "add", 10);
+    }
     if (player.statusEffects?.includes("taunt_guard")) renderer.drawGfxRuneRing(pos.x, pos.y + bob + 2, radius * 1.78, "#ff4d6d", 0.34, z + 31, now / 440, 10);
     if (player.statusEffects?.includes("mecha")) {
       renderMechaSuitAura(renderer, player, pos, radius, now, bob, z);
     }
     if (player.id === selfId) {
-      renderer.bar(pos.x, pos.y - 56 * scaleBase, 86, 8, player.hp / player.maxHp, "#ff4d6d");
-      if (player.shield > 0) renderer.bar(pos.x, pos.y - 46 * scaleBase, 86, 4, player.shield / Math.max(1, player.maxHp * 0.45), "#67e8f9");
+      renderer.healthShieldBar(pos.x, pos.y - 56 * scaleBase, 86, 8, player.hp, player.maxHp, player.shield, "#ff4d6d");
+      const dashMax = Math.max(0.1, Number(player.stats?.dashCooldownMax || 1.35));
+      const maxCharges = Math.max(1, Math.floor(Number(player.dashMaxCharges || 1)));
+      const charges = Math.max(0, Math.min(maxCharges, Math.floor(Number(player.dashCharges || 0))));
+      const recharge = Math.max(0, 1 - Number(player.dashRechargeCooldown || player.dashCooldown || 0) / dashMax);
+      const dashRatio = maxCharges > 1 ? Math.min(1, (charges + (charges < maxCharges ? recharge : 0)) / maxCharges) : player.dashReady ? 1 : recharge;
+      renderer.bar(pos.x, pos.y - 45 * scaleBase, 86, 4, dashRatio, "#8aa8bd");
     }
   }
 

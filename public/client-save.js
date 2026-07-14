@@ -13,13 +13,26 @@
     "assassin",
   ];
   const MASTERY_NODE_DEFS = Object.freeze([
-    { id: "attack", label: "공격", description: "피해량이 완만하게 증가합니다." },
-    { id: "survival", label: "생존", description: "최대 체력과 일부 방어 능력이 증가합니다." },
-    { id: "speed", label: "속도", description: "이동 속도와 스킬 회전율이 좋아집니다." },
-    { id: "special", label: "직업 특화", description: "직업 고유 강점이 조금씩 강화됩니다." },
+    { id: "damage", label: "공격력", description: "모든 공격의 피해량이 증가합니다." },
+    { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
+    { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
+    { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
+    { id: "cooldown", label: "쿨타임 감소", description: "기본 공격과 스킬의 쿨타임이 감소합니다." },
+    { id: "critDamage", label: "치명타 피해", description: "치명타로 주는 피해가 증가합니다." },
+    { id: "area", label: "범위", description: "범위 공격과 폭발의 크기가 증가합니다." },
   ]);
   const NODE_IDS = MASTERY_NODE_DEFS.map((node) => node.id);
+  const LEGACY_NODE_FALLBACKS = Object.freeze({
+    damage: "attack",
+    maxHp: "survival",
+    regen: "survival",
+    moveSpeed: "speed",
+    cooldown: "speed",
+    critDamage: "attack",
+    area: "special",
+  });
   const MAX_ASCENSION_LEVEL = 25;
+  const SHARED_MASTERY_KEY = "shared";
 
   function createDefaultMasteryEntry() {
     return {
@@ -32,10 +45,7 @@
   }
 
   function createDefaultMasteryMap() {
-    return CLASS_IDS.reduce((next, classId) => {
-      next[classId] = createDefaultMasteryEntry();
-      return next;
-    }, {});
+    return { [SHARED_MASTERY_KEY]: createDefaultMasteryEntry() };
   }
 
   const defaultProgress = {
@@ -121,7 +131,8 @@
   function normalizeMasteryEntry(entry) {
     const sourceNodes = entry && typeof entry === "object" && entry.nodes && typeof entry.nodes === "object" ? entry.nodes : {};
     const nodes = NODE_IDS.reduce((next, nodeId) => {
-      next[nodeId] = normalizeInteger(sourceNodes[nodeId], 0, 0, Number.MAX_SAFE_INTEGER);
+      const legacyNodeId = LEGACY_NODE_FALLBACKS[nodeId];
+      next[nodeId] = normalizeInteger(sourceNodes[nodeId] ?? sourceNodes[legacyNodeId], 0, 0, Number.MAX_SAFE_INTEGER);
       return next;
     }, {});
     const spent = NODE_IDS.reduce((sum, nodeId) => sum + nodes[nodeId], 0);
@@ -132,10 +143,17 @@
   }
 
   function normalizeMasteryMap(mastery) {
-    return CLASS_IDS.reduce((next, classId) => {
-      next[classId] = normalizeMasteryEntry(mastery?.[classId]);
-      return next;
-    }, {});
+    const source = mastery && typeof mastery === "object" ? mastery : {};
+    if (source[SHARED_MASTERY_KEY]) {
+      return { [SHARED_MASTERY_KEY]: normalizeMasteryEntry(source[SHARED_MASTERY_KEY]) };
+    }
+    const shared = createDefaultMasteryEntry();
+    for (const classId of CLASS_IDS) {
+      const legacy = normalizeMasteryEntry(source[classId]);
+      for (const nodeId of NODE_IDS) shared.nodes[nodeId] += legacy.nodes[nodeId] || 0;
+    }
+    shared.points = NODE_IDS.reduce((sum, nodeId) => sum + shared.nodes[nodeId], 0);
+    return { [SHARED_MASTERY_KEY]: shared };
   }
 
   function normalizeProgress(progress) {
@@ -312,26 +330,24 @@
   }
 
   function getMasteryNodeCost(progress, classId, nodeId) {
-    const safeClassId = CLASS_IDS.includes(classId) ? classId : "warrior";
-    const safeNodeId = NODE_IDS.includes(nodeId) ? nodeId : "attack";
+    const safeNodeId = NODE_IDS.includes(nodeId) ? nodeId : "damage";
     const normalized = normalizeProgress(progress);
-    const entry = normalized.mastery[safeClassId] || createDefaultMasteryEntry();
+    const entry = normalized.mastery[SHARED_MASTERY_KEY] || createDefaultMasteryEntry();
     const nodeLevel = entry.nodes[safeNodeId] || 0;
     const totalPoints = NODE_IDS.reduce((sum, id) => sum + (entry.nodes[id] || 0), 0);
-    return 16 + nodeLevel * 8 + Math.floor(totalPoints * 2.2) + Math.floor(Math.pow(nodeLevel, 1.45) * 3);
+    return 8 + nodeLevel * 4 + Math.floor(totalPoints * 0.8) + Math.floor(Math.pow(nodeLevel, 1.25) * 1.2);
   }
 
   function spendMasteryPoint(progress, classId, nodeId) {
-    const safeClassId = CLASS_IDS.includes(classId) ? classId : "warrior";
-    const safeNodeId = NODE_IDS.includes(nodeId) ? nodeId : "attack";
+    const safeNodeId = NODE_IDS.includes(nodeId) ? nodeId : "damage";
     const next = normalizeProgress(progress);
-    const cost = getMasteryNodeCost(next, safeClassId, safeNodeId);
+    const cost = getMasteryNodeCost(next, SHARED_MASTERY_KEY, safeNodeId);
     if (next.currencies.abyssShards < cost) {
       return { progress: next, spent: false, cost };
     }
     next.currencies.abyssShards -= cost;
-    next.mastery[safeClassId].nodes[safeNodeId] += 1;
-    next.mastery[safeClassId].points += 1;
+    next.mastery[SHARED_MASTERY_KEY].nodes[safeNodeId] += 1;
+    next.mastery[SHARED_MASTERY_KEY].points += 1;
     next.statistics.masteryPointsSpent += 1;
     return { progress: normalizeProgress(next), spent: true, cost };
   }
@@ -347,7 +363,7 @@
 
   function growthCurve(level) {
     const safeLevel = normalizeInteger(level, 0, 0, Number.MAX_SAFE_INTEGER);
-    return Math.log1p(safeLevel) * 1.65;
+    return Math.log1p(safeLevel) * 2.4;
   }
 
   function roundBonus(value) {
@@ -355,51 +371,40 @@
   }
 
   function calculateGrowthBonuses(classId, nodes) {
-    const safeClassId = CLASS_IDS.includes(classId) ? classId : "warrior";
-    const attack = growthCurve(nodes?.attack || 0);
-    const survival = growthCurve(nodes?.survival || 0);
-    const speed = growthCurve(nodes?.speed || 0);
-    const special = growthCurve(nodes?.special || 0);
+    const damage = growthCurve(nodes?.damage || 0);
+    const maxHp = growthCurve(nodes?.maxHp || 0);
+    const regen = growthCurve(nodes?.regen || 0);
+    const moveSpeed = growthCurve(nodes?.moveSpeed || 0);
+    const cooldown = growthCurve(nodes?.cooldown || 0);
+    const critDamage = growthCurve(nodes?.critDamage || 0);
+    const area = growthCurve(nodes?.area || 0);
     const bonuses = {
-      damageMul: 1 + Math.min(0.45, attack * 0.018),
-      maxHpMul: 1 + Math.min(0.42, survival * 0.02),
-      speedMul: 1 + Math.min(0.2, speed * 0.011),
-      skillCooldownMul: 1 - Math.min(0.22, speed * 0.012),
+      damageMul: 1 + Math.min(0.6, damage * 0.025),
+      maxHpMul: 1 + Math.min(0.58, maxHp * 0.027),
+      regenBonus: Math.min(2.5, regen * 0.08),
+      speedMul: 1 + Math.min(0.26, moveSpeed * 0.014),
+      skillCooldownMul: 1 - Math.min(0.28, cooldown * 0.016),
       armorBonus: 0,
       critChanceBonus: 0,
+      critDamageMul: 1 + Math.min(0.45, critDamage * 0.018),
       projectileSpeedMul: 1,
       poisonDurationMul: 1,
       skillDamageMul: 1,
-      areaMul: 1,
+      areaMul: 1 + Math.min(0.24, area * 0.012),
       constructDamageMul: 1,
       constructDurationMul: 1,
       droneCooldownMul: 1,
       tauntRangeMul: 1,
       meleeRangeMul: 1,
     };
-    if (safeClassId === "warrior") {
-      bonuses.armorBonus = Math.min(4, survival * 0.12 + special * 0.18);
-      bonuses.tauntRangeMul = 1 + Math.min(0.28, special * 0.018);
-      bonuses.meleeRangeMul = 1 + Math.min(0.16, special * 0.011);
-    } else if (safeClassId === "ranger") {
-      bonuses.critChanceBonus = Math.min(0.16, special * 0.01);
-      bonuses.projectileSpeedMul = 1 + Math.min(0.28, special * 0.02);
-      bonuses.poisonDurationMul = 1 + Math.min(0.35, special * 0.025);
-    } else if (safeClassId === "mage") {
-      bonuses.skillDamageMul = 1 + Math.min(0.36, special * 0.022);
-      bonuses.areaMul = 1 + Math.min(0.24, special * 0.017);
-      bonuses.skillCooldownMul *= 1 - Math.min(0.12, special * 0.006);
-    } else if (safeClassId === "engineer") {
-      bonuses.constructDamageMul = 1 + Math.min(0.38, special * 0.023);
-      bonuses.constructDurationMul = 1 + Math.min(0.34, special * 0.023);
-      bonuses.droneCooldownMul = 1 - Math.min(0.16, special * 0.009);
-    }
     bonuses.damageMul = roundBonus(bonuses.damageMul);
     bonuses.maxHpMul = roundBonus(bonuses.maxHpMul);
+    bonuses.regenBonus = roundBonus(bonuses.regenBonus);
     bonuses.speedMul = roundBonus(bonuses.speedMul);
     bonuses.skillCooldownMul = roundBonus(Math.max(0.62, bonuses.skillCooldownMul));
     bonuses.armorBonus = roundBonus(bonuses.armorBonus);
     bonuses.critChanceBonus = roundBonus(bonuses.critChanceBonus);
+    bonuses.critDamageMul = roundBonus(bonuses.critDamageMul);
     bonuses.projectileSpeedMul = roundBonus(bonuses.projectileSpeedMul);
     bonuses.poisonDurationMul = roundBonus(bonuses.poisonDurationMul);
     bonuses.skillDamageMul = roundBonus(bonuses.skillDamageMul);
@@ -412,10 +417,25 @@
     return bonuses;
   }
 
+  function calculateAccountLevelBonuses(accountLevel) {
+    const gainedLevels = Math.max(0, normalizeInteger(accountLevel, 1, 1, Number.MAX_SAFE_INTEGER) - 1);
+    return {
+      damageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
+      maxHpMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
+      regenBonus: roundBonus(Math.min(2, gainedLevels * 0.04)),
+      speedMul: roundBonus(1 + Math.min(0.15, gainedLevels * 0.003)),
+      skillCooldownMul: roundBonus(1 - Math.min(0.2, gainedLevels * 0.003)),
+      armorBonus: roundBonus(Math.min(6, gainedLevels * 0.12)),
+      critChanceBonus: roundBonus(Math.min(0.15, gainedLevels * 0.003)),
+      critDamageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
+      areaMul: roundBonus(1 + Math.min(0.25, gainedLevels * 0.005)),
+    };
+  }
+
   function getGrowthLoadout(progress, classId, ascensionLevel) {
     const normalized = normalizeProgress(progress);
     const safeClassId = CLASS_IDS.includes(classId) ? classId : "warrior";
-    const entry = normalized.mastery[safeClassId] || createDefaultMasteryEntry();
+    const entry = normalized.mastery[SHARED_MASTERY_KEY] || createDefaultMasteryEntry();
     const safeAscension = normalizeInteger(
       ascensionLevel ?? normalized.records.highestAscension,
       0,
@@ -429,6 +449,7 @@
       ascensionLevel: safeAscension,
       points: entry.points,
       nodes: { ...entry.nodes },
+      accountBonuses: calculateAccountLevelBonuses(normalized.account.level),
       bonuses: calculateGrowthBonuses(safeClassId, entry.nodes),
     };
   }
@@ -448,7 +469,7 @@
     const progressReward = Math.floor(stagesCleared * 5 + highestLevel * 2 + totalRelics * 3 + Math.sqrt(totalScore) * 0.42);
     const victoryReward = outcome === "victory" ? 45 : 0;
     const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
-    const ascensionMultiplier = 1 + ascensionLevel * 0.08;
+    const ascensionMultiplier = 1 + ascensionLevel * 0.1;
     const rawShards = Math.max(2, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier));
     const rawXp = Math.max(10, Math.floor(rawShards * 1.75 + stagesCleared * 3 + highestLevel * 6));
     const rewardBreakdown = [
@@ -554,6 +575,7 @@
     spendMasteryPoint,
     setHighestAscension,
     calculateGrowthBonuses,
+    calculateAccountLevelBonuses,
     getGrowthLoadout,
     getAccountXpToNext,
   };

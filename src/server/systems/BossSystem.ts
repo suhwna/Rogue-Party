@@ -22,6 +22,7 @@ export interface BossPhaseEnemyLike {
   readonly hp: number;
   readonly maxHp: number;
   readonly bossPhase: number;
+  readonly executionBoss?: boolean;
 }
 
 export interface BossPhaseTransition {
@@ -125,25 +126,62 @@ export function nextBossPattern(
 
 export function getBossPhaseTransition(enemy: BossPhaseEnemyLike): BossPhaseTransition | null {
   const hpRatio = enemy.hp / Math.max(1, enemy.maxHp);
-  if (hpRatio <= 0.7 && enemy.bossPhase < 2) {
+  if (enemy.executionBoss) {
+    if (hpRatio <= 0.8 && enemy.bossPhase < 2) {
+      return {
+        phase: 2,
+        cadenceMul: 0.82,
+        minCadence: 0.5,
+        damageMul: 1.05,
+        barrierRatio: 0.08,
+        barrierTime: 5.0,
+        warningRadiusBonus: 140,
+      };
+    }
+    if (hpRatio <= 0.55 && enemy.bossPhase < 3) {
+      return {
+        phase: 3,
+        cadenceMul: 0.8,
+        minCadence: 0.42,
+        damageMul: 1.05,
+        barrierRatio: 0.07,
+        barrierTime: 4.4,
+        warningRadiusBonus: 175,
+      };
+    }
+    if (hpRatio <= 0.28 && enemy.bossPhase < 4) {
+      return {
+        phase: 4,
+        cadenceMul: 0.78,
+        minCadence: 0.34,
+        damageMul: 1.06,
+        barrierRatio: 0.06,
+        barrierTime: 4.0,
+        warningRadiusBonus: 210,
+      };
+    }
+    return null;
+  }
+
+  if (hpRatio <= 0.72 && enemy.bossPhase < 2) {
     return {
       phase: 2,
-      cadenceMul: 0.9,
-      minCadence: 0.72,
-      damageMul: 1.08,
-      barrierRatio: 0.14,
-      barrierTime: 6.0,
+      cadenceMul: 0.86,
+      minCadence: 0.66,
+      damageMul: 1.06,
+      barrierRatio: 0.12,
+      barrierTime: 5.5,
       warningRadiusBonus: 120,
     };
   }
-  if (hpRatio <= 0.38 && enemy.bossPhase < 3) {
+  if (hpRatio <= 0.4 && enemy.bossPhase < 3) {
     return {
       phase: 3,
-      cadenceMul: 0.9,
-      minCadence: 0.7,
-      damageMul: 1.07,
-      barrierRatio: 0.11,
-      barrierTime: 5.0,
+      cadenceMul: 0.84,
+      minCadence: 0.56,
+      damageMul: 1.06,
+      barrierRatio: 0.1,
+      barrierTime: 4.6,
       warningRadiusBonus: 150,
     };
   }

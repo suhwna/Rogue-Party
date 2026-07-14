@@ -31,7 +31,7 @@
               </span>
               <strong>${escapeHtml(title)}</strong>
               <span>${escapeHtml(description)}</span>
-              <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i>${context.voteLocked ? "LOCKED" : "CLICK"}</i></span>
+              <span class="choice-action-row"><span>${escapeHtml(actionLabel)}</span><i class="material-symbols-rounded" aria-hidden="true">${context.voteLocked ? "lock" : "ads_click"}</i></span>
             </button>
           `;
         })

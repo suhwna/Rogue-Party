@@ -1,4 +1,5 @@
 (() => {
+  const skinEffects = window.RoguePixiSkinEffects || {};
   function hazardFlavor(hazard) {
     return `${hazard.type || ""} ${hazard.style || ""} ${hazard.damageType || ""}`.toLowerCase();
   }
@@ -112,17 +113,42 @@
     renderer.drawGfxLine(x - ux * size * 0.12 + px * size * 0.28, y - uy * size * 0.12 + py * size * 0.28, x + ux * size * 0.36 + px * size * 0.08, y + uy * size * 0.36 + py * size * 0.08, 1.6, "#fde68a", alpha * 0.28, z + 2, "add");
   }
 
-  function renderBeamHazard(renderer, hazard, state) {
+  function renderBeamHazard(renderer, hazard, state, now) {
     if (!hazard.length || !hazard.width) return false;
     const angle = hazard.angle || 0;
-    const half = hazard.length / 2;
-    const beamColor = state.flavor.includes("sniper") || state.flavor.includes("laser") || hazard.hostile ? "#ff2d55" : state.color;
-    const x1 = hazard.x - Math.cos(angle) * half;
-    const y1 = hazard.y - Math.sin(angle) * half;
-    const x2 = hazard.x + Math.cos(angle) * half;
-    const y2 = hazard.y + Math.sin(angle) * half;
-    renderer.drawGfxLine(x1, y1, x2, y2, Math.max(8, hazard.width * 1.8), beamColor, state.armed ? 0.2 : 0.12, hazard.y - 8, "add");
-    renderer.drawGfxLine(x1, y1, x2, y2, Math.max(3, hazard.width * 0.45), "#fee2e2", state.armed ? 0.5 : 0.25, hazard.y - 7, "add");
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const width = Math.max(8, Number(hazard.width) || 8);
+    const beamColor = state.color || "#ff2d55";
+    const armMax = Math.max(0.1, Number(hazard.armTimeMax || hazard.armTime || 1));
+    const charge = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
+    const pulse = 0.82 + Math.sin(now / 70 + Number(hazard.id || 0)) * 0.18;
+    const x1 = hazard.x;
+    const y1 = hazard.y;
+    const x2 = hazard.x + ux * hazard.length;
+    const y2 = hazard.y + uy * hazard.length;
+    const z = hazard.y - 8;
+
+    renderer.drawGfxLine(x1, y1, x2, y2, width * 2, "#300711", 0.045 + charge * 0.055, z - 3, "normal");
+    renderer.drawGfxLine(x1, y1, x2, y2, width * 1.82, beamColor, (0.07 + charge * 0.06) * pulse, z - 2, "add");
+    for (const side of [-1, 1]) {
+      renderer.drawGfxLine(
+        x1 + px * width * side,
+        y1 + py * width * side,
+        x2 + px * width * side,
+        y2 + py * width * side,
+        Math.max(2, width * 0.09),
+        beamColor,
+        0.34 + charge * 0.28,
+        z + side + 3,
+        "normal"
+      );
+    }
+    renderer.drawGfxLine(x1, y1, x2, y2, Math.max(2, width * 0.08), "#fff1f2", (0.28 + charge * 0.42) * pulse, z + 6, "add");
+    renderer.drawGfxCircle(x1, y1, width * (0.34 + charge * 0.18), "#3f0712", 0.42, beamColor, 0.58, 2, z + 7, "add", 12);
+    renderer.drawGfxCircle(x2, y2, Math.max(5, width * 0.16), beamColor, 0.12, "#fff1f2", 0.34, 1.5, z + 7, "add", 10);
     return true;
   }
 
@@ -340,6 +366,34 @@
     );
   }
 
+  function renderBossFieldJudgment(renderer, hazard, state, now) {
+    const armMax = Math.max(0.1, Number(hazard.armTimeMax || 1));
+    const progress = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
+    const pulse = 0.72 + Math.sin(now / 95) * 0.16;
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius, "#450a0a", 0.055 + progress * 0.045, state.color, 0.16 + progress * 0.18, 9, -10000, "normal", 96);
+    renderer.drawGfxRuneRing(hazard.x, hazard.y, Math.min(state.radius * 0.72, 680), state.color, (0.12 + progress * 0.2) * pulse, 9990, -now / 520, 18);
+  }
+
+  function renderBossSafeZone(renderer, hazard, state, now) {
+    const armMax = Math.max(0.1, Number(hazard.armTimeMax || 1));
+    const progress = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
+    const pulse = 0.9 + Math.sin(now / 120 + Number(hazard.id || 0)) * 0.06;
+    const radius = state.radius * pulse;
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius, "#083344", 0.2, "#67e8f9", 0.72, 6, hazard.y + 9000, "add", 48);
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.78, "#cffafe", 0.055 + progress * 0.025, "#ecfeff", 0.34, 2, hazard.y + 9001, "add", 40);
+    renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.62, "#a5f3fc", 0.38, hazard.y + 9002, now / 760, 12);
+  }
+
+  function renderBossSpiralEmitter(renderer, hazard, state, now) {
+    const spin = now / 260;
+    const z = hazard.y + 24;
+    for (let i = 0; i < 4; i += 1) {
+      const start = spin + i * Math.PI * 0.5;
+      renderer.drawGfxArc(hazard.x, hazard.y, state.radius * (0.48 + i * 0.1), start, start + 1.05, 4, state.color, 0.26, z + i, "add", 14);
+    }
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.24, "#14070b", 0.5, state.color, 0.5, 3, z + 6, "add", 16);
+  }
+
   function renderDefaultHazard(renderer, hazard, state, now) {
     const poison = state.flavor.includes("poison") || state.flavor.includes("acid") || state.flavor.includes("venom");
     const fire = state.flavor.includes("fire") || state.flavor.includes("flame") || state.flavor.includes("burn") || state.flavor.includes("meteor") || state.flavor.includes("bomber") || state.flavor.includes("blast");
@@ -357,7 +411,10 @@
 
   function renderHazard(renderer, hazard, now) {
     const state = hazardState(hazard, now);
-    if (renderBeamHazard(renderer, hazard, state)) return;
+    if (hazard.type === "boss_field_judgment") return renderBossFieldJudgment(renderer, hazard, state, now);
+    if (hazard.type === "boss_safe_zone") return renderBossSafeZone(renderer, hazard, state, now);
+    if (hazard.type === "boss_spiral_emitter") return renderBossSpiralEmitter(renderer, hazard, state, now);
+    if (renderBeamHazard(renderer, hazard, state, now)) return;
     drawHostileHazardBoundary(renderer, hazard, state, now);
     if (hazard.type === "engineer_turret") return renderEngineerTurret(renderer, hazard, state, now);
     if (hazard.type === "engineer_drone") return renderEngineerDrone(renderer, hazard, now);
@@ -375,7 +432,10 @@
   }
 
   function renderHazards(renderer, hazards, now) {
-    for (const hazard of hazards) renderHazard(renderer, hazard, now);
+    for (const hazard of hazards) {
+      const skinOverride = skinEffects.renderHazardOverride?.(renderer, hazard, now);
+      if (!skinOverride) renderHazard(renderer, hazard, now);
+    }
   }
 
   window.RoguePixiHazards = Object.freeze({

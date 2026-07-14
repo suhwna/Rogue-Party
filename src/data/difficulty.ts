@@ -44,15 +44,15 @@ export interface ChapterDifficultyRule {
 export const PARTY_DIFFICULTY = {
   1: {
     label: "SOLO",
-    spawnMul: 0.66,
-    hpMul: 0.92,
-    damageMul: 0.86,
-    eliteMul: 0.34,
-    eliteCap: 0.26,
-    xpMul: 1.05,
-    chestMul: 0.82,
+    spawnMul: 0.54,
+    hpMul: 0.78,
+    damageMul: 0.74,
+    eliteMul: 0.24,
+    eliteCap: 0.2,
+    xpMul: 1.14,
+    chestMul: 1,
     anchorBonus: -1,
-    maxAnchors: 3,
+    maxAnchors: 2,
   },
   2: {
     label: "DUO",

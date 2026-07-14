@@ -119,7 +119,7 @@ export const CLASS_DEFINITIONS = {
     damage: 22,
     range: 450,
     attackCd: 0.38,
-    skillCd: 8.1,
+    skillCd: 7.4,
     projectileSpeed: 620,
     armor: 2,
     crit: 0.04,

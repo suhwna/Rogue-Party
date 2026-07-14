@@ -25,6 +25,7 @@ export interface MasteryEntry {
 }
 
 export type MasteryMap = Record<string, MasteryEntry>;
+export const SHARED_MASTERY_KEY = "shared";
 
 export interface ProgressRecords {
   highestAbyssDepth: number;
@@ -48,11 +49,12 @@ export interface EquipmentItem {
   classId: string;
   setId: string;
   special: string;
-  rarity: "common" | "rare" | "epic" | "legendary";
+  rarity: "common" | "rare" | "epic" | "legendary" | "mythic";
   itemLevel: number;
   enhance: number;
   rerolls: number;
-  lockedAffixIndex: number;
+  lockedAffixIndices: number[];
+  reforgePreview: { affixes: EquipmentAffix[]; cost: number } | null;
   affixes: EquipmentAffix[];
 }
 
@@ -160,20 +162,12 @@ export const defaultProgress: Readonly<UserProgress> = Object.freeze({
     level: 1,
     xp: 0,
   },
-  mastery: Object.fromEntries(
-    CLASS_IDS.map((classId) => [
-      classId,
-      {
-        points: 0,
-        nodes: {
-          attack: 0,
-          survival: 0,
-          speed: 0,
-          special: 0,
-        },
-      },
-    ]),
-  ),
+  mastery: {
+    [SHARED_MASTERY_KEY]: {
+      points: 0,
+      nodes: { attack: 0, survival: 0, speed: 0, special: 0 },
+    },
+  },
   records: {
     highestAbyssDepth: 0,
     highestAscension: 0,

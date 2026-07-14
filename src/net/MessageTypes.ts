@@ -29,6 +29,7 @@ export interface AccountProgressActionMessage {
   readonly classId?: string;
   readonly nodeId?: string;
   readonly itemId?: string;
+  readonly itemIds?: readonly string[];
   readonly slot?: string;
   readonly affixIndex?: number;
   readonly runeId?: string;

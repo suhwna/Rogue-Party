@@ -7,6 +7,7 @@ import {
   MAX_ASCENSION_LEVEL,
   PROGRESS_KEY,
   SAVE_VERSION,
+  SHARED_MASTERY_KEY,
   type BestClearRecord,
   type ChallengeProgress,
   type CombatProgress,
@@ -252,7 +253,7 @@ export function calculateRunRewards(result: RunResultRecord): {
   const progressReward = Math.floor(stagesCleared * 5 + highestLevel * 2 + totalRelics * 3 + Math.sqrt(totalScore) * 0.42);
   const victoryReward = outcome === "victory" ? 45 : 0;
   const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
-  const ascensionMultiplier = 1 + ascensionLevel * 0.08;
+  const ascensionMultiplier = 1 + ascensionLevel * 0.1;
   const earnedShards = Math.max(2, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier));
   return {
     earnedShards,
@@ -269,15 +270,14 @@ export function getMasteryNodeCost(level: number): number {
 
 export function spendMasteryPoint(progress: unknown, classId: string, nodeId: MasteryNodeId): UserProgress {
   const next = normalizeProgress(progress);
-  const safeClassId = sanitizeClassId(classId);
-  const entry = next.mastery[safeClassId] ?? createDefaultMasteryEntry();
+  const entry = next.mastery[SHARED_MASTERY_KEY] ?? createDefaultMasteryEntry();
   const level = entry.nodes[nodeId] ?? 0;
   const cost = getMasteryNodeCost(level);
   if (next.currencies.abyssShards < cost) return next;
   next.currencies.abyssShards -= cost;
   entry.nodes[nodeId] = level + 1;
   entry.points += 1;
-  next.mastery[safeClassId] = entry;
+  next.mastery[SHARED_MASTERY_KEY] = entry;
   next.statistics.masteryPointsSpent += 1;
   return normalizeProgress(next);
 }
@@ -290,9 +290,27 @@ function uniqueStrings(values: unknown, fallback: readonly string[] = []): strin
 function normalizeInventory(value: unknown): UserProgress["inventory"] {
   const source = value && typeof value === "object" ? (value as Partial<UserProgress["inventory"]>) : {};
   const items = (Array.isArray(source.items) ? source.items : []).slice(-120).map((item) => {
-    const entry = item && typeof item === "object" ? (item as Partial<EquipmentItem>) : {};
+    const entry = item && typeof item === "object"
+      ? (item as Partial<EquipmentItem> & { lockedAffixIndex?: number })
+      : {};
     const slots = ["weapon", "armor", "amulet", "core"] as const;
-    const rarities = ["common", "rare", "epic", "legendary"] as const;
+    const rarities = ["common", "rare", "epic", "legendary", "mythic"] as const;
+    const affixes = (Array.isArray(entry.affixes) ? entry.affixes : []).slice(0, 5).map((affix) => ({
+      id: String(affix?.id || "power").slice(0, 32),
+      value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
+    }));
+    const legacyLocks = Number.isInteger(entry.lockedAffixIndex) && Number(entry.lockedAffixIndex) >= 0
+      ? [Number(entry.lockedAffixIndex)]
+      : [];
+    const lockedAffixIndices = [...new Set((Array.isArray(entry.lockedAffixIndices) ? entry.lockedAffixIndices : legacyLocks)
+      .map((index) => Math.floor(Number(index)))
+      .filter((index) => index >= 0 && index < affixes.length))]
+      .slice(0, Math.max(0, affixes.length - 1))
+      .sort((a, b) => a - b);
+    const previewAffixes = (Array.isArray(entry.reforgePreview?.affixes) ? entry.reforgePreview.affixes : []).slice(0, affixes.length).map((affix) => ({
+      id: String(affix?.id || "power").slice(0, 32),
+      value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
+    }));
     return {
       id: String(entry.id || "").slice(0, 96),
       baseId: String(entry.baseId || "").slice(0, 64),
@@ -305,11 +323,11 @@ function normalizeInventory(value: unknown): UserProgress["inventory"] {
       itemLevel: Math.max(1, wholeNumber(entry.itemLevel, 1)),
       enhance: clampedWholeNumber(entry.enhance, 0, 0, 20),
       rerolls: wholeNumber(entry.rerolls, 0),
-      lockedAffixIndex: Math.max(-1, Math.min(3, Math.floor(Number(entry.lockedAffixIndex) || -1))),
-      affixes: (Array.isArray(entry.affixes) ? entry.affixes : []).slice(0, 4).map((affix) => ({
-        id: String(affix?.id || "power").slice(0, 32),
-        value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
-      })),
+      lockedAffixIndices,
+      reforgePreview: previewAffixes.length === affixes.length && affixes.length > 0
+        ? { affixes: previewAffixes, cost: wholeNumber(entry.reforgePreview?.cost, 0) }
+        : null,
+      affixes,
     } satisfies EquipmentItem;
   });
   const runes = (Array.isArray(source.runes) ? source.runes : []).slice(-180).map((rune) => {
@@ -449,15 +467,14 @@ function normalizeMasteryEntry(entry: unknown): MasteryEntry {
 
 function normalizeMasteryMap(mastery: unknown): MasteryMap {
   const source = mastery && typeof mastery === "object" ? (mastery as Record<string, unknown>) : {};
-  const output: MasteryMap = {};
+  if (source[SHARED_MASTERY_KEY]) return { [SHARED_MASTERY_KEY]: normalizeMasteryEntry(source[SHARED_MASTERY_KEY]) };
+  const shared = createDefaultMasteryEntry();
   for (const classId of CLASS_IDS) {
-    output[classId] = normalizeMasteryEntry(source[classId]);
+    const legacy = normalizeMasteryEntry(source[classId]);
+    for (const nodeId of MASTERY_NODE_IDS) shared.nodes[nodeId] += legacy.nodes[nodeId] || 0;
   }
-  for (const [classId, entry] of Object.entries(source)) {
-    const safeClassId = sanitizeClassId(classId);
-    output[safeClassId] = normalizeMasteryEntry(entry);
-  }
-  return output;
+  shared.points = MASTERY_NODE_IDS.reduce((sum, nodeId) => sum + shared.nodes[nodeId], 0);
+  return { [SHARED_MASTERY_KEY]: shared };
 }
 
 function sanitizeClassId(classId: string): string {

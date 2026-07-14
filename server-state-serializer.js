@@ -64,7 +64,6 @@ function roomStageSummaryView(room, options = {}) {
     riskChoices: [],
     activeRisk: options.activeRisk,
     stageModifier: options.stageModifier ?? options.activeRisk,
-    waveTrait: options.waveTrait,
     threatLevel: round2(room.threatLevel || 1),
     stageKind: options.stageKind || "combat",
     stage: options.stage
@@ -89,7 +88,8 @@ function playerIdentityView(player, options = {}) {
     classId: player.classId,
     classLabel: options.classLabel || "",
     icon: classDef.icon || "",
-    color: player.appearanceColor || classDef.color || "",
+    color: classDef.color || "",
+    skinColor: player.appearanceColor || "",
     title: player.cosmeticTitle || "",
     skin: player.cosmeticSkin || ""
   };
@@ -102,9 +102,10 @@ function playerPositionView(player) {
   };
 }
 
-function projectileView(projectile) {
+function projectileView(projectile, options = {}) {
   return {
     id: projectile.id,
+    ownerId: projectile.ownerId,
     classId: projectile.classId,
     x: round2(projectile.x),
     y: round2(projectile.y),
@@ -114,12 +115,13 @@ function projectileView(projectile) {
     style: projectile.style || "",
     poison: Boolean(projectile.poison),
     splash: round2(projectile.splash || 0),
-    pierce: projectile.pierce || 0
+    pierce: projectile.pierce || 0,
+    skin: typeof options.getOwnerSkin === "function" ? options.getOwnerSkin(projectile.ownerId) : projectile.skin || ""
   };
 }
 
-function projectileViews(projectiles) {
-  return (projectiles || []).map(projectileView);
+function projectileViews(projectiles, options = {}) {
+  return (projectiles || []).map((projectile) => projectileView(projectile, options));
 }
 
 function movementView(move, includeKey = false) {
@@ -188,9 +190,10 @@ function enemyViews(enemies, options = {}) {
   return (enemies || []).map((enemy) => enemyView(enemy, options));
 }
 
-function hazardView(hazard) {
+function hazardView(hazard, options = {}) {
   return {
     id: hazard.id,
+    ownerId: hazard.ownerId,
     type: hazard.type,
     mode: hazard.mode || "",
     style: hazard.style || "",
@@ -204,6 +207,7 @@ function hazardView(hazard) {
     timer: round2(hazard.timer),
     armTime: round2(hazard.armTime || 0),
     armTimeMax: round2(hazard.armTimeMax || hazard.armTime || 0),
+    mechanicId: hazard.mechanicId || "",
     spawnFromX: Number.isFinite(hazard.spawnFromX) ? round2(hazard.spawnFromX) : null,
     spawnFromY: Number.isFinite(hazard.spawnFromY) ? round2(hazard.spawnFromY) : null,
     moveFromX: Number.isFinite(hazard.moveFromX) ? round2(hazard.moveFromX) : null,
@@ -212,12 +216,13 @@ function hazardView(hazard) {
     moveTimeMax: round2(hazard.moveTimeMax || hazard.moveTime || 0),
     armed: !hazard.armTime || hazard.armTime <= 0,
     hostile: Boolean(hazard.hostile),
-    color: hazard.color || ""
+    color: hazard.color || "",
+    skin: typeof options.getOwnerSkin === "function" ? options.getOwnerSkin(hazard.ownerId) : hazard.skin || ""
   };
 }
 
-function hazardViews(hazards) {
-  return (hazards || []).map(hazardView);
+function hazardViews(hazards, options = {}) {
+  return (hazards || []).map((hazard) => hazardView(hazard, options));
 }
 
 function relicChestView(chest) {
@@ -245,6 +250,22 @@ function xpOrbView(orb) {
 
 function xpOrbViews(orbs) {
   return (orbs || []).map(xpOrbView);
+}
+
+function fieldPickupView(pickup) {
+  return {
+    id: pickup.id,
+    type: pickup.type,
+    x: round2(pickup.x),
+    y: round2(pickup.y),
+    radius: pickup.radius,
+    rarity: pickup.rarity || "",
+    timer: round2(pickup.timer)
+  };
+}
+
+function fieldPickupViews(pickups) {
+  return (pickups || []).map(fieldPickupView);
 }
 
 function stageObjectiveView(objective, options = {}) {
@@ -322,6 +343,8 @@ function playerVitalsView(player, options = {}) {
     hp: Math.ceil(player.hp),
     maxHp: player.maxHp,
     shield: Math.ceil(player.shield),
+    poisonStacks: Math.max(0, Math.min(3, Math.floor(player.poisonStacks || 0))),
+    poisonMaxStacks: 3,
     hitIFrameTime: round2(player.hitIFrameTimer || 0),
     sizeScale: round2(sizeScale),
     tauntGuardTime: round2(player.tauntGuardTimer || 0),
@@ -440,6 +463,8 @@ function runResultSummaryView(room, options = {}) {
 module.exports = {
   enemyView,
   enemyViews,
+  fieldPickupView,
+  fieldPickupViews,
   getRoomCapabilities,
   getRoomTimers,
   hazardView,

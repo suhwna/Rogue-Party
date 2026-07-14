@@ -57,7 +57,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 4,
       "name": "보호의 함성",
-      "text": "도발을 외칠 때 전사에게 방어막을 부여합니다."
+      "text": "도발을 외칠 때 최대 체력의 38%만큼 방어막을 부여합니다."
     },
     {
       "id": "warrior_charge",
@@ -98,7 +98,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 7,
       "name": "처형의 호",
-      "text": "광역 베기 피해가 적용된 뒤 남은 체력이 최대 체력의 25% 이하인 보스가 아닌 적을 즉시 처형합니다."
+      "text": "광역 베기 피해가 적용된 뒤 남은 체력이 최대 체력의 25% 이하인 일반 적을 즉시 처형합니다. 보스에게는 광역 베기 피해가 35% 증가합니다."
     },
     {
       "id": "warrior_cleave_wave",
@@ -126,8 +126,8 @@ export const SKILL_UPGRADES = {
         "ranger_primary"
       ],
       "minLevel": 3,
-      "name": "화염 화살",
-      "text": "Q 연발 사격의 화살이 적중한 적에게 화상을 부여합니다."
+      "name": "폭발 화살",
+      "text": "Q 연발 사격의 화살이 적중하면 범위 폭발을 일으키고, 직격 대상과 폭발에 맞은 적에게 화상을 부여합니다."
     },
     {
       "id": "ranger_pierce",
@@ -159,7 +159,7 @@ export const SKILL_UPGRADES = {
       "slot": "r",
       "minLevel": 4,
       "name": "레인 에로우",
-      "text": "R: 조준 위치에 화살비를 내려 지속 타격합니다."
+      "text": "R: 넓은 조준 지점에 3.2초 동안 화살비를 내려 다수의 적을 지속 타격합니다."
     },
     {
       "id": "ranger_rain_slow",
@@ -193,7 +193,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 7,
       "name": "독구름",
-      "text": "독화살이 명중한 지점에 독장판을 남깁니다."
+      "text": "독화살이 명중한 지점에 넓고 오래 유지되는 독장판을 남깁니다."
     },
     {
       "id": "ranger_poison_burst",
@@ -222,7 +222,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 3,
       "name": "분열 핵",
-      "text": "Q 별빛 폭발이 처음 적중하면 작은 별빛 파편 3갈래로 분열됩니다. 분열 핵 유물의 투사체 증가 효과가 원본과 파편 모두에 적용됩니다."
+      "text": "Q 별빛 폭발이 처음 적중하면 작은 별빛 파편 3갈래로 흩어집니다. 파편은 유도되지 않으며, 분열 핵 유물의 투사체 증가 효과가 원본과 파편 모두에 적용됩니다."
     },
     {
       "id": "mage_frost",
@@ -263,7 +263,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 5,
       "name": "포식하는 운석",
-      "text": "운석으로 적을 처치할 때마다 운석 크기가 영구적으로 0.5% 증가합니다."
+      "text": "운석으로 적을 처치할 때마다 이번 원정 동안 운석 크기가 0.1% 증가합니다. 최대 50%까지 증가합니다."
     },
     {
       "id": "mage_wildfire",
@@ -308,7 +308,7 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 2,
       "name": "레이저 모듈",
-      "text": "메카 탑승 중 기본공격을 일정 횟수 사용하면 플레이어 중앙에서 거대 레이저를 발사합니다. 거대 렌즈로 폭이 증가합니다."
+      "text": "메카 탑승 중 기본공격을 3회 사용하면 플레이어 중앙에서 강력한 거대 레이저를 발사합니다. 거대 렌즈로 폭이 증가합니다."
     },
     {
       "id": "engineer_singularity_core",
@@ -324,7 +324,7 @@ export const SKILL_UPGRADES = {
       "slot": "e",
       "minLevel": 2,
       "name": "메카 탑승",
-      "text": "E: 일정 시간 메카에 탑승해 방어력을 높이고 양손 레이저 기본공격을 사용합니다."
+      "text": "E: 8.5초 동안 메카에 탑승해 방어력과 방어막을 얻고, 빠른 양손 레이저 기본공격을 사용합니다."
     },
     {
       "id": "engineer_rail_turret",
@@ -349,16 +349,7 @@ export const SKILL_UPGRADES = {
       "slot": "r",
       "minLevel": 4,
       "name": "감전 지뢰",
-      "text": "R: 적이 밟으면 터지는 전기 지뢰를 설치합니다."
-    },
-    {
-      "id": "engineer_chain_mine",
-      "requires": [
-        "engineer_mine"
-      ],
-      "minLevel": 5,
-      "name": "대시 지뢰",
-      "text": "패시브: 기계공이 대시할 때마다 대시 시작 지점에 작은 감전 지뢰를 남깁니다."
+      "text": "R: 적이 밟으면 넓게 폭발해 큰 피해를 주고 둔화시키는 전기 지뢰를 설치합니다."
     },
     {
       "id": "engineer_mine_field",
@@ -367,14 +358,23 @@ export const SKILL_UPGRADES = {
       ],
       "minLevel": 6,
       "name": "충전식 지뢰",
-      "text": "감전 지뢰를 최대 3회까지 충전해 연속으로 설치할 수 있습니다."
+      "text": "감전 지뢰를 최대 3회까지 저장합니다. 지뢰 쿨타임이 끝날 때마다 충전이 1개씩 회복됩니다."
+    },
+    {
+      "id": "engineer_auto_mine",
+      "requires": [
+        "engineer_mine"
+      ],
+      "minLevel": 7,
+      "name": "자동 기뢰 살포",
+      "text": "패시브: 일정 시간마다 캐릭터 주변 무작위 위치에 지뢰를 자동 설치합니다. 설치 주기는 쿨타임 감소의 영향을 받습니다."
     },
     {
       "id": "engineer_drone",
       "slot": "f",
       "minLevel": 6,
       "name": "호위 드론",
-      "text": "F: 주변을 비행하며 적을 견제하는 드론을 호출합니다."
+      "text": "F: 14초 동안 주변을 비행하며 적을 빠르게 지원 사격하는 드론을 호출합니다."
     },
     {
       "id": "engineer_drone_missile",

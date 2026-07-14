@@ -1,8 +1,7 @@
-export interface RoomDefaults<TModifier = unknown, TWaveTrait = unknown> {
+export interface RoomDefaults<TModifier = unknown> {
   readonly worldWidth?: number;
   readonly worldHeight?: number;
   readonly activeRisk?: TModifier;
-  readonly waveTrait?: TWaveTrait;
 }
 
 export interface PublicRoomView {
@@ -62,9 +61,9 @@ export interface StageCombatObjectsRoomLike {
   xpOrbs: unknown[];
 }
 
-export function createRoomState<TModifier = unknown, TWaveTrait = unknown>(
+export function createRoomState<TModifier = unknown>(
   code: string,
-  defaults: RoomDefaults<TModifier, TWaveTrait> = {},
+  defaults: RoomDefaults<TModifier> = {},
 ) {
   return {
     code,
@@ -84,7 +83,6 @@ export function createRoomState<TModifier = unknown, TWaveTrait = unknown>(
     hostId: null,
     riskChoices: [],
     activeRisk: defaults.activeRisk,
-    waveTrait: defaults.waveTrait,
     stageMap: null,
     currentMapNodeId: null,
     activeMapNode: null,

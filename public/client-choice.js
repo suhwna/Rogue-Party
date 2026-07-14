@@ -28,7 +28,7 @@
                 </span>
                 <strong>${escapeHtml(choice.name)}</strong>
                 <span>${escapeHtml(choice.text)}</span>
-                <span class="choice-action-row"><span>유물 선택</span><i aria-hidden="true">›</i></span>
+                <span class="choice-action-row"><span>유물 선택</span><i class="choice-forward-icon" aria-hidden="true"></i></span>
               </span>
             </button>
           `;
@@ -49,7 +49,7 @@
                 </span>
                 <strong>${escapeHtml(choice.name)}</strong>
                 <span>${escapeHtml(choice.text)}</span>
-                <span class="choice-action-row"><span>강화 선택</span><i aria-hidden="true">›</i></span>
+                <span class="choice-action-row"><span>강화 선택</span><i class="choice-forward-icon" aria-hidden="true"></i></span>
               </span>
             </button>
           `;

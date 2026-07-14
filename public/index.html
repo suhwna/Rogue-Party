@@ -4,6 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Rogue Party</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..700,0..1,-25..100" />
     <link rel="stylesheet" href="/styles.css" />
     <link rel="stylesheet" href="/ui-benchmark.css" />
   </head>
@@ -11,25 +14,23 @@
     <main class="shell">
       <section class="stage" aria-label="Game screen">
         <canvas id="game" width="1280" height="720"></canvas>
-        <div class="top-hud" aria-label="Run info">
-          <span class="top-stat room-top-stat"><span>ROOM</span><strong id="roomCode">----</strong></span>
-          <span class="top-stat stage-top-stat"><span>STAGE</span><strong id="wave">-</strong></span>
-          <button id="settingsButton" class="hud-icon-button" type="button" aria-label="설정 열기" title="설정">⚙</button>
-          <span id="connection" class="connection-state">OFFLINE</span>
+        <span id="roomCode" class="visually-hidden">----</span>
+        <span id="wave" class="visually-hidden">-</span>
+        <span id="connection" class="visually-hidden">OFFLINE</span>
+        <div class="top-hud" aria-label="설정">
+          <button id="settingsButton" class="hud-icon-button google-icon-only" type="button" data-icon="settings" aria-label="설정 열기" title="설정">설정</button>
         </div>
-        <section id="runContext" class="run-context hidden" aria-label="Current objective" aria-live="polite">
-          <div class="run-context-copy">
-            <span id="runPhaseKicker">SURVIVAL</span>
-            <strong id="runObjectiveTitle">전투 준비</strong>
-            <small id="runObjectiveText"></small>
+        <section id="runContext" class="run-context hidden" aria-label="전투 정보" aria-live="polite">
+          <div class="run-context-metric timer">
+            <span>TIME</span>
+            <div><strong id="runTimer">0:00</strong><small id="runTimerMax">/ 9:00</small></div>
           </div>
-          <div class="run-context-progress">
-            <div><strong id="runTimer">0:00</strong><span id="runTimerMax">/ 9:00</span></div>
-            <i><b id="runProgressBar"></b></i>
+          <div class="run-context-metric ascension">
+            <span>DIFFICULTY</span>
+            <strong id="runAscension">승천 0</strong>
           </div>
-          <div id="runModifiers" class="run-modifiers"></div>
         </section>
-        <button id="startButton" class="start-run stage-start hidden" type="button">START RUN</button>
+        <button id="startButton" class="start-run stage-start hidden" type="button" data-icon="play_arrow">START RUN</button>
         <div id="centerBanner" class="center-banner hidden"></div>
 
         <section id="lobbyPanel" class="lobby-panel hidden" aria-label="Lobby">
@@ -41,19 +42,19 @@
             </div>
             <div class="lobby-head-tools">
               <div id="lobbyReadyCount" class="lobby-ready-count">0/0 READY</div>
-              <button id="lobbyArenaToggle" class="lobby-arena-toggle" type="button" aria-pressed="false">훈련장 보기</button>
+              <button id="lobbyArenaToggle" class="lobby-arena-toggle" type="button" data-icon="sports_esports" aria-pressed="false">훈련장 보기</button>
             </div>
           </div>
 
           <div class="lobby-body">
             <nav id="lobbyWorkspaceNav" class="lobby-workspace-nav" aria-label="Lobby sections">
-              <button type="button" class="active" data-lobby-view="loadout" aria-selected="true"><span>01</span><strong>전투 준비</strong><small>직업 · 스킬</small></button>
-              <button type="button" data-lobby-view="growth" aria-selected="false"><span>02</span><strong>영구 성장</strong><small>숙련 · 승천</small></button>
-              <button type="button" data-lobby-view="gear" aria-selected="false"><span>03</span><strong>장비</strong><small>세트 · 룬</small></button>
-              <button type="button" data-lobby-view="forge" aria-selected="false"><span>04</span><strong>대장간</strong><small>강화 · 제작</small></button>
-              <button type="button" data-lobby-view="archive" aria-selected="false"><span>05</span><strong>기록</strong><small>도감 · 업적</small></button>
-              <button type="button" data-lobby-view="challenges" aria-selected="false"><span>06</span><strong>개인 임무</strong><small>일일 · 주간</small></button>
-              <button type="button" data-lobby-view="training" aria-selected="false"><span>07</span><strong>훈련 설정</strong><small>스킬 · 유물</small></button>
+              <button type="button" class="active" data-lobby-view="loadout" data-icon="shield" aria-selected="true"><strong>전투 준비</strong><small>직업 · 스킬</small></button>
+              <button type="button" data-lobby-view="growth" data-icon="trending_up" aria-selected="false"><strong>영구 성장</strong><small>모든 직업 공용</small></button>
+              <button type="button" data-lobby-view="gear" data-icon="inventory_2" aria-selected="false"><strong>장비</strong><small>세트 · 룬</small></button>
+              <button type="button" data-lobby-view="forge" data-icon="construction" aria-selected="false"><strong>대장간</strong><small>강화 · 제작</small></button>
+              <button type="button" data-lobby-view="archive" data-icon="menu_book" aria-selected="false"><strong>기록</strong><small>도감 · 업적</small></button>
+              <button type="button" data-lobby-view="challenges" data-icon="task_alt" aria-selected="false"><strong>개인 임무</strong><small>일일 · 주간</small></button>
+              <button type="button" data-lobby-view="training" data-icon="science" aria-selected="false"><strong>훈련 설정</strong><small>스킬 · 유물</small></button>
             </nav>
 
             <div id="lobbyWorkspace" class="lobby-class-area lobby-workspace" data-view="loadout">
@@ -68,22 +69,22 @@
               <div class="lobby-class-rail">
                 <div class="lobby-section-label">CURRENT CLASS</div>
               <div id="lobbyClassGrid" class="lobby-class-grid" aria-label="Change class">
-                <button class="lobby-class-card" type="button" data-class="warrior">
+                <button class="lobby-class-card" type="button" data-class="warrior" data-icon="shield">
                   <strong>전사</strong>
                   <em>전열 탱커</em>
                   <span>도발과 방패 돌진으로 적을 붙잡는 근접 전열.</span>
                 </button>
-                <button class="lobby-class-card" type="button" data-class="ranger">
+                <button class="lobby-class-card" type="button" data-class="ranger" data-icon="my_location">
                   <strong>궁수</strong>
                   <em>원거리 딜러</em>
                   <span>긴 사거리와 2단 대시, 화살비로 거리를 지배.</span>
                 </button>
-                <button class="lobby-class-card" type="button" data-class="mage">
+                <button class="lobby-class-card" type="button" data-class="mage" data-icon="auto_awesome">
                   <strong>마법사</strong>
                   <em>광역 마법</em>
                   <span>빙결 파동, 운석, 연쇄 번개로 한 번에 쓸어냄.</span>
                 </button>
-                <button class="lobby-class-card" type="button" data-class="engineer">
+                <button class="lobby-class-card" type="button" data-class="engineer" data-icon="precision_manufacturing">
                   <strong>기계공</strong>
                   <em>설치형 딜러</em>
                   <span>터렛, 지뢰, 드론을 깔아 전장을 자동화.</span>
@@ -108,10 +109,10 @@
               </div>
             </div>
             <div id="lobbyArenaClassGrid" class="lobby-arena-class-grid" aria-label="Training class">
-              <button type="button" data-arena-class="warrior">전사</button>
-              <button type="button" data-arena-class="ranger">궁수</button>
-              <button type="button" data-arena-class="mage">마법사</button>
-              <button type="button" data-arena-class="engineer">기계공</button>
+              <button type="button" data-arena-class="warrior" data-icon="shield">전사</button>
+              <button type="button" data-arena-class="ranger" data-icon="my_location">궁수</button>
+              <button type="button" data-arena-class="mage" data-icon="auto_awesome">마법사</button>
+              <button type="button" data-arena-class="engineer" data-icon="precision_manufacturing">기계공</button>
             </div>
             <div id="lobbyArenaSkillList" class="lobby-arena-skill-list"></div>
           </section>
@@ -119,13 +120,13 @@
           <div class="lobby-actions">
             <div id="lobbyBotControl" class="lobby-bot-control">
               <span id="lobbyBotCount">BOT 0</span>
-              <button id="removeBotButton" class="lobby-bot-button" type="button" aria-label="Remove bot">-</button>
-              <button id="addBotButton" class="lobby-bot-button" type="button" aria-label="Add bot">+</button>
+              <button id="removeBotButton" class="lobby-bot-button google-icon-only" type="button" data-icon="remove" aria-label="봇 제거" title="봇 제거">-</button>
+              <button id="addBotButton" class="lobby-bot-button google-icon-only" type="button" data-icon="add" aria-label="봇 추가" title="봇 추가">+</button>
             </div>
             <div class="lobby-primary-actions">
-              <button id="spectatorButton" class="lobby-spectator-button" type="button">SPECTATE</button>
-              <button id="readyButton" class="lobby-ready-button" type="button">READY</button>
-              <button id="lobbyStartButton" class="lobby-start-button hidden" type="button">START RUN</button>
+              <button id="spectatorButton" class="lobby-spectator-button" type="button" data-icon="visibility">SPECTATE</button>
+              <button id="readyButton" class="lobby-ready-button" type="button" data-icon="check_circle">READY</button>
+              <button id="lobbyStartButton" class="lobby-start-button hidden" type="button" data-icon="play_arrow">START RUN</button>
             </div>
           </div>
         </section>
@@ -144,6 +145,7 @@
           <h1>Rogue Party</h1>
           <button id="titleStartButton" class="front-primary" type="button">
             <span>입장</span>
+            <i class="choice-forward-icon" aria-hidden="true"></i>
           </button>
         </div>
       </section>
@@ -167,7 +169,7 @@
                   <p>원정대를 만들거나 열린 방에 합류하세요.</p>
                 </div>
               </div>
-              <button id="refreshRooms" class="ghost-button room-refresh-button" type="button" aria-label="열린 방 새로고침" title="열린 방 새로고침"><span aria-hidden="true">↻</span><b>새로고침</b></button>
+              <button id="refreshRooms" class="ghost-button room-refresh-button" type="button" data-icon="refresh" aria-label="열린 방 새로고침" title="열린 방 새로고침"><b>새로고침</b></button>
             </div>
 
             <div class="account-strip" aria-live="polite">
@@ -177,8 +179,8 @@
               </div>
               <div class="account-strip-actions">
                 <small id="accountIdLabel">연결 준비</small>
-                <button id="accountQuickCopyButton" type="button">복구 키</button>
-                <button id="accountManageButton" type="button">계정 관리</button>
+                <button id="accountQuickCopyButton" type="button" data-icon="key">복구 키</button>
+                <button id="accountManageButton" type="button" data-icon="manage_accounts">계정 관리</button>
               </div>
             </div>
 
@@ -195,11 +197,11 @@
             </div>
 
             <div class="quick-room-actions">
-              <button id="menuCreateButton" class="menu-action primary-action" type="button">
+              <button id="menuCreateButton" class="menu-action primary-action" type="button" data-icon="group_add">
                 <strong>방 생성</strong>
                 <span>새 원정대 구성</span>
               </button>
-              <button id="roomSubmitButton" class="menu-action" type="button">
+              <button id="roomSubmitButton" class="menu-action" type="button" data-icon="login">
                 <strong>코드 입장</strong>
                 <span>입력한 방에 합류</span>
               </button>
@@ -217,7 +219,7 @@
     <div id="choiceOverlay" class="overlay choice hidden">
       <div class="modal choice-modal">
         <div class="modal-heading">
-          <span class="brand-mark">R</span>
+          <span class="brand-mark google-icon-only" data-icon="diamond" aria-hidden="true">R</span>
           <div>
             <p class="result-kicker">RELIC CACHE</p>
             <h2>렐릭 선택</h2>
@@ -232,7 +234,7 @@
     <div id="skillOverlay" class="overlay choice hidden">
       <div class="modal choice-modal">
         <div class="modal-heading">
-          <span class="brand-mark">S</span>
+          <span class="brand-mark google-icon-only" data-icon="bolt" aria-hidden="true">S</span>
           <div>
             <p class="result-kicker">SKILL EVOLUTION</p>
             <h2 id="skillChoiceTitle">스킬 강화</h2>
@@ -246,7 +248,7 @@
     <div id="mapOverlay" class="overlay choice hidden">
       <div class="modal choice-modal map-modal">
         <div class="modal-heading">
-          <span class="brand-mark">MP</span>
+          <span class="brand-mark google-icon-only" data-icon="route" aria-hidden="true">MP</span>
           <div>
             <h2>Route Vote</h2>
             <p id="mapSubtitle">Vote for the next route</p>
@@ -279,7 +281,7 @@
           </section>
         </div>
         <div class="result-actions">
-          <button id="resultStartButton" class="primary" type="button">NEW RUN</button>
+          <button id="resultStartButton" class="primary" type="button" data-icon="keyboard_return">NEW RUN</button>
           <span id="resultActionNote">Host can start the next run.</span>
         </div>
       </div>
@@ -288,7 +290,7 @@
     <div id="settingsOverlay" class="overlay settings-overlay hidden">
       <div class="modal settings-modal">
         <div class="modal-heading">
-          <span class="brand-mark">OP</span>
+          <span class="brand-mark google-icon-only" data-icon="tune" aria-hidden="true">OP</span>
           <div>
             <p class="result-kicker">OPTIONS</p>
             <h2>설정</h2>
@@ -296,7 +298,7 @@
           </div>
         </div>
         <section class="settings-section">
-          <div class="settings-section-head">
+          <div class="settings-section-head" data-icon="palette">
             <strong>그래픽 품질</strong>
             <span>즉시 렌더러에 반영됩니다.</span>
           </div>
@@ -307,7 +309,7 @@
           </div>
         </section>
         <section class="settings-section">
-          <div class="settings-section-head">
+          <div class="settings-section-head" data-icon="language">
             <strong>언어</strong>
             <span>현재는 UI 저장값만 유지합니다.</span>
           </div>
@@ -317,14 +319,14 @@
           </select>
         </section>
         <section class="settings-section">
-          <div class="settings-section-head">
+          <div class="settings-section-head" data-icon="keyboard">
             <strong>키 설정</strong>
             <span>버튼을 누른 뒤 새 키를 입력하세요.</span>
           </div>
           <div id="settingsKeyList" class="settings-key-list"></div>
         </section>
         <section id="accountSettingsSection" class="settings-section account-settings-section">
-          <div class="settings-section-head">
+          <div class="settings-section-head" data-icon="cloud_done">
             <strong>서버 계정</strong>
             <span id="settingsAccountSync">동기화 확인 중</span>
           </div>
@@ -333,18 +335,18 @@
             <strong id="settingsAccountId">-</strong>
           </div>
           <div class="account-settings-actions">
-            <button id="accountCopyRecoveryButton" class="ghost-button" type="button">복구 키 복사</button>
-            <button id="accountNewGuestButton" class="ghost-button" type="button">새 게스트 계정</button>
+            <button id="accountCopyRecoveryButton" class="ghost-button" type="button" data-icon="content_copy">복구 키 복사</button>
+            <button id="accountNewGuestButton" class="ghost-button" type="button" data-icon="person_add">새 게스트 계정</button>
           </div>
           <div class="account-recovery-row">
             <input id="accountRecoveryInput" type="text" autocomplete="off" placeholder="RP-계정ID.복구키" aria-label="Account recovery key" />
-            <button id="accountRecoverButton" type="button">계정 복구</button>
+            <button id="accountRecoverButton" type="button" data-icon="restore">계정 복구</button>
           </div>
           <p id="accountSettingsMessage" class="account-settings-message">진행도는 서버에 저장되고 브라우저에는 캐시만 유지됩니다.</p>
         </section>
         <div class="settings-actions">
-          <button id="settingsResetButton" class="ghost-button" type="button">초기화</button>
-          <button id="settingsCloseButton" class="primary" type="button">완료</button>
+          <button id="settingsResetButton" class="ghost-button" type="button" data-icon="restart_alt">초기화</button>
+          <button id="settingsCloseButton" class="primary" type="button" data-icon="done">완료</button>
         </div>
       </div>
     </div>
@@ -367,6 +369,7 @@
     <script src="/pixi-world.js"></script>
     <script src="/pixi-pickups.js"></script>
     <script src="/effect-style-classifier.js"></script>
+    <script src="/pixi-skin-effects.js"></script>
     <script src="/pixi-projectiles.js"></script>
     <script src="/pixi-hazards.js"></script>
     <script src="/pixi-enemies.js"></script>

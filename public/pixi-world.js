@@ -95,12 +95,12 @@
     if (kind === "boss" || kind === "miniboss") return renderBossBackdrop(renderer, world, now, kind, accent, theme, chapter);
     if (kind === "elite") return renderEliteBackdrop(renderer, world, now, accent, theme);
 
-    return renderTraitBackdrop(renderer, world, now, room?.waveTrait?.id || "", theme, pulse);
+    return renderAmbientBackdrop(renderer, world, now, theme, pulse);
   }
 
-  function renderTraitBackdrop(renderer, world, now, traitId, theme, pulse) {
-    const color = traitId === "volatile" ? "#ff7a3d" : traitId === "ritual" ? "#39ff88" : traitId === "bulwark" ? "#67e8f9" : theme.rune;
-    const count = traitId === "horde" ? 8 : traitId ? 6 : 4;
+  function renderAmbientBackdrop(renderer, world, now, theme, pulse) {
+    const color = theme.rune;
+    const count = 4;
     for (let i = 0; i < count; i += 1) {
       const x = world.w * (0.14 + ((i * 0.17) % 0.74));
       const y = world.h * (0.2 + ((i * 0.29) % 0.58));
