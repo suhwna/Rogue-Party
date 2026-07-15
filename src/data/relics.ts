@@ -20,7 +20,7 @@ export const RELIC_DEFINITIONS = [
   {
     id: "power_core",
     name: "힘의 핵",
-    text: "공격력이 10% 증가합니다.",
+    text: "모든 피해 증폭이 10% 증가합니다.",
     target: "공용 · 공격",
     maxLevel: 5,
     icon: "힘",
@@ -28,7 +28,7 @@ export const RELIC_DEFINITIONS = [
   {
     id: "iron_plate",
     name: "강철 갑판",
-    text: "방어력이 2 증가합니다.",
+    text: "방어력이 1 증가합니다.",
     target: "공용 · 방어",
     maxLevel: 5,
     icon: "방",
@@ -77,7 +77,7 @@ export const RELIC_DEFINITIONS = [
   {
     id: "fatal_mark",
     name: "치명 표식",
-    text: "치명타 데미지가 10% 증가합니다.",
+    text: "치명타 피해 배율에 10%p를 더합니다.",
     target: "공용 · 치명 피해",
     maxLevel: 5,
     icon: "치",

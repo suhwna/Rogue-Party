@@ -113,11 +113,14 @@ const ENEMY_POISON_TICK_DISPLAY_INTERVAL = 0.45;
 const ENEMY_VENOM_DURATION = 4;
 const ENEMY_POISON_MAX_HP_DPS = 0.02;
 const ENEMY_POISON_ELITE_MAX_HP_DPS = 0.014;
-const ENEMY_POISON_BOSS_MAX_HP_DPS = 0.007;
+const ENEMY_POISON_BOSS_MAX_HP_DPS = 0.003;
+const BOSS_VENOM_POISON_RATIO = 0.5;
 const ENEMY_BURN_DURATION = 2;
 const ENEMY_BURN_TICK_DISPLAY_INTERVAL = 0.45;
 const ENEMY_BURN_TOTAL_DAMAGE_RATIO = 0.8;
-const RANGER_PIERCE_KILL_DAMAGE_BONUS = 2;
+const RANGER_PIERCE_GROWTH_FULL_KILLS = 20;
+const RANGER_PIERCE_GROWTH_HALF_KILLS = 50;
+const RANGER_PIERCE_GROWTH_CAP = 100;
 const RANGER_LASER_ARROW_BASE_WIDTH = 120;
 const PLAYER_HIT_IFRAME_DURATION = 0.22;
 const PLAYER_HAZARD_IFRAME_DURATION = 0.15;
@@ -126,8 +129,8 @@ const STAGE_CLEAR_HEAL_RATIO = 0.15;
 const STAGE_CLEAR_REVIVE_RATIO = 0.35;
 const SURVIVAL_DURATION_SEC = 9 * 60;
 const SURVIVAL_BOSS_CHECKPOINTS = Object.freeze([3 * 60, 6 * 60, 9 * 60]);
-const CHAPTER_BOSS_HEALTH_MUL = 4;
-const MINIBOSS_HEALTH_MUL = 3;
+const CHAPTER_BOSS_HEALTH_MUL = 6;
+const MINIBOSS_HEALTH_MUL = 4;
 const SURVIVAL_MINIBOSS_SCHEDULE = Object.freeze([
   { minute: 1, count: 1 },
   { minute: 2, count: 1 },
@@ -137,7 +140,7 @@ const SURVIVAL_MINIBOSS_SCHEDULE = Object.freeze([
   { minute: 8, count: 1 }
 ]);
 const SURVIVAL_EXECUTION_SPAWN_DELAY_MS = 2800;
-const SURVIVAL_EXECUTION_BOSS_HP_MUL = 40;
+const SURVIVAL_EXECUTION_BOSS_HP_MUL = 20;
 const SURVIVAL_BOSS_INTRO_DELAY_MS = 2400;
 const SURVIVAL_BOSS_DISSOLVE_START_MS = 220;
 const SURVIVAL_BOSS_DISSOLVE_END_LEAD_MS = 620;
@@ -993,7 +996,7 @@ const skillUpgrades = {
       ],
       "minLevel": 3,
       "name": "관통 성장",
-      "text": "관통 사격으로 적을 처치할 때마다 관통 사격 피해가 영구적으로 2 증가합니다."
+      "text": "관통 사격으로 적을 처치하면 피해가 증가합니다. 20회까지 +2, 50회까지 +1, 이후 +0.5씩 증가하며 최대 +100입니다."
     },
     {
       "id": "ranger_pierce_blast",
@@ -1072,7 +1075,7 @@ const skillUpgrades = {
       ],
       "minLevel": 3,
       "name": "분열 핵",
-      "text": "Q 별빛 폭발이 처음 적중하면 작은 별빛 파편 3갈래로 흩어집니다. 파편은 유도되지 않으며, 분열 핵 유물의 투사체 증가 효과가 원본과 파편 모두에 적용됩니다."
+      "text": "Q 별빛 폭발이 처음 적중하면 작은 별빛 파편 3갈래로 흩어집니다. 파편 총 피해는 원본의 50%를 넘지 않으며, 분열 핵 유물의 투사체 증가 효과가 원본과 파편 모두에 적용됩니다."
     },
     {
       "id": "mage_frost",
@@ -1631,23 +1634,23 @@ const relics = [
   {
     id: "power_core",
     name: "힘의 핵",
-    text: "공격력이 10% 증가합니다.",
+    text: "모든 피해 증폭이 10% 증가합니다.",
     target: "공용 · 공격",
     maxLevel: 5,
     icon: "힘",
     apply(player) {
-      player.damageMul *= 1.1;
+      player.damageMul += 0.1;
     }
   },
   {
     id: "iron_plate",
     name: "강철 갑판",
-    text: "방어력이 2 증가합니다.",
+    text: "방어력이 1 증가합니다.",
     target: "공용 · 방어",
     maxLevel: 5,
     icon: "방",
     apply(player) {
-      player.armor = Math.min(18, player.armor + 2);
+      player.armor = Math.min(18, player.armor + 1);
     }
   },
   {
@@ -1720,12 +1723,12 @@ const relics = [
   {
     id: "fatal_mark",
     name: "치명 표식",
-    text: "치명타 데미지가 10% 증가합니다.",
+    text: "치명타 피해 배율에 10%p를 더합니다.",
     target: "공용 · 치명 피해",
     maxLevel: 5,
     icon: "치",
     apply(player) {
-      player.critDamageMul *= 1.1;
+      player.critDamageMul += 0.1;
     }
   },
   {
@@ -2924,6 +2927,9 @@ function sanitizeCosmeticLoadout(source) {
 
 function sanitizeGearBonuses(source) {
   const bonuses = source && typeof source === "object" ? source : {};
+  const legacyEliteBossDamageMul = 1
+    + Math.max(0, Number(bonuses.eliteDamageMul || 1) - 1)
+    + Math.max(0, Number(bonuses.bossDamageMul || 1) - 1);
   const legacyCooldownMul = clampNumber(bonuses.skillCooldownMul || 1, 0.1, 1);
   const legacySkillHaste = Math.max(0, (100 / legacyCooldownMul) - 100);
   return {
@@ -2935,11 +2941,10 @@ function sanitizeGearBonuses(source) {
     speedMul: clampNumber(bonuses.speedMul || 1, 1, 1.25),
     attackSpeed: clampNumber(bonuses.attackSpeed || 0, 0, 500),
     skillHaste: clampNumber(bonuses.skillHaste ?? legacySkillHaste, 0, 500),
-    armorBonus: clampNumber(bonuses.armorBonus || 0, 0, 6),
+    armorBonus: clampNumber(bonuses.armorBonus || 0, 0, 10),
     critChanceBonus: clampNumber(bonuses.critChanceBonus || 0, 0, 0.22),
     critDamageMul: clampNumber(bonuses.critDamageMul || 1, 1, 1.6),
-    eliteDamageMul: clampNumber(bonuses.eliteDamageMul || 1, 1, 1.45),
-    bossDamageMul: clampNumber(bonuses.bossDamageMul || 1, 1, 1.5),
+    eliteBossDamageMul: clampNumber(bonuses.eliteBossDamageMul || legacyEliteBossDamageMul, 1, 1.75),
     bossFinisherMul: clampNumber(bonuses.bossFinisherMul || 1, 1, 1.45),
     bossFinisherThreshold: clampNumber(bonuses.bossFinisherThreshold || 0, 0, 0.2),
     statusDamageMul: clampNumber(bonuses.statusDamageMul || 1, 1, 1.45),
@@ -3059,10 +3064,8 @@ function applyPlayerGrowthBonuses(player, room) {
   const accountBonuses = calculateAccountLevelBonuses(loadout.accountLevel);
   const gear = sanitizeGearBonuses(loadout.gearBonuses);
   player.growthLoadout = loadout;
-  player.damageMul *= accountBonuses.damageMul * bonuses.damageMul;
-  const classBaseDamage = Math.max(1, Number(classes[player.classId]?.damage || 1));
-  player.damageMul *= (classBaseDamage + gear.attackBonus) / classBaseDamage;
-  player.damageMul *= gear.damageMul;
+  player.attackPowerBonus = gear.attackBonus;
+  player.damageMul += (accountBonuses.damageMul - 1) + (bonuses.damageMul - 1) + (gear.damageMul - 1);
   player.maxHp = Math.max(1, Math.round((player.maxHp + gear.maxHpBonus) * accountBonuses.maxHpMul * bonuses.maxHpMul * gear.maxHpMul));
   player.hp = player.maxHp;
   player.regen += accountBonuses.regenBonus + bonuses.regenBonus + gear.regenBonus;
@@ -3071,7 +3074,7 @@ function applyPlayerGrowthBonuses(player, room) {
   player.skillHaste = Math.min(500, (player.skillHaste || 0) + accountBonuses.skillHaste + bonuses.skillHaste + gear.skillHaste);
   player.armor = clamp((player.armor || 0) + accountBonuses.armorBonus + bonuses.armorBonus + gear.armorBonus, 0, 18);
   player.crit = clamp((player.crit || 0) + accountBonuses.critChanceBonus + bonuses.critChanceBonus + gear.critChanceBonus, 0, 0.85);
-  player.critDamageMul *= accountBonuses.critDamageMul * bonuses.critDamageMul * gear.critDamageMul;
+  player.critDamageMul += (accountBonuses.critDamageMul - 1) + (bonuses.critDamageMul - 1) + (gear.critDamageMul - 1);
   player.projectileSpeedMul = bonuses.projectileSpeedMul;
   player.poisonDurationMul = bonuses.poisonDurationMul;
   player.skillDamageMul = bonuses.skillDamageMul;
@@ -3081,8 +3084,7 @@ function applyPlayerGrowthBonuses(player, room) {
   player.droneCooldownMul = bonuses.droneCooldownMul;
   player.tauntRangeMul = bonuses.tauntRangeMul;
   player.rangeMul *= bonuses.meleeRangeMul;
-  player.eliteDamageMul *= gear.eliteDamageMul;
-  player.bossDamageMul *= gear.bossDamageMul;
+  player.eliteBossDamageMul = gear.eliteBossDamageMul;
   player.bossFinisherMul = gear.bossFinisherMul;
   player.bossFinisherThreshold = gear.bossFinisherThreshold;
   player.statusDamageMul *= gear.statusDamageMul;
@@ -3106,7 +3108,7 @@ function applyPlayerGrowthBonuses(player, room) {
   player.gearAppearance = loadout.gearAppearance;
   const activeModifier = room?.challengeModifierId || loadout.challenge.modifierId;
   if (activeModifier === "healing_drought") player.healingMul *= 0.6;
-  if (activeModifier === "glass_cannon") player.damageMul *= 1.18;
+  if (activeModifier === "glass_cannon") player.damageMul += 0.18;
   if ((room?.ascensionLevel || 0) >= 3) player.healingMul *= 0.65;
   const weeklyRuleId = room?.challengeRuleId || loadout.challenge.ruleId;
   if (weeklyRuleId === "venom_week") {
@@ -3305,6 +3307,7 @@ function createPlayer(id, name, classId, room) {
     lastSkillSeqs: { q: 0, e: 0, r: 0, f: 0 },
     lastDashSeq: 0,
     damageMul: 1,
+    attackPowerBonus: 0,
     speedMul: 1,
     cooldownMul: 1,
     attackSpeed: 0,
@@ -3326,8 +3329,7 @@ function createPlayer(id, name, classId, room) {
     regen: BASE_HEALTH_REGEN + (def.regen ?? 0),
     lowHpCritBonus: 0,
     missingHpDamageBonus: 0,
-    eliteDamageMul: 1,
-    bossDamageMul: 1,
+    eliteBossDamageMul: 1,
     bossFinisherMul: 1,
     bossFinisherThreshold: 0,
     statusDamageMul: 1,
@@ -3479,6 +3481,7 @@ function resetPlayerForRun(player, room) {
   player.mageMeteorGrowthStacks = 0;
   player.mageFrostBreathTick = 0;
   player.damageMul = 1;
+  player.attackPowerBonus = 0;
   player.speedMul = 1;
   player.cooldownMul = 1;
   player.attackSpeed = 0;
@@ -3500,8 +3503,7 @@ function resetPlayerForRun(player, room) {
   player.regen = BASE_HEALTH_REGEN + (def.regen ?? 0);
   player.lowHpCritBonus = 0;
   player.missingHpDamageBonus = 0;
-  player.eliteDamageMul = 1;
-  player.bossDamageMul = 1;
+  player.eliteBossDamageMul = 1;
   player.bossFinisherMul = 1;
   player.bossFinisherThreshold = 0;
   player.statusDamageMul = 1;
@@ -4087,13 +4089,15 @@ function spawnSurvivalEnemies(room, now, force = false) {
   const ascensionDifficulty = getAbyssDifficulty(room);
   const baseMaxAlive = (solo ? 26 + minute * 3.6 : 32 + minute * 5) + (players - 1) * 9;
   const maxAlive = Math.round(baseMaxAlive * ascensionDifficulty.spawnMul);
+  const multiplayerBatchGrowth = [120, 390, 450, 510]
+    .reduce((growth, threshold) => growth + (survival.elapsed >= threshold ? 1 : 0), 0);
   const baseBatchTarget = force
     ? solo
       ? 4
       : 5 + players
     : solo
       ? 2 + Math.floor(survival.elapsed / 180)
-      : 2 + Math.floor(survival.elapsed / 120) + (players >= 3 ? 1 : 0);
+      : 2 + multiplayerBatchGrowth + (players >= 3 ? 1 : 0);
   const batchTarget = Math.ceil(baseBatchTarget * Math.min(1.5, 0.75 + ascensionDifficulty.spawnMul * 0.25));
   const batchSize = Math.min(maxAlive - alive, batchTarget);
   const baseInterval = solo ? 1.02 - elapsedRatio * 0.46 : 0.92 - elapsedRatio * 0.52;
@@ -5059,7 +5063,7 @@ function pickDefenseEnemyType(wave, forceBasic = false, random = Math.random) {
     ["bomber", wave >= 2 ? 0.12 : 0],
     ["splitter", wave >= 2 ? 0.1 : 0],
     ["guardian", wave >= 3 ? 0.08 : 0],
-    ["charger", wave >= 5 ? 0.05 : 0]
+    ["charger", wave >= 7 ? 0.05 : 0]
   ].filter(([type, weight]) => weight > 0 && DEFENSE_ALLOWED_TYPES.includes(type) && isEnemyTypeUnlocked(type, wave));
   return pickWeightedEnemyType(weights, random) || pickBasicEnemyType(wave, random);
 }
@@ -5177,8 +5181,8 @@ function pickEnemyType(wave, random = Math.random) {
 
   const roll = random();
   if (wave >= 2 && roll > 0.88) return "sniper";
-  if (wave >= 3 && roll > 0.86) return "mortar";
-  if (wave >= 5 && roll > 0.82) return "charger";
+  if (wave >= 8 && roll > 0.86) return "mortar";
+  if (wave >= 7 && roll > 0.82) return "charger";
   if (wave >= 4 && roll > 0.66) return "spitter";
   if (wave >= 2 && roll > 0.56) return "bomber";
   if (wave >= 2 && roll > 0.46) return "brute";
@@ -5815,17 +5819,20 @@ function spawnEnemy(room, type, options = {}) {
   const nodeKind = getActiveStageKind(room);
   const nodePower = nodeKind === "boss" ? 0.16 : nodeKind === "miniboss" ? 0.11 : nodeKind === "elite" ? 0.1 : 0;
   const chapterDifficulty = getChapterDifficulty(room);
-  const waveScale = 1 + (room.wave - 1) * 0.095 + (chapter - 1) * 0.12 + (depth - 1) * 0.038 + nodePower;
+  const survivalRegularEnemy = Boolean(room.survival?.active && type !== "boss");
+  const chapterStep = survivalRegularEnemy ? 0 : chapter - 1;
+  const statChapterDifficulty = survivalRegularEnemy ? CHAPTER_DIFFICULTY[1] : chapterDifficulty;
+  const waveScale = 1 + (room.wave - 1) * 0.095 + chapterStep * 0.12 + (depth - 1) * 0.038 + nodePower;
   const xpScale = 1 + (room.wave - 1) * 0.028 + (chapter - 1) * 0.05;
   const damageScale =
-    1 + Math.max(0, room.wave - 1) * 0.05 + (chapter - 1) * 0.09 + (depth - 1) * 0.026 + (nodeKind === "boss" ? 0.1 : nodeKind === "elite" ? 0.055 : 0);
-  const speedScale = 1 + Math.min(0.36, Math.max(0, room.wave - 1) * 0.009 + (chapter - 1) * 0.018 + (depth - 1) * 0.007);
+    1 + Math.max(0, room.wave - 1) * 0.05 + chapterStep * 0.09 + (depth - 1) * 0.026 + (nodeKind === "boss" ? 0.1 : nodeKind === "elite" ? 0.055 : 0);
+  const speedScale = 1 + Math.min(0.36, Math.max(0, room.wave - 1) * 0.009 + chapterStep * 0.018 + (depth - 1) * 0.007);
   const stageDifficulty = getStageDifficulty(room);
   const abyssDifficulty = getAbyssDifficulty(room);
   const cadenceMul =
-    Math.max(0.72, 1 - Math.max(0, room.wave - 1) * 0.003 - (chapter - 1) * 0.009 - (depth - 1) * 0.0015 - (nodeKind === "boss" ? 0.02 : 0)) *
+    Math.max(0.72, 1 - Math.max(0, room.wave - 1) * 0.003 - chapterStep * 0.009 - (depth - 1) * 0.0015 - (nodeKind === "boss" ? 0.02 : 0)) *
     stageDifficulty.cadenceMul *
-    chapterDifficulty.cadenceMul *
+    statChapterDifficulty.cadenceMul *
     abyssDifficulty.cadenceMul;
   const partyDifficulty = getPartyDifficulty(room);
   const elite = Boolean(options.elite);
@@ -5850,7 +5857,7 @@ function spawnEnemy(room, type, options = {}) {
       waveScale *
       partyDifficulty.hpMul *
       stageDifficulty.hpMul *
-      chapterDifficulty.hpMul *
+      statChapterDifficulty.hpMul *
       eliteHpMul *
       scale *
       bossHpMul *
@@ -5881,13 +5888,13 @@ function spawnEnemy(room, type, options = {}) {
     y,
     hp: maxHp,
     maxHp,
-    speed: def.speed * speedScale * stageDifficulty.speedMul * chapterDifficulty.speedMul * eliteSpeedMul * bossSpeedMul * abyssDifficulty.speedMul,
+    speed: def.speed * speedScale * stageDifficulty.speedMul * statChapterDifficulty.speedMul * eliteSpeedMul * bossSpeedMul * abyssDifficulty.speedMul,
     damage: Math.round(
       def.damage *
         damageScale *
         partyDifficulty.damageMul *
         stageDifficulty.damageMul *
-        chapterDifficulty.damageMul *
+        statChapterDifficulty.damageMul *
         eliteDamageMul *
         bossDamageMul *
         abyssDifficulty.damageMul
@@ -8543,6 +8550,8 @@ function performSkill(room, player, slot, now) {
       const gearSplit = Boolean(player.mageStarSplit || player.arcanistPiercingFragments);
       const piercingFragments = Boolean(player.arcanistPiercingFragments);
       const bolts = 10 + getProjectileCountBonus(player);
+      const splitShardCount = (splitCore ? 3 : 2) + (piercingFragments ? 2 : 0);
+      const splitDamageMul = Math.min(splitCore ? 0.2 : 0.15, 0.5 / splitShardCount);
       for (let i = 0; i < bolts; i += 1) {
         const angle = (Math.PI * 2 * i) / bolts;
         const lane = i - (bolts - 1) / 2;
@@ -8570,8 +8579,8 @@ function performSkill(room, player, slot, now) {
           homingTargetOffset: homingStar ? Math.max(-20, Math.min(20, Math.sin(angle) * 14)) : 0,
           splitOnHit: splitCore || gearSplit,
           splitDepth: 0,
-          splitShardCount: (splitCore ? 3 : 2) + (piercingFragments ? 2 : 0),
-          splitDamageMul: splitCore ? (piercingFragments ? 0.16 : 0.2) : 0.15,
+          splitShardCount,
+          splitDamageMul,
           splitShardPierce: piercingFragments ? 1 : 0,
           style: "star_orb",
           hostile: false,
@@ -10907,8 +10916,11 @@ function clearEnemyPoison(enemy) {
 function applyVenomToEnemy(room, enemy, ownerId, options = {}) {
   if (!enemy || enemy.hp <= 0) return;
   const duration = Number.isFinite(options.duration) ? options.duration : ENEMY_VENOM_DURATION;
+  const venomDps = enemy.type === "boss"
+    ? Math.max(0, enemy.poisonDps || getEnemyPoisonDpsForStacks(enemy, 1)) * BOSS_VENOM_POISON_RATIO
+    : getEnemyPoisonDpsForStacks(enemy, ENEMY_POISON_MAX_STACKS);
   enemy.venomTimer = Math.max(enemy.venomTimer || 0, Math.max(0.1, duration));
-  enemy.venomDps = Math.max(enemy.venomDps || 0, getEnemyPoisonDpsForStacks(enemy, ENEMY_POISON_MAX_STACKS));
+  enemy.venomDps = Math.max(enemy.venomDps || 0, venomDps);
   enemy.venomOwnerId = ownerId;
   enemy.venomTickTimer = Math.min(
     enemy.venomTickTimer || ENEMY_POISON_TICK_DISPLAY_INTERVAL,
@@ -16077,10 +16089,17 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
   let finalDamage = amount;
   let critical = false;
 
-  if (owner && options.element === "poison") finalDamage *= owner.poisonDamageMul || 1;
-  if (owner && options.element === "burn") finalDamage *= owner.burnDamageMul || 1;
+  if (owner && (options.element === "poison" || options.element === "venom")) {
+    finalDamage *= owner.poisonDamageMul || 1;
+    finalDamage *= owner.statusDamageMul || 1;
+  }
+  if (owner && options.element === "burn") {
+    finalDamage *= owner.burnDamageMul || 1;
+    finalDamage *= owner.statusDamageMul || 1;
+  }
 
   if (owner && !options.fixedDamage) {
+    finalDamage *= getPlayerAttackPowerMultiplier(owner);
     finalDamage *= owner.damageMul;
     if (owner.classId === "mage" && options.skillTag) {
       finalDamage *= owner.skillDamageMul || 1;
@@ -16101,11 +16120,8 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
       const missingRatio = clamp(1 - owner.hp / Math.max(1, owner.maxHp), 0, 1);
       finalDamage *= 1 + missingRatio * owner.missingHpDamageBonus;
     }
-    if ((enemy.elite || enemy.type === "boss") && owner.eliteDamageMul) {
-      finalDamage *= owner.eliteDamageMul;
-    }
-    if (isBossTarget && owner.bossDamageMul) {
-      finalDamage *= owner.bossDamageMul;
+    if ((enemy.elite || isBossTarget) && owner.eliteBossDamageMul) {
+      finalDamage *= owner.eliteBossDamageMul;
     }
     if (
       isBossTarget &&
@@ -16114,15 +16130,11 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     ) {
       finalDamage *= owner.bossFinisherMul || 1;
     }
-    if ((owner.statusDamageMul || 1) > 1 && hasCombatStatus(enemy)) {
-      finalDamage *= owner.statusDamageMul;
-    }
-
     const lowHpCrit = owner.hp <= owner.maxHp * 0.4 ? owner.lowHpCritBonus || 0 : 0;
     const critChance = options.forceCrit ? 1 : clamp((owner.crit || 0) + lowHpCrit, 0, 0.85);
     if (Math.random() < critChance) {
       const baseCritDamageMul = owner.classId === "ranger" || owner.classId === "assassin" ? 2 : 1.5;
-      finalDamage *= baseCritDamageMul * (owner.critDamageMul || 1);
+      finalDamage *= baseCritDamageMul + Math.max(0, (owner.critDamageMul || 1) - 1);
       critical = true;
     }
   }
@@ -16259,8 +16271,17 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
         }
       }
       if (options.skillTag === "ranger_pierce" && hasUpgrade(owner, "ranger_pierce_momentum")) {
-        owner.rangerPierceKills = Math.max(0, owner.rangerPierceKills || 0) + 1;
-        owner.rangerPierceDamageBonus = Math.max(0, owner.rangerPierceDamageBonus || 0) + RANGER_PIERCE_KILL_DAMAGE_BONUS;
+        const previousKills = Math.max(0, owner.rangerPierceKills || 0);
+        const growth = previousKills < RANGER_PIERCE_GROWTH_FULL_KILLS
+          ? 2
+          : previousKills < RANGER_PIERCE_GROWTH_HALF_KILLS
+            ? 1
+            : 0.5;
+        owner.rangerPierceKills = previousKills + 1;
+        owner.rangerPierceDamageBonus = Math.min(
+          RANGER_PIERCE_GROWTH_CAP,
+          Math.max(0, owner.rangerPierceDamageBonus || 0) + growth
+        );
         addEffect(room, "impact", owner.x, owner.y, {
           color: classes.ranger.color,
           radius: 54 + Math.min(14, owner.rangerPierceKills) * 4,
@@ -16313,18 +16334,6 @@ function interruptEnemyCast(room, enemy, options = {}) {
     style: "cast_interrupt"
   });
   return true;
-}
-
-function hasCombatStatus(enemy) {
-  return (
-    enemy.slowTimer > 0 ||
-    enemy.freezeTimer > 0 ||
-    enemy.poisonTimer > 0 ||
-    enemy.burnTimer > 0 ||
-    enemy.vulnerableTimer > 0 ||
-    enemy.weakenTimer > 0 ||
-    enemy.tauntTimer > 0
-  );
 }
 
 function applyRelicOnKill(room, owner, enemy) {
@@ -17649,11 +17658,20 @@ function applySkillUpgrade(player, upgradeId) {
   }
 }
 
+function getPlayerAttackPowerMultiplier(player, fallbackClassId = "novice") {
+  const classId = player?.classId || fallbackClassId;
+  const def = classes[classId] || classes[fallbackClassId] || classes.novice;
+  const baseAttackPower = Math.max(1, Number(def.damage) || 1);
+  const equipmentAttackPower = Math.max(0, Number(player?.attackPowerBonus) || 0);
+  return (baseAttackPower + equipmentAttackPower) / baseAttackPower;
+}
+
 function getPlayerAttackDamage(player, fallbackClassId = "novice") {
   const classId = player?.classId || fallbackClassId;
   const def = classes[classId] || classes[fallbackClassId] || classes.novice;
   const basicAttackDamageMul = classId === "engineer" && player ? getEngineerMechaAttackDamageMul(player) : 1;
-  return Math.max(0, def.damage * (player?.damageMul || 1) * basicAttackDamageMul);
+  const attackPower = def.damage + Math.max(0, Number(player?.attackPowerBonus) || 0);
+  return Math.max(0, attackPower * (player?.damageMul || 1) * basicAttackDamageMul);
 }
 
 function getPlayerStats(player) {

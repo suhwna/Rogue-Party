@@ -15,7 +15,7 @@
     arcanist: { two: "스킬 가속 +5", four: "화상 피해 +30% · 별빛 파편 +2개 및 1회 관통", twoStats: { skillHaste: 5 }, fourStats: { burnDamageMul: 0.3, arcanistPiercingFragments: 1 } },
     mechanist: { two: "설치물 피해 +12%", four: "터렛 처치 연장 +1초 · 터렛 위치에 감전 지뢰 자동 설치", twoStats: { constructDamageMul: 0.12 }, fourStats: { turretKillDurationBonus: 1, mechanistTurretMine: 1 } },
     occult: { two: "상태이상 피해 +10%", four: "독 최대 중첩 +1", twoStats: { statusDamageMul: 0.1 }, fourStats: { poisonStackCapBonus: 1 } },
-    abyss: { two: "보스 피해 +18%", four: "피해 +10%", twoStats: { bossDamageMul: 0.18 }, fourStats: { damageMul: 0.1 } },
+    abyss: { two: "정예/보스 피해 +18%", four: "피해 +10%", twoStats: { eliteBossDamageMul: 0.18 }, fourStats: { damageMul: 0.1 } },
   };
   const RARITIES = [
     { id: "common", label: "일반", color: "#cbd5e1", rank: 0 },
@@ -107,7 +107,7 @@
   const RARITY_PRIMARY_SCALE = [1, 1.2, 1.45, 1.75, 2.1];
   const RARITY_SPECIAL_SCALE = [0, 1, 1.4, 1.85, 2.4];
   const SPECIALS = {
-    boss_hunter: { label: "거인 사냥", text: "보스 피해 증가" },
+    boss_hunter: { label: "거인 사냥", text: "정예/보스 피해 증가" },
     ricochet: { label: "벽 반사", text: "투사체가 벽에서 1회 튕김" },
     skill_amp: { label: "과충전", text: "스킬 피해와 범위 증가" },
     construct_amp: { label: "자동화", text: "설치물 피해와 지속시간 증가" },
@@ -119,7 +119,7 @@
     warden_oath: { label: "불굴의 맹세", text: "최대 체력 +12% · 방어 +1.5 · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)" },
     prophet_bloom: { label: "역병 개화", text: "상태이상 피해 +22% · 독 최대 중첩 +2 · 체력 재생 +0.35/s" },
     regent_singularity: { label: "특이점 기관", text: "공격력 +10% · 범위 +14% · 스킬 가속 +8" },
-    abyss_crown: { label: "심연의 판결", text: "공격력 +12% · 보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가" },
+    abyss_crown: { label: "심연의 판결", text: "공격력 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가" },
     burn_amp: { label: "불씨 증폭", text: "화상 피해 +28%" },
     turret_sustain: { label: "자가 연장", text: "터렛 처치 시 지속시간 +0.8초" },
     warrior_signature: { label: "회오리 증폭", text: "강철 회오리가 전방으로 이동하는 회오리 칼날을 추가 발사" },
@@ -139,13 +139,13 @@
     { id: "haste", name: "순환 룬", text: "이동 속도와 쿨감", icon: "speed" },
     { id: "venom", name: "맹독 룬", text: "상태이상 피해와 독 중첩", icon: "science" },
     { id: "rebound", name: "반향 룬", text: "고등급에서 벽 반사", icon: "switch_access_shortcut" },
-    { id: "eclipse", name: "일식 룬", text: "화상·상태이상·보스 피해", icon: "contrast" },
+    { id: "eclipse", name: "일식 룬", text: "화상·상태이상·정예/보스 피해", icon: "contrast" },
     { id: "precision", name: "정밀 룬", text: "치명타 확률 증가", icon: "my_location" },
     { id: "ruin", name: "파멸 룬", text: "치명타 피해 증가", icon: "crisis_alert" },
     { id: "colossus", name: "거신 룬", text: "최대 체력 크게 증가", icon: "fitness_center" },
     { id: "bastion", name: "성채 룬", text: "방어력 증가", icon: "castle" },
-    { id: "hunter", name: "사냥 룬", text: "보스 피해 증가", icon: "swords" },
-    { id: "slayer", name: "토벌 룬", text: "엘리트 피해 증가", icon: "skull" },
+    { id: "hunter", name: "사냥 룬", text: "정예/보스 피해 증가", icon: "swords" },
+    { id: "slayer", name: "토벌 룬", text: "정예/보스 피해 증가", icon: "skull" },
     { id: "wildfire", name: "산불 룬", text: "화상 피해 증가", icon: "whatshot" },
     { id: "expansion", name: "팽창 룬", text: "범위 증가", icon: "open_in_full" },
     { id: "automation", name: "자동화 룬", text: "설치물 피해 증가", icon: "precision_manufacturing" },
@@ -213,7 +213,7 @@
     relic: { label: "유물", icon: "diamond" },
   };
   const ITEM_SPECIAL_DETAILS = {
-    boss_hunter: ["보스 피해", "일반 +8% · 희귀 +9.5% · 영웅 +11% · 전설 +12.5%"],
+    boss_hunter: ["정예/보스 피해", "일반 +8% · 희귀 +9.5% · 영웅 +11% · 전설 +12.5%"],
     ricochet: ["벽 반사", "투사체가 벽에서 1회 추가 반사"],
     skill_amp: ["과충전", "모든 피해 +3.5% · 범위 +5%"],
     construct_amp: ["자동화", "설치물 피해 +11% · 설치물 지속시간 +9%"],
@@ -225,7 +225,7 @@
     warden_oath: ["불굴의 맹세", "최대 체력 +12% · 방어 +1.5 · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)"],
     prophet_bloom: ["역병 개화", "상태이상 피해 +22% · 독 최대 중첩 +2 · 체력 재생 +0.35/s"],
     regent_singularity: ["특이점 기관", "공격력 +10% · 범위 +14% · 스킬 가속 +8"],
-    abyss_crown: ["심연의 판결", "공격력 +12% · 보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가"],
+    abyss_crown: ["심연의 판결", "공격력 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가"],
     burn_amp: ["불씨 증폭", "화상 피해 +28%"],
     turret_sustain: ["자가 연장", "터렛이 적을 처치할 때 지속시간 +0.8초"],
     warrior_signature: ["회오리 증폭", "피해 +6% · 범위 +8% · 강철 회오리가 전방 회오리 칼날 1개 추가 발사"],
@@ -267,15 +267,15 @@
     fate_executioner: { tier: "9분 생존 히든 보스", multipliers: ["체력: 최종 보스 체력 ×설정 배율 또는 생성 체력 ×12 중 높은 값", "피해: 생성 피해 ×2.4 또는 파티 최대 체력 ×62% 중 높은 값", "속도 ×1.38", "크기 ×1.14", "초기 보호막: 최대 체력 8%"], phases: "체력 80% / 55% / 28%에서 총 4페이즈 · 공격 간격이 단계마다 크게 감소", patterns: ["붉은 감옥", "끈질긴 연쇄 추적", "레이저·탄환 교차 사격", "충격파와 광역 폭발의 최종 선고"] },
   };
   const RELIC_DETAILS = {
-    power_core: { cap: 5, type: "곱연산", unit: "공격력 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "현재 공격 배율에 중첩마다 ×1.10을 적용합니다." },
-    iron_plate: { cap: 5, type: "고정 수치", unit: "방어 +2", values: ["+2", "+4", "+6", "+8", "+10"], note: "플레이어 최종 방어 수치는 18을 넘지 않습니다." },
+    power_core: { cap: 5, type: "합연산", unit: "모든 피해 +10%", values: ["+10%", "+20%", "+30%", "+40%", "+50%"], note: "계정·영구 성장·장비의 모든 피해 증가량과 합산됩니다." },
+    iron_plate: { cap: 5, type: "고정 수치", unit: "방어 +1", values: ["+1", "+2", "+3", "+4", "+5"], note: "플레이어 최종 방어 수치는 18을 넘지 않습니다." },
     swift_boots: { cap: 5, type: "곱연산", unit: "이동 속도 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "현재 이동 속도 배율에 중첩마다 ×1.10을 적용합니다." },
     cooling_gear: { cap: 5, type: "합연산", unit: "스킬 가속 +10", values: ["+10", "+20", "+30", "+40", "+50"], note: "Q/E/R/F 스킬에 적용되며 최대 스킬 가속은 500입니다." },
     rapid_loader: { cap: 5, type: "합연산", unit: "공격 속도 +10", values: ["+10", "+20", "+30", "+40", "+50"], note: "기본 공격과 기계공 터렛·드론의 공격 간격을 기본 간격 × 100 / (100 + 공격 속도)로 계산합니다." },
     splitter_core: { cap: 1, type: "고정 수치", unit: "투사체 수 +1", values: ["+1"], note: "투사체 계열에만 적용되며 실제 발사체가 1개 늘어납니다. 최대 1중첩입니다." },
     giant_lens: { cap: 5, type: "곱연산", unit: "범위 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "범위 공격과 폭발의 판정 반경 및 대응 그래픽 크기에 적용됩니다." },
     sharp_eye: { cap: 5, type: "합연산", unit: "치명타 확률 +10%p", values: ["+10%p", "+20%p", "+30%p", "+40%p", "+50%p"], note: "최종 치명타 확률은 85%를 넘지 않습니다." },
-    fatal_mark: { cap: 5, type: "곱연산", unit: "치명타 피해 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "직업의 기본 치명타 피해 배율에 중첩마다 ×1.10을 적용합니다." },
+    fatal_mark: { cap: 5, type: "합연산", unit: "치명타 피해 +10%p", values: ["+10%p", "+20%p", "+30%p", "+40%p", "+50%p"], note: "직업의 기본 치명타 피해 150% 또는 200%에 합산됩니다." },
     living_moss: { cap: 5, type: "고정 수치", unit: "초당 재생 +0.5", values: ["+0.5/s", "+1.0/s", "+1.5/s", "+2.0/s", "+2.5/s"], note: "기본 체력 재생에 합산됩니다." },
     heartstone: { cap: 5, type: "고정 수치", unit: "최대 체력 +25", values: ["+25", "+50", "+75", "+100", "+125"], note: "획득 즉시 최대 체력과 현재 체력이 각각 25 증가합니다." },
   };
@@ -320,20 +320,20 @@
   const COSMETIC_EFFECTS = {
     titles: {
       "초행자": { text: "최대 체력 +3%", maxHpMul: 0.03 },
-      "심연 탐사자": { text: "보스 피해 +5%", bossDamageMul: 0.05 },
+      "심연 탐사자": { text: "정예/보스 피해 +5%", eliteBossDamageMul: 0.05 },
       "승천자": { text: "모든 피해 +4%", damageMul: 0.04 },
       "백전노장": { text: "방어 +1", armorBonus: 1 },
       "맹독 추적자": { text: "상태이상 피해 +8%", statusDamageMul: 0.08 },
       "불굴": { text: "최대 체력 +6%", maxHpMul: 0.06 },
       "자동화 지휘관": { text: "설치물 피해 +10%", constructDamageMul: 0.1 },
       "시즌 개척자": { text: "이동 속도 +3%", speedMul: 0.03 },
-      "심연의 계절": { text: "보스 피해 +8%", bossDamageMul: 0.08 },
+      "심연의 계절": { text: "정예/보스 피해 +8%", eliteBossDamageMul: 0.08 },
       "경계를 넘은 자": { text: "모든 피해 +5% · 최대 체력 +5%", damageMul: 0.05, maxHpMul: 0.05 },
       "룬 초월자": { text: "치명타 확률 +3% · 범위 +5%", critChanceBonus: 0.03, areaMul: 0.05 },
     },
     skins: {
       victory_trim: { label: "승전 장식", text: "치명타 +2.5% · 직업 장비에 왕실 금장과 태양 문장 추가", critChanceBonus: 0.025 },
-      abyss_glow: { label: "심연 광휘", text: "피해 +3% · 보스 +5% · 직업 공격에 심연 균열 잔광 추가", damageMul: 0.03, bossDamageMul: 0.05 },
+      abyss_glow: { label: "심연 광휘", text: "피해 +3% · 정예/보스 +5% · 직업 공격에 심연 균열 잔광 추가", damageMul: 0.03, eliteBossDamageMul: 0.05 },
       season_ember: { label: "계절의 불씨", text: "화상 +12% · 직업 무기와 스킬에 잿불 궤적 추가", burnDamageMul: 0.12 },
       season_verdant: { label: "계절의 새싹", text: "체력 +4% · 이동 +2% · 직업 장비에 생명 문양과 잎 장식 추가", maxHpMul: 0.04, speedMul: 0.02 },
     },
@@ -1015,7 +1015,7 @@
     else if (def.stat === "skillHaste") bonuses.skillHaste += value;
     else if (def.stat === "armorBonus") addBonus(bonuses, "armorBonus", value);
     else if (def.stat === "critChanceBonus") addBonus(bonuses, "critChanceBonus", value);
-    else if (def.stat === "eliteDamage") addBonus(bonuses, "eliteDamageMul", value);
+    else if (def.stat === "eliteDamage") addBonus(bonuses, "eliteBossDamageMul", value);
     else if (def.stat === "statusDamage") addBonus(bonuses, "statusDamageMul", value);
     else if (def.stat === "regenBonus") addBonus(bonuses, "regenBonus", value);
     else if (def.stat === "critDamageMul") addBonus(bonuses, "critDamageMul", value);
@@ -1023,7 +1023,7 @@
   }
 
   function applyRaritySpecial(bonuses, special, scale) {
-    if (special === "boss_hunter") bonuses.bossDamageMul += 0.1 * scale;
+    if (special === "boss_hunter") bonuses.eliteBossDamageMul += 0.1 * scale;
     if (special === "ricochet") bonuses.wallBounceBonus += 1;
     if (special === "skill_amp") { bonuses.damageMul += 0.035 * scale; bonuses.areaMul += 0.05 * scale; }
     if (special === "construct_amp") { bonuses.constructDamageMul += 0.11 * scale; bonuses.constructDurationMul += 0.09 * scale; }
@@ -1035,7 +1035,7 @@
     if (special === "warden_oath") { bonuses.maxHpMul += 0.12 * scale; bonuses.armorBonus += 1.5 * scale; bonuses.lowHpShieldRatio = Math.max(bonuses.lowHpShieldRatio, 0.35); }
     if (special === "prophet_bloom") { bonuses.statusDamageMul += 0.22 * scale; bonuses.poisonStackCapBonus += 2; bonuses.regenBonus += 0.35 * scale; }
     if (special === "regent_singularity") { bonuses.damageMul += 0.1 * scale; bonuses.areaMul += 0.14 * scale; bonuses.skillHaste += 8 * scale; }
-    if (special === "abyss_crown") { bonuses.bossDamageMul += 0.25 * scale; bonuses.damageMul += 0.12 * scale; bonuses.bossFinisherMul = Math.max(bonuses.bossFinisherMul, 1.45); bonuses.bossFinisherThreshold = Math.max(bonuses.bossFinisherThreshold, 0.2); }
+    if (special === "abyss_crown") { bonuses.eliteBossDamageMul += 0.25 * scale; bonuses.damageMul += 0.12 * scale; bonuses.bossFinisherMul = Math.max(bonuses.bossFinisherMul, 1.45); bonuses.bossFinisherThreshold = Math.max(bonuses.bossFinisherThreshold, 0.2); }
     if (special === "burn_amp") bonuses.burnDamageMul += 0.28 * scale;
     if (special === "turret_sustain") bonuses.turretKillDurationBonus += 0.8 * scale;
     if (special === "warrior_signature") { bonuses.damageMul += 0.06 * scale; bonuses.areaMul += 0.08 * scale; bonuses.warriorWhirlwindEcho = 1; }
@@ -1055,7 +1055,7 @@
     const runeMap = new Map(next.inventory.runes.map((rune) => [rune.id, rune]));
     const bonuses = {
       attackBonus: 0, maxHpBonus: 0, damageMul: 1, maxHpMul: 1, regenBonus: 0, speedMul: 1, attackSpeed: 0, skillHaste: 0, armorBonus: 0,
-      critChanceBonus: 0, critDamageMul: 1, eliteDamageMul: 1, bossDamageMul: 1,
+      critChanceBonus: 0, critDamageMul: 1, eliteBossDamageMul: 1,
       statusDamageMul: 1, areaMul: 1, constructDamageMul: 1,
       constructDurationMul: 1, burnDamageMul: 1, turretKillDurationBonus: 0,
       wallBounceBonus: 0, poisonStackCapBonus: 0, lowHpShieldRatio: 0,
@@ -1094,13 +1094,13 @@
       if (rune.runeId === "haste") { bonuses.speedMul += 0.008 * power; bonuses.skillHaste += 0.9 * power; }
       if (rune.runeId === "venom") { bonuses.statusDamageMul += 0.025 * power; if (tier >= 5) bonuses.poisonStackCapBonus += 1; }
       if (rune.runeId === "rebound" && tier >= 4) bonuses.wallBounceBonus += 1;
-      if (rune.runeId === "eclipse") { bonuses.burnDamageMul += 0.04 * power; bonuses.statusDamageMul += 0.035 * power; bonuses.bossDamageMul += 0.02 * power; }
+      if (rune.runeId === "eclipse") { bonuses.burnDamageMul += 0.04 * power; bonuses.statusDamageMul += 0.035 * power; bonuses.eliteBossDamageMul += 0.02 * power; }
       if (rune.runeId === "precision") bonuses.critChanceBonus += 0.012 * power;
       if (rune.runeId === "ruin") bonuses.critDamageMul += 0.025 * power;
       if (rune.runeId === "colossus") bonuses.maxHpMul += 0.04 * power;
       if (rune.runeId === "bastion") bonuses.armorBonus += 0.42 * power;
-      if (rune.runeId === "hunter") bonuses.bossDamageMul += 0.025 * power;
-      if (rune.runeId === "slayer") bonuses.eliteDamageMul += 0.028 * power;
+      if (rune.runeId === "hunter") bonuses.eliteBossDamageMul += 0.025 * power;
+      if (rune.runeId === "slayer") bonuses.eliteBossDamageMul += 0.028 * power;
       if (rune.runeId === "wildfire") bonuses.burnDamageMul += 0.05 * power;
       if (rune.runeId === "expansion") bonuses.areaMul += 0.018 * power;
       if (rune.runeId === "automation") bonuses.constructDamageMul += 0.03 * power;
@@ -1130,9 +1130,10 @@
     bonuses.speedMul = Math.min(1.25, bonuses.speedMul);
     bonuses.attackSpeed = Math.min(500, bonuses.attackSpeed);
     bonuses.skillHaste = Math.min(500, bonuses.skillHaste);
-    bonuses.armorBonus = Math.min(6, bonuses.armorBonus);
+    bonuses.armorBonus = Math.min(10, bonuses.armorBonus);
     bonuses.critChanceBonus = Math.min(0.22, bonuses.critChanceBonus);
     bonuses.critDamageMul = Math.min(1.6, bonuses.critDamageMul);
+    bonuses.eliteBossDamageMul = Math.min(1.75, bonuses.eliteBossDamageMul);
     bonuses.areaMul = Math.min(1.5, bonuses.areaMul);
     bonuses.wallBounceBonus = Math.min(2, bonuses.wallBounceBonus);
     bonuses.poisonStackCapBonus = Math.min(2, bonuses.poisonStackCapBonus);
@@ -1387,7 +1388,7 @@
     const pct = (value) => `+${percent(value * scale)}`;
     const number = (value, suffix = "") => `+${Math.round(value * scale * 100) / 100}${suffix}`;
     switch (item.special) {
-      case "boss_hunter": return `보스 피해 ${pct(0.1)}`;
+      case "boss_hunter": return `정예/보스 피해 ${pct(0.1)}`;
       case "ricochet": return "투사체가 벽에서 1회 튕김";
       case "skill_amp": return `스킬 피해 ${pct(0.035)} · 범위 ${pct(0.05)}`;
       case "construct_amp": return `설치물 피해 ${pct(0.11)} · 지속시간 ${pct(0.09)}`;
@@ -1399,7 +1400,7 @@
       case "warden_oath": return `최대 체력 ${pct(0.12)} · 방어 ${number(1.5)} · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)`;
       case "prophet_bloom": return `상태이상 피해 ${pct(0.22)} · 독 최대 중첩 +2 · 체력 재생 ${number(0.35, "/s")}`;
       case "regent_singularity": return `공격력 ${pct(0.1)} · 범위 ${pct(0.14)} · 스킬 가속 +${Math.round(8 * scale * 10) / 10}`;
-      case "abyss_crown": return `공격력 ${pct(0.12)} · 보스 피해 ${pct(0.25)} · 보스 체력 20% 이하에서 피해 +45%`;
+      case "abyss_crown": return `공격력 ${pct(0.12)} · 정예/보스 피해 ${pct(0.25)} · 보스 체력 20% 이하에서 피해 +45%`;
       case "burn_amp": return `화상 피해 ${pct(0.28)}`;
       case "turret_sustain": return `터렛 처치 시 지속시간 ${number(0.8, "초")}`;
       case "warrior_signature": return `피해 ${pct(0.06)} · 범위 ${pct(0.08)} · 강철 회오리 추가 칼날 발사`;
@@ -1457,8 +1458,8 @@
     if (runeId === "ruin") return `치명타 피해 +${percent(0.025 * power)}`;
     if (runeId === "colossus") return `최대 체력 +${percent(0.04 * power)}`;
     if (runeId === "bastion") return `방어 +${Math.round(0.42 * power * 100) / 100}`;
-    if (runeId === "hunter") return `보스 피해 +${percent(0.025 * power)}`;
-    if (runeId === "slayer") return `엘리트 피해 +${percent(0.028 * power)}`;
+    if (runeId === "hunter") return `정예/보스 피해 +${percent(0.025 * power)}`;
+    if (runeId === "slayer") return `정예/보스 피해 +${percent(0.028 * power)}`;
     if (runeId === "wildfire") return `화상 피해 +${percent(0.05 * power)}`;
     if (runeId === "expansion") return `범위 +${percent(0.018 * power)}`;
     if (runeId === "automation") return `설치물 피해 +${percent(0.03 * power)}`;
@@ -1701,8 +1702,7 @@
     ];
     const specialRows = [
       ["상태이상 피해", percent(bonuses.statusDamageMul - 1), bonuses.statusDamageMul > 1],
-      ["정예 피해", percent(bonuses.eliteDamageMul - 1), bonuses.eliteDamageMul > 1],
-      ["보스 피해", percent(bonuses.bossDamageMul - 1), bonuses.bossDamageMul > 1],
+      ["정예/보스 피해", percent(bonuses.eliteBossDamageMul - 1), bonuses.eliteBossDamageMul > 1],
       ["화상 피해", percent(bonuses.burnDamageMul - 1), bonuses.burnDamageMul > 1],
       ["설치물 피해", percent(bonuses.constructDamageMul - 1), bonuses.constructDamageMul > 1],
       ["설치물 지속", percent(bonuses.constructDurationMul - 1), bonuses.constructDurationMul > 1],

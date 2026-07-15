@@ -187,9 +187,9 @@ function checkBossPatternContract() {
     !serverSource.includes("startPendingBossPhaseTransition(room, enemy, owner);") ||
     !serverSource.includes("if (isBossTarget && !bossGateFailOpen)") ||
     !serverSource.includes("bossSystem.getBossDamageAllowance(enemy, finalDamage)") ||
-    !serverSource.includes("CHAPTER_BOSS_HEALTH_MUL = 4") ||
-    !serverSource.includes("MINIBOSS_HEALTH_MUL = 3") ||
-    !serverSource.includes("SURVIVAL_EXECUTION_BOSS_HP_MUL = 40") ||
+    !serverSource.includes("CHAPTER_BOSS_HEALTH_MUL = 6") ||
+    !serverSource.includes("MINIBOSS_HEALTH_MUL = 4") ||
+    !serverSource.includes("SURVIVAL_EXECUTION_BOSS_HP_MUL = 20") ||
     !clientSource.includes('"boss_volley"') ||
     !pixiEnemySource.includes('"boss_volley"') ||
     !pixiHazardSource.includes("function renderBossFieldJudgment") ||
@@ -405,7 +405,7 @@ function checkSoloBalanceContract() {
     !serverSource.includes("def.damage * 2.55") ||
     !serverSource.includes("def.damage * 3.7 * bossExecutionBonus") ||
     !serverSource.includes("const bolts = 10 + getProjectileCountBonus(player)") ||
-    !serverSource.includes("splitCore ? (piercingFragments ? 0.16 : 0.2) : 0.15") ||
+    !serverSource.includes("0.5 / splitShardCount") ||
     !serverSource.includes("getEngineerMechaAttackDamageMul(player) * 1.1") ||
     !serverSource.includes("mini ? 0.72 : 1.1") ||
     !difficultySource.includes("spawnMul: 0.54") ||
@@ -417,8 +417,42 @@ function checkSoloBalanceContract() {
   console.log("solo class viability contract ok");
 }
 
+function checkBalanceCorrectionsContract() {
+  const serverSource = fs.readFileSync("server.js", "utf8");
+  const progressionSource = fs.readFileSync("public/client-progression.js", "utf8");
+  const relicSource = fs.readFileSync("src/data/relics.ts", "utf8");
+  const skillSource = fs.readFileSync("src/data/skillUpgrades.ts", "utf8");
+  if (
+    !serverSource.includes("ENEMY_POISON_BOSS_MAX_HP_DPS = 0.003") ||
+    !serverSource.includes("BOSS_VENOM_POISON_RATIO = 0.5") ||
+    !serverSource.includes('options.element === "poison" || options.element === "venom"') ||
+    !serverSource.includes("finalDamage *= owner.statusDamageMul || 1") ||
+    serverSource.includes("function hasCombatStatus") ||
+    !serverSource.includes("RANGER_PIERCE_GROWTH_FULL_KILLS = 20") ||
+    !serverSource.includes("RANGER_PIERCE_GROWTH_HALF_KILLS = 50") ||
+    !serverSource.includes("RANGER_PIERCE_GROWTH_CAP = 100") ||
+    !serverSource.includes("0.5 / splitShardCount") ||
+    !serverSource.includes("player.attackPowerBonus = gear.attackBonus") ||
+    !serverSource.includes("player.damageMul += (accountBonuses.damageMul - 1) + (bonuses.damageMul - 1) + (gear.damageMul - 1)") ||
+    !serverSource.includes("(baseAttackPower + equipmentAttackPower) / baseAttackPower") ||
+    !serverSource.includes("eliteBossDamageMul: clampNumber") ||
+    !serverSource.includes("baseCritDamageMul + Math.max(0, (owner.critDamageMul || 1) - 1)") ||
+    !progressionSource.includes('["정예/보스 피해", percent(bonuses.eliteBossDamageMul - 1)') ||
+    !serverSource.includes("armorBonus: clampNumber(bonuses.armorBonus || 0, 0, 10)") ||
+    !progressionSource.includes("bonuses.armorBonus = Math.min(10, bonuses.armorBonus)") ||
+    !progressionSource.includes('unit: "방어 +1"') ||
+    !relicSource.includes('text: "방어력이 1 증가합니다."') ||
+    !skillSource.includes("최대 +100") ||
+    !skillSource.includes("파편 총 피해는 원본의 50%")
+  ) {
+    throw new Error("balance corrections contract failed");
+  }
+  console.log("balance corrections contract ok");
+}
+
 function checkSurvivalModeContract() {
   const serverSource = fs.readFileSync("server.js", "utf8");
+  const enemySystem = require("./server-enemy-system");
   const hudSource = fs.readFileSync("public/client-hud.js", "utf8");
   const enemySource = fs.readFileSync("public/pixi-enemies.js", "utf8");
   const effectsSource = fs.readFileSync("public/pixi-effects.js", "utf8");
@@ -442,10 +476,18 @@ function checkSurvivalModeContract() {
     !serverSource.includes("function updateSurvivalMode") ||
     !serverSource.includes("solo ? 26 + minute * 3.6 : 32 + minute * 5") ||
     !serverSource.includes(": 5 + players") ||
-    !serverSource.includes(": 2 + Math.floor(survival.elapsed / 120)") ||
+    !serverSource.includes("const multiplayerBatchGrowth = [120, 390, 450, 510]") ||
+    !serverSource.includes(": 2 + multiplayerBatchGrowth + (players >= 3 ? 1 : 0)") ||
+    enemySystem.isEnemyTypeUnlocked("charger", 6) ||
+    enemySystem.isEnemyTypeUnlocked("mortar", 7) ||
+    !enemySystem.isEnemyTypeUnlocked("charger", 7) ||
+    !enemySystem.isEnemyTypeUnlocked("mortar", 8) ||
     !serverSource.includes(": 0.92 - elapsedRatio * 0.52") ||
     !serverSource.includes("function spawnScheduledSurvivalMiniBosses") ||
     !serverSource.includes("function spawnSurvivalMiniBossWave(room, minute, count) {\n  const total = 1;") ||
+    !serverSource.includes('const survivalRegularEnemy = Boolean(room.survival?.active && type !== "boss")') ||
+    !serverSource.includes("const chapterStep = survivalRegularEnemy ? 0 : chapter - 1") ||
+    !serverSource.includes("const statChapterDifficulty = survivalRegularEnemy ? CHAPTER_DIFFICULTY[1] : chapterDifficulty") ||
     !serverSource.includes("function clearSurvivalRegularEnemiesForBoss") ||
     !serverSource.includes("boss.survivalMiniBoss = true") ||
     !serverSource.includes("boss.guaranteedRelicDrop = true") ||
@@ -510,7 +552,7 @@ function checkAscensionDifficultyContract() {
     !serverSource.includes("spawnMul: 1.68") ||
     !serverSource.includes("cadenceMul: 0.68") ||
     !serverSource.includes("rewardMul: 5") ||
-    !serverSource.includes("chapterDifficulty.cadenceMul *\n    abyssDifficulty.cadenceMul") ||
+    !serverSource.includes("statChapterDifficulty.cadenceMul *\n    abyssDifficulty.cadenceMul") ||
     !serverSource.includes("baseMaxAlive * ascensionDifficulty.spawnMul") ||
     !serverSource.includes("EQUIPMENT_DROP_CHANCE * Math.sqrt(ascensionRewardMul)") ||
     authoritativeSource.includes("highestAscension") ||
@@ -557,7 +599,7 @@ function checkLongTermProgressionContract() {
     "accountProgressAction",
     "getAuthoritativeGrowthLoadout",
     "function calculateAccountLevelBonuses",
-    "accountBonuses.damageMul * bonuses.damageMul",
+    "player.damageMul += (accountBonuses.damageMul - 1) + (bonuses.damageMul - 1) + (gear.damageMul - 1)",
     "accountBonuses.maxHpMul * bonuses.maxHpMul",
     "accountBonuses.armorBonus + bonuses.armorBonus",
     "function recordEnemyDefeatDiscovery",
@@ -1809,7 +1851,7 @@ async function checkClientSaveRuntimeContract() {
     bossItemBonuses.regent_engine.areaMul < 1.14 ||
     bossItemBonuses.regent_engine.skillHaste < 8 ||
     bossItemBonuses.abyss_crown.damageMul < 1.12 ||
-    bossItemBonuses.abyss_crown.bossDamageMul < 1.25 ||
+    bossItemBonuses.abyss_crown.eliteBossDamageMul < 1.25 ||
     bossItemBonuses.abyss_crown.bossFinisherMul !== 1.45 ||
     bossItemBonuses.abyss_crown.bossFinisherThreshold !== 0.2 ||
     rejectedBossCraft.changed ||
@@ -2045,7 +2087,7 @@ async function checkClientSaveRuntimeContract() {
     !["armor_flat", "health_flat"].includes(armorPrimary?.id) ||
     weaponFour.milestoneAffixes.length !== 0 || milestoneFive.inventory.items[0].milestoneAffixes.length !== 1 ||
     bonusFive.attackBonus <= bonusFour.attackBonus || !milestoneBonusActivated ||
-    bonusFour.bossDamageMul !== 1 || mythicWeaponBonus.attackBonus < bonusFour.attackBonus * 1.8 || mythicWeaponBonus.bossDamageMul <= 1.2 ||
+    bonusFour.eliteBossDamageMul !== 1 || mythicWeaponBonus.attackBonus < bonusFour.attackBonus * 1.8 || mythicWeaponBonus.eliteBossDamageMul <= 1.2 ||
     !mythicGearHtml.includes('data-rarity="mythic"') || !mythicGearHtml.includes("주 능력 210%")
   ) {
     throw new Error("slot primary stat, fixed enhancement, milestone, or rarity special contract failed");
@@ -3134,6 +3176,7 @@ Promise.resolve()
   .then(checkEngineerBalanceContract)
   .then(checkSkillHasteContract)
   .then(checkSoloBalanceContract)
+  .then(checkBalanceCorrectionsContract)
   .then(checkSurvivalModeContract)
   .then(checkExperienceCurveContract)
   .then(checkAscensionDifficultyContract)

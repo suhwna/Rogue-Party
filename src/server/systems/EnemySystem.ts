@@ -51,8 +51,8 @@ export function isEnemyTypeUnlocked(type: string, wave: number, blockadeRunnerTy
   if (type === "splitter") return wave >= 2;
   if (type === "spitter") return wave >= 4;
   if (type === "guardian" || type === "shaman") return wave >= 3;
-  if (type === "charger") return wave >= 5;
-  if (type === "mortar") return wave >= 5;
+  if (type === "charger") return wave >= 7;
+  if (type === "mortar") return wave >= 8;
   if (type === "stalker") return wave >= 7;
   if (type === "splinter") return false;
   return true;

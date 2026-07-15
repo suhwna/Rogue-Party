@@ -253,7 +253,7 @@ export const DEFENSE_ENEMY_WEIGHTS = [
   { type: "bomber", weight: 0.12, minWave: 2 },
   { type: "splitter", weight: 0.1, minWave: 2 },
   { type: "guardian", weight: 0.08, minWave: 3 },
-  { type: "charger", weight: 0.05, minWave: 5 },
+  { type: "charger", weight: 0.05, minWave: 7 },
 ] as const satisfies readonly WeightedEnemyType[];
 
 export function isEnemyType(type: string): type is EnemyType {
@@ -280,8 +280,8 @@ export function isEnemyTypeUnlocked(type: string, wave: number): boolean {
   if (type === "splitter") return wave >= 2;
   if (type === "spitter") return wave >= 4;
   if (type === "guardian" || type === "shaman") return wave >= 3;
-  if (type === "charger") return wave >= 5;
-  if (type === "mortar") return wave >= 5;
+  if (type === "charger") return wave >= 7;
+  if (type === "mortar") return wave >= 8;
   if (type === "stalker") return wave >= 7;
   if (type === "splinter") return false;
   return true;

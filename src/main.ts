@@ -65,7 +65,7 @@ window.__rogueModernizationSmoke = {
     stageEightHpMul: getStageDifficulty(8).hpMul,
     bossId: getChapterBossProfile(3).id,
     defenseGlyph: getStageNodeMeta("defense").glyph,
-    chargerUnlocksAtFive: isEnemyTypeUnlocked("charger", 5),
+    chargerUnlocksAtSixMinutes: isEnemyTypeUnlocked("charger", 7),
     shamanRole: getEnemyDefinition("shaman").role,
     swarmSpawnMul: getRiskById("swarm_contract").spawnMul,
     warriorPrimary: getPrimarySkillName("warrior"),
