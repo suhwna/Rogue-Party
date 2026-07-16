@@ -41,6 +41,11 @@ export interface EquipmentAffix {
   value: number;
 }
 
+export interface EquipmentMilestoneAffix extends EquipmentAffix {
+  milestone: number;
+  quality: number;
+}
+
 export interface EquipmentItem {
   id: string;
   baseId: string;
@@ -49,13 +54,15 @@ export interface EquipmentItem {
   classId: string;
   setId: string;
   special: string;
-  rarity: "common" | "rare" | "epic" | "legendary" | "mythic";
+  rarity: "common" | "rare" | "epic" | "legendary" | "mythic" | "unique";
   itemLevel: number;
   enhance: number;
   rerolls: number;
+  reforgeLockTarget: "milestone";
   lockedAffixIndices: number[];
-  reforgePreview: { affixes: EquipmentAffix[]; cost: number } | null;
+  reforgePreview: { milestoneAffixes: EquipmentMilestoneAffix[]; cost: number } | null;
   affixes: EquipmentAffix[];
+  milestoneAffixes: EquipmentMilestoneAffix[];
 }
 
 export interface RuneItem {

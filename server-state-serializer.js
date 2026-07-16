@@ -18,9 +18,16 @@ function getRoomCapabilities(room, selfId, options = {}) {
   const maxPlayers = options.maxPlayers || 4;
   const allReady = Boolean(options.allReady);
 
+  const soloOwner = selfId === room.hostId
+    && activePlayers.length === 1
+    && activePlayers[0]?.id === selfId
+    && !activePlayers[0]?.bot
+    && botPlayers.length === 0;
+
   return {
     canStart: selfId === room.hostId && room.status === "lobby" && allReady,
-    canReturnLobby: room.status === "gameover",
+    canPause: soloOwner && room.status === "combat",
+    canReturnLobby: room.status === "gameover" || (soloOwner && room.status === "combat"),
     canManageBots: selfId === room.hostId && room.status === "lobby",
     canAddBot: selfId === room.hostId && room.status === "lobby" && activePlayers.length < maxPlayers,
     canRemoveBot: selfId === room.hostId && room.status === "lobby" && botPlayers.length > 0
@@ -215,6 +222,7 @@ function hazardView(hazard, options = {}) {
     mode: hazard.mode || "",
     style: hazard.style || "",
     small: Boolean(hazard.small),
+    iceMeteor: Boolean(hazard.iceMeteor),
     x: round2(hazard.x),
     y: round2(hazard.y),
     radius: hazard.radius,
@@ -360,6 +368,9 @@ function playerVitalsView(player, options = {}) {
     hp: Math.ceil(player.hp),
     maxHp: player.maxHp,
     shield: Math.ceil(player.shield),
+    projectileShieldCharges: Math.max(0, Math.floor(player.projectileShieldCharges || 0)),
+    projectileShieldMaxCharges: Math.max(0, Math.floor(player.projectileShieldMaxCharges || 0)),
+    projectileShieldRespawnTime: round2(player.projectileShieldRespawnTimer || 0),
     poisonStacks: Math.max(0, Math.min(3, Math.floor(player.poisonStacks || 0))),
     poisonMaxStacks: 3,
     hitIFrameTime: round2(player.hitIFrameTimer || 0),

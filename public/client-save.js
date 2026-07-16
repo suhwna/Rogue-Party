@@ -13,7 +13,7 @@
     "assassin",
   ];
   const MASTERY_NODE_DEFS = Object.freeze([
-    { id: "damage", label: "공격력", description: "모든 공격의 피해량이 증가합니다." },
+    { id: "damage", label: "피해 증폭", description: "모든 피해 증가량에 합산됩니다." },
     { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
     { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
     { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
@@ -34,7 +34,7 @@
     area: "special",
   });
   const MAX_ASCENSION_LEVEL = 5;
-  const ASCENSION_REWARD_MULTIPLIERS = Object.freeze([1, 1.5, 2, 2.75, 3.75, 5]);
+  const ASCENSION_REWARD_MULTIPLIERS = Object.freeze([1, 2, 4, 8, 12, 16]);
   const SHARED_MASTERY_KEY = "shared";
 
   function createDefaultMasteryEntry() {
@@ -432,7 +432,7 @@
       speedMul: roundBonus(1 + Math.min(0.15, gainedLevels * 0.003)),
       skillHaste: roundBonus(Math.min(20, gainedLevels * 0.3)),
       armorBonus: roundBonus(Math.min(6, gainedLevels * 0.12)),
-      critChanceBonus: roundBonus(Math.min(0.15, gainedLevels * 0.003)),
+      critChanceBonus: roundBonus(Math.min(0.1, gainedLevels * 0.003)),
       critDamageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
       areaMul: roundBonus(1 + Math.min(0.25, gainedLevels * 0.005)),
     };
@@ -476,13 +476,17 @@
     const victoryReward = outcome === "victory" ? 45 : 0;
     const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
     const ascensionMultiplier = ASCENSION_REWARD_MULTIPLIERS[ascensionLevel] || 1;
-    const rawShards = Math.max(2, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier));
-    const rawXp = Math.max(10, Math.floor(rawShards * 1.75 + stagesCleared * 3 + highestLevel * 6));
+    const challengeMultiplier = result?.challengeModifierId ? 1.15 : 1;
+    const outcomeMultiplier = outcome === "victory" ? 2 : 0.5;
+    const rewardBase = progressReward + victoryReward + abyssReward;
+    const rawShards = Math.max(outcome === "victory" ? 6 : 1, Math.floor(rewardBase * ascensionMultiplier * challengeMultiplier * 1.45 * outcomeMultiplier));
+    const rawXp = Math.max(outcome === "victory" ? 20 : 5, Math.floor((rewardBase * ascensionMultiplier * challengeMultiplier * 1.75 + stagesCleared * 3 + highestLevel * 6) * outcomeMultiplier));
     const rewardBreakdown = [
       { id: "progress", label: "진행 보상", value: progressReward },
       { id: "victory", label: "승리 보너스", value: victoryReward },
       { id: "abyss", label: "심연 보너스", value: abyssReward },
       { id: "ascension", label: "승천 배율", value: ascensionLevel > 0 ? `${Math.round(ascensionMultiplier * 100)}%` : "100%" },
+      { id: "outcome", label: outcome === "victory" ? "런 성공 보너스" : "생존 실패 감산", value: `${Math.round(outcomeMultiplier * 100)}%` },
     ];
     return {
       earnedShards: rawShards,

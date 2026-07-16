@@ -46,6 +46,7 @@
               <span class="choice-copy">
                 <span class="choice-meta-row">
                   <span class="choice-type-pill">${escapeHtml(typeLabel)}</span>
+                  ${choice.equipmentModified ? `<span class="choice-type-pill equipment-modified">장비 변형 · ${escapeHtml(choice.equipmentLabel || "고유 효과")}</span>` : ""}
                 </span>
                 <strong>${escapeHtml(choice.name)}</strong>
                 <span>${escapeHtml(choice.text)}</span>

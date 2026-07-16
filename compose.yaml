@@ -1,0 +1,15 @@
+services:
+  game:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: rogue-party:local
+    environment:
+      NODE_ENV: production
+      PORT: 5173
+      ROGUE_DATA_DIR: /app/.data
+    ports:
+      - "${ROGUE_PORT:-5174}:5173"
+    volumes:
+      - ./.data:/app/.data
+    restart: unless-stopped

@@ -106,8 +106,12 @@
     });
   }
 
-  function drawMeteorTrail(renderer, fromX, fromY, toX, toY, width, alpha, z, phase = 0) {
+  function drawMeteorTrail(renderer, fromX, fromY, toX, toY, width, alpha, z, phase = 0, palette = {}) {
     if (!renderer.drawGfxPath || !renderer.drawGfxLine) return false;
+    const main = palette.main || "#f97316";
+    const hot = palette.hot || "#fed7aa";
+    const mid = palette.mid || "#fde68a";
+    const core = palette.core || "#fff7ed";
     const angle = Math.atan2(toY - fromY, toX - fromX);
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
@@ -124,9 +128,9 @@
         { x: fromX - px * (width * 0.24 - flutter), y: fromY - py * (width * 0.24 - flutter) },
         { x: toX - ux * width * 0.16 - px * width * 0.52, y: toY - uy * width * 0.16 - py * width * 0.52 },
       ],
-      "#f97316",
+      main,
       alpha * 0.16,
-      "#fed7aa",
+      hot,
       alpha * 0.18,
       2,
       z,
@@ -140,15 +144,15 @@
         { x: fromX - px * width * 0.08, y: fromY - py * width * 0.08 },
         { x: toX - ux * width * 0.22 - px * width * 0.24, y: toY - uy * width * 0.22 - py * width * 0.24 },
       ],
-      "#fde68a",
+      mid,
       alpha * 0.16,
-      "#fff7ed",
+      core,
       alpha * 0.18,
       1,
       z + 1,
       "add",
     );
-    renderer.drawGfxLine(fromX, fromY, toX - ux * width * 0.32, toY - uy * width * 0.32, Math.max(3, width * 0.18), "#fff7ed", alpha * 0.26, z + 2, "add");
+    renderer.drawGfxLine(fromX, fromY, toX - ux * width * 0.32, toY - uy * width * 0.32, Math.max(3, width * 0.18), core, alpha * 0.26, z + 2, "add");
     return true;
   }
 
@@ -167,39 +171,50 @@
     return true;
   }
 
-  function drawMeteorFragments(renderer, x, y, radius, alpha, z, phase = 0) {
+  function drawMeteorFragments(renderer, x, y, radius, alpha, z, phase = 0, palette = {}) {
     if (!renderer.drawGfxPath) return;
+    const rock = palette.rock || "#3f1f13";
+    const dark = palette.dark || "#7c2d12";
+    const hot = palette.hot || "#fed7aa";
     for (let i = 0; i < 8; i += 1) {
       const angle = phase * 0.32 + (Math.PI * 2 * i) / 8;
       const dist = radius * (0.26 + (i % 3) * 0.08);
       const cx = x + Math.cos(angle) * dist;
       const cy = y + Math.sin(angle) * dist * 0.64;
       const size = 5 + (i % 3) * 2;
-      renderer.drawGfxPath(meteorRockPoints(cx, cy, angle, size * 1.25, size * 0.74, phase + i), i % 2 ? "#7c2d12" : "#3f1f13", alpha * 0.36, "#fed7aa", alpha * 0.24, 1.2, z + i, "normal");
+      renderer.drawGfxPath(meteorRockPoints(cx, cy, angle, size * 1.25, size * 0.74, phase + i), i % 2 ? dark : rock, alpha * 0.36, hot, alpha * 0.24, 1.2, z + i, "normal");
     }
   }
 
-  function drawMeteorLandingShadow(renderer, x, y, radius, fall, impact, alpha, z) {
+  function drawMeteorLandingShadow(renderer, x, y, radius, fall, impact, alpha, z, palette = {}) {
     if (!renderer.drawGfxCircle) return;
+    const dark = palette.dark || "#7c2d12";
+    const main = palette.main || "#f97316";
+    const shadow = palette.shadow || "#0b0604";
     const shadowAlpha = alpha * Math.max(0, 1 - impact * 0.85) * (0.05 + fall * 0.18);
     const shadowRadius = radius * (0.24 + fall * 0.46);
-    renderer.drawGfxCircle(x, y + radius * 0.08, shadowRadius, "#000000", shadowAlpha, "#7c2d12", alpha * fall * 0.08, 1.5, z, "normal", 34);
-    renderer.drawGfxCircle(x, y + radius * 0.08, shadowRadius * 0.58, "#0b0604", shadowAlpha * 0.9, "#f97316", alpha * fall * 0.06, 1, z + 1, "add", 24);
+    renderer.drawGfxCircle(x, y + radius * 0.08, shadowRadius, "#000000", shadowAlpha, dark, alpha * fall * 0.08, 1.5, z, "normal", 34);
+    renderer.drawGfxCircle(x, y + radius * 0.08, shadowRadius * 0.58, shadow, shadowAlpha * 0.9, main, alpha * fall * 0.06, 1, z + 1, "add", 24);
   }
 
-  function drawMeteorImpactBloom(renderer, x, y, radius, impact, alpha, z, phase) {
+  function drawMeteorImpactBloom(renderer, x, y, radius, impact, alpha, z, phase, palette = {}) {
     if (impact <= 0) return;
+    const main = palette.main || "#f97316";
+    const dark = palette.dark || "#7c2d12";
+    const hot = palette.hot || "#fed7aa";
+    const mid = palette.mid || "#fde68a";
+    const core = palette.core || "#fff7ed";
     const flash = Math.max(0, 1 - impact);
-    renderer.drawGfxCircle?.(x, y, radius * (0.28 + impact * 0.2), "#fff7ed", alpha * flash * 0.22, "#fed7aa", alpha * flash * 0.62, 5, z + 8, "add", 24);
-    renderer.drawGfxCircle?.(x, y, radius * (0.48 + impact * 0.54), "#7c2d12", alpha * (0.12 - impact * 0.05), "#f97316", alpha * (0.36 - impact * 0.18), 5, z + 9, "add", 42);
-    renderer.drawGfxImpactBurst?.(x, y, radius * (0.62 + impact * 0.42), "#f97316", alpha * (0.58 - impact * 0.16), z + 16, phase, 16);
-    renderer.drawGfxSparkSpray?.(x, y, radius * (0.7 + impact * 0.42), "#fde68a", alpha * (0.42 - impact * 0.12), z + 24, 18, phase * 4.2);
-    drawMeteorFragments(renderer, x, y, radius * (0.52 + impact * 0.24), alpha * Math.min(1, impact * 1.4), z + 28, phase * 4);
+    renderer.drawGfxCircle?.(x, y, radius * (0.28 + impact * 0.2), core, alpha * flash * 0.22, hot, alpha * flash * 0.62, 5, z + 8, "add", 24);
+    renderer.drawGfxCircle?.(x, y, radius * (0.48 + impact * 0.54), dark, alpha * (0.12 - impact * 0.05), main, alpha * (0.36 - impact * 0.18), 5, z + 9, "add", 42);
+    renderer.drawGfxImpactBurst?.(x, y, radius * (0.62 + impact * 0.42), main, alpha * (0.58 - impact * 0.16), z + 16, phase, 16);
+    renderer.drawGfxSparkSpray?.(x, y, radius * (0.7 + impact * 0.42), mid, alpha * (0.42 - impact * 0.12), z + 24, 18, phase * 4.2);
+    drawMeteorFragments(renderer, x, y, radius * (0.52 + impact * 0.24), alpha * Math.min(1, impact * 1.4), z + 28, phase * 4, palette);
     renderer.renderParticlePreset?.("fireBurst", {
       x,
       y,
       radius: radius * (0.46 + impact * 0.22),
-      color: "#fde68a",
+      color: mid,
       alpha: alpha * Math.max(0, 0.62 - impact * 0.18),
       zIndex: z + 36,
       phase: phase * 3.2,
@@ -510,17 +525,23 @@
 
   function renderMageFrostEffect(renderer, context) {
     const { effect, progress, alpha, effectRadius, pulse, peak, z, s } = context;
-    if (!s.includes("frost")) return false;
+    const flameWave = s.includes("flame_wave");
+    const flameBreath = s.includes("flame_breath");
+    if (!s.includes("frost") && !flameWave && !flameBreath) return false;
     const frostRadius = effectRadius;
-    if (s.includes("frost_breath")) {
-      renderer.ring(effect.x, effect.y, frostRadius * 0.86, "#93c5fd", alpha * 0.09, 2);
-      renderer.ring(effect.x, effect.y, frostRadius * 0.58, "#dbeafe", alpha * 0.035, 1);
+    if (s.includes("frost_breath") || flameBreath) {
+      const outer = flameBreath ? "#fb923c" : "#93c5fd";
+      const inner = flameBreath ? "#ffedd5" : "#dbeafe";
+      renderer.ring(effect.x, effect.y, frostRadius * 0.86, outer, alpha * 0.09, 2);
+      renderer.ring(effect.x, effect.y, frostRadius * 0.58, inner, alpha * 0.035, 1);
       return true;
     }
+    const snapTint = flameWave ? "#ffedd5" : "#dbeafe";
+    const shardTint = flameWave ? "#fb923c" : "#93c5fd";
     const snap = progress < 0.24 ? 1.24 : 1.08 - (progress - 0.24) * 0.28;
-    renderer.fx("fx-frost-snap", effect.x, effect.y, frostRadius / 86 * snap, frostRadius / 86 * snap, "#dbeafe", alpha * 0.95, z, progress * 0.15, "add");
-    renderer.fx("fx-frost-shards", effect.x, effect.y, frostRadius / 94 * pulse, frostRadius / 94 * pulse, "#93c5fd", alpha * 0.45, z - 2, -progress * 0.35, "add");
-    renderer.ring(effect.x, effect.y, frostRadius * (0.72 + peak * 0.1), "#93c5fd", alpha * 0.25, 4);
+    renderer.fx("fx-frost-snap", effect.x, effect.y, frostRadius / 86 * snap, frostRadius / 86 * snap, snapTint, alpha * 0.95, z, progress * 0.15, "add");
+    renderer.fx("fx-frost-shards", effect.x, effect.y, frostRadius / 94 * pulse, frostRadius / 94 * pulse, shardTint, alpha * 0.45, z - 2, -progress * 0.35, "add");
+    renderer.ring(effect.x, effect.y, frostRadius * (0.72 + peak * 0.1), shardTint, alpha * 0.25, 4);
     return true;
   }
 
@@ -538,20 +559,35 @@
     const y = startY + (effect.y - startY) * fall;
     const angle = Math.atan2(effect.y - startY, effect.x - startX);
     const meteorZ = z + 4 + fall * 10;
-    drawMeteorLandingShadow(renderer, effect.x, effect.y, meteorRadius, fall, impact, alpha, z - 18);
-    renderer.drawGfxArc?.(effect.x, effect.y, meteorRadius * (0.82 + impact * 0.08), Math.PI * 0.12, Math.PI * 0.92, 3.5, "#f97316", alpha * Math.max(0.04, 0.18 - impact * 0.12), z - 16, "add", 12);
-    renderer.drawGfxArc?.(effect.x, effect.y, meteorRadius * (0.82 + impact * 0.08), -Math.PI * 0.92, -Math.PI * 0.12, 3.5, "#f97316", alpha * Math.max(0.04, 0.18 - impact * 0.12), z - 16, "add", 12);
+    const iceMeteor = Boolean(effect.iceMeteor) || s.includes("ice_meteor");
+    const meteorPalette = iceMeteor ? {
+      main: "#38bdf8",
+      dark: "#082f49",
+      hot: "#e0f2fe",
+      mid: "#7dd3fc",
+      core: "#f0f9ff",
+      rock: "#0c4a6e",
+      shadow: "#020617",
+    } : {};
+    const main = meteorPalette.main || "#f97316";
+    drawMeteorLandingShadow(renderer, effect.x, effect.y, meteorRadius, fall, impact, alpha, z - 18, meteorPalette);
+    renderer.drawGfxArc?.(effect.x, effect.y, meteorRadius * (0.82 + impact * 0.08), Math.PI * 0.12, Math.PI * 0.92, 3.5, main, alpha * Math.max(0.04, 0.18 - impact * 0.12), z - 16, "add", 12);
+    renderer.drawGfxArc?.(effect.x, effect.y, meteorRadius * (0.82 + impact * 0.08), -Math.PI * 0.92, -Math.PI * 0.12, 3.5, main, alpha * Math.max(0.04, 0.18 - impact * 0.12), z - 16, "add", 12);
     if (impact <= 0.05) {
       const tailX = x - Math.cos(angle) * meteorRadius * (0.66 + fall * 0.16);
       const tailY = y - Math.sin(angle) * meteorRadius * (0.66 + fall * 0.16);
-      if (!drawMeteorTrail(renderer, tailX, tailY, x, y, meteorRadius * (0.2 + fall * 0.08), alpha, meteorZ - 8, progress)) {
-        renderer.lineFx("beam", startX, startY, x, y, 18, "#f97316", alpha * 0.22, meteorZ - 8, "add");
+      if (!drawMeteorTrail(renderer, tailX, tailY, x, y, meteorRadius * (0.2 + fall * 0.08), alpha, meteorZ - 8, progress, meteorPalette)) {
+        renderer.lineFx("beam", startX, startY, x, y, 18, main, alpha * 0.22, meteorZ - 8, "add");
       }
     } else {
-      renderer.fx("fx-fire-pool", effect.x, effect.y + 12, meteorRadius / 78, meteorRadius / 90, "#f97316", alpha * Math.max(0.2, 0.48 - impact * 0.18), z + 1, 0, "add");
+      renderer.fx("fx-fire-pool", effect.x, effect.y + 12, meteorRadius / 78, meteorRadius / 90, main, alpha * Math.max(0.2, 0.48 - impact * 0.18), z + 1, 0, "add");
     }
-    drawMeteorImpactBloom(renderer, effect.x, effect.y, meteorRadius * (0.95 + peak * 0.05), impact, alpha, z + 8, progress * 2.6);
+    drawMeteorImpactBloom(renderer, effect.x, effect.y, meteorRadius * (0.95 + peak * 0.05), impact, alpha, z + 8, progress * 2.6, meteorPalette);
     return true;
+  }
+
+  function renderMageFlameEffect(renderer, context) {
+    return false;
   }
 
   function renderMageChainEffect(renderer, context) {
@@ -595,6 +631,7 @@
   function renderMageStyledSkillEffect(renderer, context) {
     if (!context) return false;
     return (
+      renderMageFlameEffect(renderer, context) ||
       renderMageFrostEffect(renderer, context) ||
       renderMageMeteorEffect(renderer, context) ||
       renderMageChainEffect(renderer, context) ||
@@ -1078,12 +1115,36 @@
     return true;
   }
 
+  function renderExplosionRangeBoundary(renderer, context, options = {}) {
+    const { effect, progress, alpha, effectRadius, peak, z } = context;
+    const radius = Math.max(1, Number(effectRadius) || 1);
+    const t = Math.max(0, Math.min(1, Number(progress) || 0));
+    const edge = options.edge || "#fb923c";
+    const hot = options.hot || "#fde68a";
+    const dark = options.dark || "#7c2d12";
+    const expand = 1 - Math.pow(1 - Math.min(1, t / 0.48), 3);
+    const shockRadius = radius * (0.14 + expand * 0.86);
+    const boundaryAlpha = alpha * (0.28 + Math.max(0, Number(peak) || 0) * 0.08);
+
+    // The outer ring is the exact server-provided splash radius; the inner ring is visual motion only.
+    renderer.drawGfxCircle(effect.x, effect.y, radius, dark, alpha * 0.025, edge, boundaryAlpha, 3, z - 18, "add", 72);
+    renderer.drawGfxCircle(effect.x, effect.y, shockRadius, "#000000", 0, hot, alpha * 0.34, 4, z - 10, "add", 64);
+    return true;
+  }
+
   function renderCommonImpactEffect(renderer, context) {
     const { effect, progress, alpha, color, s, kind, effectRadius, z } = context;
     if (!(kind === "explosion" || kind === "death" || kind === "impact")) return false;
     const fire = s.includes("fire") || s.includes("bomber") || s.includes("blast") || s.includes("meteor");
     const poison = s.includes("poison") || s.includes("acid") || s.includes("splitter");
     const tint = poison ? "#bef264" : fire ? "#f97316" : color;
+    if (kind === "explosion" && Number(effect.rangeRadius) > 0) {
+      renderExplosionRangeBoundary(renderer, context, {
+        edge: tint,
+        hot: fire ? "#fde68a" : tint,
+        dark: poison ? "#365314" : "#7c2d12"
+      });
+    }
     renderer.drawGfxCircle(effect.x, effect.y, effectRadius * (0.44 + progress * 0.42), tint, alpha * 0.16, tint, alpha * 0.34, 4, z, "add", 30);
     renderer.drawGfxCircle(effect.x, effect.y, effectRadius * (0.72 + progress * 0.34), tint, alpha * 0.04, "#f8f3e9", alpha * 0.2, 2, z + 1, "add", 34);
     renderer.drawGfxShardBurst(effect.x, effect.y, effectRadius * 0.82, fire ? "#fde68a" : tint, alpha * 0.46, z + 4, fire ? 11 : 8, progress);
@@ -1136,6 +1197,29 @@
         "add"
       );
     };
+
+    if (s.includes("ranger_explosive_arrow")) {
+      renderExplosionRangeBoundary(renderer, context, {
+        edge: "#fb923c",
+        hot: "#fff7ed",
+        dark: "#7c2d12"
+      });
+      const blastRadius = effectRadius * (0.5 + peak * 0.16);
+      renderer.drawGfxCircle(effect.x, effect.y, blastRadius, "#7c2d12", alpha * 0.16, "#fb923c", alpha * 0.5, 5, z - 4, "add", 40);
+      renderer.drawGfxImpactBurst(effect.x, effect.y, effectRadius * (0.58 + peak * 0.12), "#fde68a", alpha * 0.42, z + 8, progress * 3.2, 12);
+      renderer.drawGfxShardBurst(effect.x, effect.y, effectRadius * 0.78, "#fff7ed", alpha * 0.38, z + 14, 11, progress);
+      renderer.renderParticlePreset?.("fireBurst", {
+        x: effect.x,
+        y: effect.y,
+        radius: effectRadius * 0.82,
+        color: "#fde68a",
+        alpha: alpha * 0.44,
+        zIndex: z + 24,
+        phase: progress * 3,
+        count: 13
+      });
+      return true;
+    }
 
     if (s.includes("arrow_rain_launch")) {
       const dx = end.toX - end.fromX;
@@ -1342,14 +1426,15 @@
   }
 
   function renderCrispMageEffect(renderer, context) {
-    const { effect, progress, alpha, s, kind, peak, pulse, effectRadius, end, z, styleInfo, skinPalette } = context;
+    const { effect, progress, alpha, s, kind, peak, pulse, effectRadius, end, z, angle, styleInfo, skinPalette } = context;
     const cx = effect.x;
     const cy = effect.y;
     const t = Math.max(0, Math.min(1, progress));
     const fade = Math.max(0, 1 - Math.max(0, t - 0.78) / 0.22);
     const phase = Number(effect.seed || 0) * 0.19 + t * Math.PI * 2;
 
-    if (s.includes("frost") || s.includes("freeze") || s.includes("ice")) {
+    const flameWave = s.includes("flame_wave");
+    if ((s.includes("frost") || s.includes("freeze") || s.includes("ice") || flameWave) && !isMeteorFallEffect(context)) {
       const frostRadius = effectRadius;
       if (s.includes("frost_breath")) {
         const auraAlpha = alpha * 0.85;
@@ -1371,19 +1456,23 @@
       const ease = 1 - Math.pow(1 - wave, 2.4);
       const ring = frostRadius * (0.18 + ease * 0.78);
       const iceAlpha = alpha * fade;
-      renderer.drawGfxCircle(cx, cy, frostRadius * 0.82, "#06131f", iceAlpha * 0.045, "#93c5fd", iceAlpha * 0.12, 2, z - 14, "add", 58);
-      renderer.drawGfxCircle(cx, cy, ring, "#000000", 0, "#dbeafe", iceAlpha * 0.58, 4, z - 8, "add", 58);
-      renderer.drawGfxCircle(cx, cy, Math.max(18, ring * 0.42), "#dbeafe", iceAlpha * 0.035, "#93c5fd", iceAlpha * 0.16, 1.5, z - 7, "add", 34);
+      const waveDark = flameWave ? "#2a120b" : "#06131f";
+      const waveMain = flameWave ? "#fb923c" : "#93c5fd";
+      const waveHot = flameWave ? "#ffedd5" : "#dbeafe";
+      const waveLight = flameWave ? "#fed7aa" : "#e0f2fe";
+      renderer.drawGfxCircle(cx, cy, frostRadius * 0.82, waveDark, iceAlpha * 0.045, waveMain, iceAlpha * 0.12, 2, z - 14, "add", 58);
+      renderer.drawGfxCircle(cx, cy, ring, "#000000", 0, waveHot, iceAlpha * 0.58, 4, z - 8, "add", 58);
+      renderer.drawGfxCircle(cx, cy, Math.max(18, ring * 0.42), waveHot, iceAlpha * 0.035, waveMain, iceAlpha * 0.16, 1.5, z - 7, "add", 34);
       for (let i = 0; i < 8; i += 1) {
         const a = (Math.PI * 2 * i) / 8 + 0.18;
         const inner = ring * 0.18;
         const outer = ring * (0.72 + (i % 3) * 0.045);
-        renderer.drawGfxLine(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner * 0.92, cx + Math.cos(a) * outer, cy + Math.sin(a) * outer * 0.92, i % 2 ? 2.4 : 3.4, i % 2 ? "#93c5fd" : "#e0f2fe", iceAlpha * 0.34, z + i, "add");
+        renderer.drawGfxLine(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner * 0.92, cx + Math.cos(a) * outer, cy + Math.sin(a) * outer * 0.92, i % 2 ? 2.4 : 3.4, i % 2 ? waveMain : waveLight, iceAlpha * 0.34, z + i, "add");
       }
       for (let i = 0; i < 5; i += 1) {
         const a = phase * 0.06 + (Math.PI * 2 * i) / 5;
         const r = ring * (0.62 + (i % 2) * 0.08);
-        renderer.drawGfxDiamond(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.92, 5 + (i % 2), "#dbeafe", iceAlpha * 0.24, z + 14 + i, a, "#93c5fd");
+        renderer.drawGfxDiamond(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.92, 5 + (i % 2), waveHot, iceAlpha * 0.24, z + 14 + i, a, waveMain);
       }
       if (skinPalette) {
         const glyphCount = skinPalette.shape === "star" ? 8 : 6;
@@ -1394,7 +1483,7 @@
         }
       }
       if (s.includes("lock") || s.includes("shatter")) {
-        renderer.drawGfxImpactBurst(cx, cy, frostRadius * 0.38, "#dbeafe", alpha * 0.22, z + 20, t * 1.6, 7);
+        renderer.drawGfxImpactBurst(cx, cy, frostRadius * 0.38, waveHot, alpha * 0.22, z + 20, t * 1.6, 7);
       }
       return true;
     }
@@ -1410,11 +1499,22 @@
       const mx = startX + (cx - startX) * fall;
       const my = startY + (cy - startY) * fall;
       const meteorAngle = Math.atan2(cy - startY, cx - startX);
-      const meteorTint = skinPalette?.main || "#fb923c";
-      const meteorHot = skinPalette?.hot || "#fed7aa";
-      const meteorDark = skinPalette?.dark || "#2a120b";
+      const iceMeteor = Boolean(effect.iceMeteor);
+      const icePalette = iceMeteor ? {
+        main: "#38bdf8",
+        dark: "#082f49",
+        hot: "#e0f2fe",
+        mid: "#7dd3fc",
+        core: "#f0f9ff",
+        rock: "#0c4a6e",
+        shadow: "#020617",
+      } : {};
+      const themedSkinPalette = iceMeteor && skinPalette ? { ...skinPalette, ...icePalette } : skinPalette;
+      const meteorTint = icePalette.main || skinPalette?.main || "#fb923c";
+      const meteorHot = icePalette.hot || skinPalette?.hot || "#fed7aa";
+      const meteorDark = icePalette.dark || skinPalette?.dark || "#2a120b";
       const targetAlpha = alpha * Math.max(0.06, 0.3 - impact * 0.14);
-      drawMeteorLandingShadow(renderer, cx, cy, meteorRadius, fall, impact, alpha, z - 20);
+      drawMeteorLandingShadow(renderer, cx, cy, meteorRadius, fall, impact, alpha, z - 20, icePalette);
       renderer.drawGfxCircle(cx, cy, meteorRadius * (0.42 + impact * 0.5), meteorDark, alpha * (0.04 + impact * 0.045), meteorTint, targetAlpha, 2.5, z - 18, "add", 48);
       renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, Math.PI * 0.1, Math.PI * 0.86, 4, meteorHot, targetAlpha * 0.78, z - 16, "add", 14);
       renderer.drawGfxArc(cx, cy, meteorRadius * 0.88, -Math.PI * 0.86, -Math.PI * 0.1, 4, meteorTint, targetAlpha * 0.78, z - 15, "add", 14);
@@ -1422,21 +1522,21 @@
         const meteorSize = meteorRadius * (0.2 + fall * 0.075);
         const tailX = mx - Math.cos(meteorAngle) * meteorRadius * 0.75;
         const tailY = my - Math.sin(meteorAngle) * meteorRadius * 0.75;
-        if (skinPalette) {
+        if (themedSkinPalette) {
           renderer.drawGfxLine?.(tailX, tailY, mx, my, meteorSize * 1.15, meteorDark, alpha * 0.28, z - 5 + fall * 10, "add");
           renderer.drawGfxLine?.(tailX, tailY, mx, my, meteorSize * 0.5, meteorTint, alpha * 0.64, z - 4 + fall * 10, "add");
-          drawMageSkinGlyph(renderer, skinPalette, mx, my, meteorSize * 1.25, alpha * 0.96, z + 12 + fall * 12, meteorAngle + t * 1.8);
+          drawMageSkinGlyph(renderer, themedSkinPalette, mx, my, meteorSize * 1.25, alpha * 0.96, z + 12 + fall * 12, meteorAngle + t * 1.8);
         } else {
-          drawMeteorTrail(renderer, tailX, tailY, mx, my, meteorSize, alpha * 0.82, z - 4 + fall * 10, t);
-          renderer.drawGfxPath?.(meteorRockPoints(mx, my, meteorAngle, meteorSize * 1.52, meteorSize * 0.98, t * 4), "#3f1f13", alpha * 0.9, "#fed7aa", alpha * 0.56, 2.2, z + 10 + fall * 12, "normal");
-          renderer.drawGfxLine?.(mx - Math.cos(meteorAngle) * meteorSize * 0.55, my - Math.sin(meteorAngle) * meteorSize * 0.55, mx + Math.cos(meteorAngle) * meteorSize * 0.28, my + Math.sin(meteorAngle) * meteorSize * 0.28, Math.max(3, meteorSize * 0.18), "#fde68a", alpha * 0.36, z + 14 + fall * 12, "add");
+          drawMeteorTrail(renderer, tailX, tailY, mx, my, meteorSize, alpha * 0.82, z - 4 + fall * 10, t, icePalette);
+          renderer.drawGfxPath?.(meteorRockPoints(mx, my, meteorAngle, meteorSize * 1.52, meteorSize * 0.98, t * 4), icePalette.rock || "#3f1f13", alpha * 0.9, meteorHot, alpha * 0.56, 2.2, z + 10 + fall * 12, "normal");
+          renderer.drawGfxLine?.(mx - Math.cos(meteorAngle) * meteorSize * 0.55, my - Math.sin(meteorAngle) * meteorSize * 0.55, mx + Math.cos(meteorAngle) * meteorSize * 0.28, my + Math.sin(meteorAngle) * meteorSize * 0.28, Math.max(3, meteorSize * 0.18), icePalette.mid || "#fde68a", alpha * 0.36, z + 14 + fall * 12, "add");
         }
       } else {
         const shock = meteorRadius * (0.4 + impact * 0.5);
         renderer.drawGfxCircle(cx, cy + meteorRadius * 0.06, shock, meteorDark, alpha * (0.11 - impact * 0.03), meteorTint, alpha * (0.36 - impact * 0.14), 4, z + 8, "add", 42);
         renderer.drawGfxImpactBurst(cx, cy, meteorRadius * (0.58 + impact * 0.28), meteorTint, alpha * (0.28 - impact * 0.08), z + 18, t * 2.1, 10);
-        if (skinPalette) drawMageSkinGlyph(renderer, skinPalette, cx, cy, meteorRadius * 0.24, alpha * (0.66 - impact * 0.28), z + 23, t * 2.4);
-        drawMeteorFragments(renderer, cx, cy, meteorRadius * (0.36 + impact * 0.18), alpha * impact * 0.62, z + 24, t * 4.6);
+        if (themedSkinPalette) drawMageSkinGlyph(renderer, themedSkinPalette, cx, cy, meteorRadius * 0.24, alpha * (0.66 - impact * 0.28), z + 23, t * 2.4);
+        drawMeteorFragments(renderer, cx, cy, meteorRadius * (0.36 + impact * 0.18), alpha * impact * 0.62, z + 24, t * 4.6, icePalette);
       }
       return true;
     }
@@ -1528,13 +1628,71 @@
       return true;
     }
 
-    if (s.includes("star_orb") || s.includes("star_burst") || s.includes("star_split") || s.includes("arcane_splash") || s.includes("blink")) {
+    if (s.includes("star_orb_pierce_impact")) {
+      const tint = skinPalette?.main || "#c4b5fd";
+      const core = skinPalette?.hot || "#f8fafc";
+      const hitRadius = Math.max(18, Math.min(72, effectRadius * 0.34));
+      const impactAngle = Number.isFinite(effect.angle)
+        ? effect.angle
+        : Math.atan2(end.toY - end.fromY, end.toX - end.fromX);
+      renderer.drawGfxCircle(cx, cy, hitRadius * (0.72 + peak * 0.16), "#000000", 0, tint, alpha * 0.2, 2, z - 2, "add", 18);
+      renderer.drawGfxStar(cx, cy, Math.max(10, hitRadius * 0.42), core, alpha * 0.48, z + 2, 6);
+      renderer.drawGfxImpactBurst(cx, cy, hitRadius * 0.7, tint, alpha * 0.14, z + 4, impactAngle, 6);
+      return true;
+    }
+
+    if (s.includes("arcane_orb") || s.includes("star_orb") || s.includes("star_shard") || s.includes("star_burst") || s.includes("star_split") || s.includes("arcane_splash") || s.includes("blink")) {
       const blink = s.includes("blink");
       const burst = s.includes("burst") || s.includes("splash");
       const split = s.includes("split");
       const tint = skinPalette?.main || (blink ? "#93c5fd" : burst ? "#d8b4fe" : "#c4b5fd");
       const core = skinPalette?.hot || (blink ? "#e0f2fe" : "#f8fafc");
       const starRadius = Math.max(34, effectRadius * (burst ? 1 : 0.42) * (0.94 + peak * 0.06));
+      if (s.includes("giant_star_orb_launch")) {
+        const gather = 1 - Math.pow(progress, 0.62);
+        const coreRadius = Math.max(18, effectRadius * (0.16 + peak * 0.025));
+        const gatherRadius = effectRadius * (0.42 + gather * 0.5);
+        renderer.drawGfxCircle(cx, cy, gatherRadius, skinPalette?.dark || "#180f2a", alpha * 0.035, tint, alpha * 0.2, 2, z - 8, "add", 32);
+        renderer.drawGfxArc(cx, cy, gatherRadius * 0.82, phase, phase + Math.PI * 1.25, 3, core, alpha * 0.34, z - 4, "add", 18);
+        renderer.drawGfxArc(cx, cy, gatherRadius * 0.82, phase + Math.PI, phase + Math.PI * 2.25, 3, tint, alpha * 0.3, z - 3, "add", 18);
+        for (let i = 0; i < 8; i += 1) {
+          const a = phase * 0.18 + (Math.PI * 2 * i) / 8;
+          const outer = gatherRadius * 0.86;
+          renderer.drawGfxLine(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, cx + Math.cos(a) * coreRadius * 0.72, cy + Math.sin(a) * coreRadius * 0.72, 2, tint, alpha * 0.2, z + i, "add");
+        }
+        renderer.drawGfxStar(cx, cy, coreRadius, core, alpha * 0.72, z + 12, 8);
+        renderer.drawGfxDiamond(cx, cy, coreRadius * 0.34, "#ffffff", alpha * 0.8, z + 14, phase * 0.6, tint);
+        return true;
+      }
+      if (s.includes("giant_star_orb_impact") || s.includes("giant_star_orb_wall_impact")) {
+        const wallImpact = s.includes("wall_impact");
+        const impactRadius = effectRadius * (wallImpact ? 0.92 : 0.72);
+        const shockRadius = impactRadius * (0.28 + progress * 0.78);
+        const ux = Math.cos(angle);
+        const uy = Math.sin(angle);
+        const px = -uy;
+        const py = ux;
+        renderer.drawGfxCircle(cx, cy, shockRadius, skinPalette?.dark || "#180f2a", alpha * 0.05, tint, alpha * 0.46, Math.max(2, impactRadius * 0.025), z - 7, "add", 30);
+        renderer.drawGfxArc(cx, cy, shockRadius * 0.86, angle - Math.PI * 0.72, angle + Math.PI * 0.72, Math.max(3, impactRadius * 0.045), core, alpha * 0.58, z - 3, "add", 18);
+        renderer.drawGfxLine(cx - ux * impactRadius * 0.72, cy - uy * impactRadius * 0.72, cx + ux * impactRadius * 0.54, cy + uy * impactRadius * 0.54, Math.max(3, impactRadius * 0.075), core, alpha * 0.5, z + 1, "add");
+        renderer.drawGfxStar(cx, cy, Math.max(16, impactRadius * (0.34 - progress * 0.12)), core, alpha * 0.76, z + 6, 8);
+        for (let i = 0; i < 6; i += 1) {
+          const side = i % 2 === 0 ? -1 : 1;
+          const lane = Math.ceil((i + 1) / 2);
+          const travel = impactRadius * (0.25 + progress * (0.38 + lane * 0.06));
+          const sx = cx - ux * travel + px * side * impactRadius * (0.12 + lane * 0.08);
+          const sy = cy - uy * travel + py * side * impactRadius * (0.12 + lane * 0.08);
+          renderer.drawGfxDiamond(sx, sy, Math.max(3.5, impactRadius * 0.045), i % 2 ? tint : core, alpha * 0.42, z + 8 + i, angle + side * 0.55, tint);
+        }
+        return true;
+      }
+      if (s.includes("giant_star_orb_shockwave")) {
+        const shockRadius = effectRadius * (0.16 + progress * 0.84);
+        renderer.drawGfxCircle(cx, cy, shockRadius, skinPalette?.dark || "#180f2a", alpha * 0.018, tint, alpha * 0.32, Math.max(2, effectRadius * 0.012), z - 9, "add", 42);
+        renderer.drawGfxCircle(cx, cy, shockRadius * 0.82, "#000000", 0, core, alpha * 0.12, 1.5, z - 8, "add", 36);
+        renderer.drawGfxImpactBurst(cx, cy, Math.min(effectRadius * 0.34, 92), tint, alpha * 0.22, z + 2, angle, 8);
+        return true;
+      }
       if (blink) {
         const fromX = Number.isFinite(effect.fromX) ? effect.fromX : end.fromX;
         const fromY = Number.isFinite(effect.fromY) ? effect.fromY : end.fromY;
@@ -1556,18 +1714,21 @@
         }
         return true;
       }
-      renderer.drawGfxCircle(cx, cy, starRadius * 0.94, skinPalette?.dark || "#180f2a", alpha * 0.07, tint, alpha * 0.2, 2, z - 8, "add", 34);
-      renderer.drawGfxCircle(cx, cy, starRadius * 0.54, "#000000", 0, core, alpha * 0.16, 1.4, z - 7, "add", 24);
-      renderer.drawGfxRuneRing(cx, cy, starRadius * 0.9, tint, alpha * 0.28, z - 5, phase * 0.22, burst ? 8 : 6);
-      if (skinPalette) drawMageSkinGlyph(renderer, skinPalette, cx, cy, Math.max(20, starRadius * 0.62), alpha * 0.82, z + 2, phase * 0.2);
-      else renderer.drawGfxStar(cx, cy, Math.max(20, starRadius * 0.62), core, alpha * 0.62, z + 2, burst ? 8 : 6);
+      const softHit = s.includes("arcane_splash") || (kind === "impact" && (s.includes("arcane_orb") || s.includes("star_orb") || s.includes("star_shard")));
+      const hitAlpha = alpha * (softHit ? 0.44 : 1);
+      const hitRadius = softHit ? starRadius * 0.76 : starRadius;
+      renderer.drawGfxCircle(cx, cy, hitRadius * 0.94, skinPalette?.dark || "#180f2a", hitAlpha * 0.07, tint, hitAlpha * 0.2, 2, z - 8, "add", 34);
+      renderer.drawGfxCircle(cx, cy, hitRadius * 0.54, "#000000", 0, core, hitAlpha * 0.16, 1.4, z - 7, "add", 24);
+      renderer.drawGfxRuneRing(cx, cy, hitRadius * 0.9, tint, hitAlpha * 0.28, z - 5, phase * 0.22, burst ? 8 : 6);
+      if (skinPalette) drawMageSkinGlyph(renderer, skinPalette, cx, cy, Math.max(softHit ? 13 : 20, hitRadius * 0.62), hitAlpha * 0.82, z + 2, phase * 0.2);
+      else renderer.drawGfxStar(cx, cy, Math.max(softHit ? 13 : 20, hitRadius * 0.62), core, hitAlpha * 0.62, z + 2, burst ? 8 : 6);
       const orbitCount = burst ? 8 : 6;
       for (let i = 0; i < orbitCount; i += 1) {
         const a = phase * (burst ? 0.16 : 0.1) + (Math.PI * 2 * i) / orbitCount;
-        const inner = starRadius * 0.26;
-        const outer = starRadius * (0.78 + (i % 2) * 0.06);
-        renderer.drawGfxLine(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner, cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, i % 2 ? 2.4 : 3.4, tint, alpha * 0.24, z + 7 + i, "add");
-        if (i % 2 === 0) renderer.drawGfxDiamond(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, 4.5 + (i % 3), core, alpha * 0.26, z + 18 + i, a, tint);
+        const inner = hitRadius * 0.26;
+        const outer = hitRadius * (0.78 + (i % 2) * 0.06);
+        renderer.drawGfxLine(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner, cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, i % 2 ? 2.4 : 3.4, tint, hitAlpha * 0.24, z + 7 + i, "add");
+        if (i % 2 === 0) renderer.drawGfxDiamond(cx + Math.cos(a) * outer, cy + Math.sin(a) * outer, softHit ? 3.5 + (i % 2) : 4.5 + (i % 3), core, hitAlpha * 0.26, z + 18 + i, a, tint);
       }
       if (split) {
         for (let i = 0; i < 3; i += 1) {
@@ -1577,7 +1738,7 @@
           renderer.drawGfxStar(x, y, Math.max(8, starRadius * 0.18), "#dbeafe", alpha * 0.34, z + 32 + i, 5);
         }
       }
-      renderer.drawGfxImpactBurst(cx, cy, starRadius * (burst ? 0.72 : 0.5), tint, alpha * (burst ? 0.2 : 0.13), z + 20, phase * 0.2, burst ? 8 : 6);
+      renderer.drawGfxImpactBurst(cx, cy, hitRadius * (burst ? 0.72 : 0.5), tint, hitAlpha * (burst ? 0.2 : 0.13), z + 20, phase * 0.2, burst ? 8 : 6);
       return true;
     }
 
@@ -1599,21 +1760,32 @@
       renderer.drawGfxCircle(end.toX, end.toY, beamWidth * (2.1 + peak * 0.5), tint, alpha * 0.16, "#f8fafc", alpha * 0.3, 2, z + 4, "add", 10);
       return true;
     }
-    if ((styleInfo && styleInfo.mechaMuzzle) || s.includes("mecha_giant_laser") || s.includes("engineer_laser_module_beam") || s.includes("turret_laser") || s.includes("drone_laser")) {
+    if ((styleInfo && styleInfo.mechaMuzzle) || s.includes("mecha_hand_laser") || s.includes("mecha_giant_laser") || s.includes("engineer_laser_module_beam") || s.includes("turret_laser") || s.includes("drone_laser")) {
       const giant = s.includes("mecha_giant_laser") || s.includes("engineer_laser_module_beam");
       const handLaser = s.includes("mecha_hand_laser");
-      const beamWidth = giant ? Math.max(44, Number(effect.width || 56)) : handLaser ? Math.max(13, Number(effect.width || 16)) : s.includes("turret") ? 12 : 8;
+      const continuousLaser = s.includes("adaptive_continuous_laser");
+      const transmittedHitRadius = Number(effect.hitRadius);
+      const adaptiveHitWidth = Number.isFinite(transmittedHitRadius) && transmittedHitRadius > 0
+        ? transmittedHitRadius * 2
+        : Math.max(2, Number(effect.width) || 16);
+      const beamWidth = giant
+        ? Math.max(44, Number(effect.width || 56))
+        : handLaser
+          ? continuousLaser ? adaptiveHitWidth : Math.max(13, Number(effect.width || 16))
+          : s.includes("turret") ? 12 : 8;
       const tint = giant ? (effect.color || "#c084fc") : s.includes("turret") && !handLaser ? "#fde68a" : "#67e8f9";
-      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, beamWidth + 8, "#08111f", alpha * 0.34, z - 8, "add");
-      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, beamWidth, tint, alpha * 0.74, z - 4, "add");
+      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, continuousLaser ? beamWidth : beamWidth + 8, "#08111f", alpha * 0.34, z - 8, "add");
+      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, continuousLaser ? Math.max(2, beamWidth - 2) : beamWidth, tint, alpha * 0.74, z - 4, "add");
       renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, Math.max(3, beamWidth * 0.34), "#f8fafc", alpha * 0.8, z - 1, "add");
-      for (let i = 1; i <= 4; i += 1) {
-        const t = i / 5;
-        const x = end.fromX + (end.toX - end.fromX) * t;
-        const y = end.fromY + (end.toY - end.fromY) * t;
-        renderer.drawGfxCircle(x, y, 4 + (i % 2) * 2 + peak * 2, tint, alpha * 0.24, "#f8fafc", alpha * 0.12, 1, z + i, "add", 8);
+      if (!continuousLaser) {
+        for (let i = 1; i <= 4; i += 1) {
+          const t = i / 5;
+          const x = end.fromX + (end.toX - end.fromX) * t;
+          const y = end.fromY + (end.toY - end.fromY) * t;
+          renderer.drawGfxCircle(x, y, 4 + (i % 2) * 2 + peak * 2, tint, alpha * 0.24, "#f8fafc", alpha * 0.12, 1, z + i, "add", 8);
+        }
+        renderer.drawGfxImpactBurst(end.toX, end.toY, beamWidth * (2.1 + peak * 0.4), tint, alpha * 0.26, z + 8, progress * 2.4, 7);
       }
-      renderer.drawGfxImpactBurst(end.toX, end.toY, beamWidth * (2.1 + peak * 0.4), tint, alpha * 0.26, z + 8, progress * 2.4, 7);
     } else if (s.includes("engineer_laser_module_core") || s.includes("mecha_laser_core")) {
       const coreRadius = Math.max(48, effectRadius * 0.58);
       renderer.drawGfxCircle(effect.x, effect.y, coreRadius * (0.72 + peak * 0.16), "#170728", alpha * 0.22, "#c084fc", alpha * 0.58, 4, z - 2, "add", 28);
@@ -1622,6 +1794,11 @@
     } else if (s.includes("missile_explosion") || s.includes("kamikaze_explosion")) {
       const big = s.includes("kamikaze");
       const r = effectRadius * (big ? 1.05 : 0.9);
+      renderExplosionRangeBoundary(renderer, context, {
+        edge: "#fb923c",
+        hot: "#fff7ed",
+        dark: "#7c2d12"
+      });
       renderer.drawGfxCircle(effect.x, effect.y, r * (0.55 + peak * 0.18), "#7c2d12", alpha * 0.18, "#fb923c", alpha * 0.48, 5, z - 8, "add", 28);
       renderer.drawGfxImpactBurst(effect.x, effect.y, r * (0.5 + peak * 0.16), "#fde68a", alpha * 0.42, z + 3, progress * 3.4, big ? 15 : 11);
       for (let i = 0; i < (big ? 14 : 10); i += 1) {
@@ -2429,22 +2606,22 @@
     const { effect, progress, alpha, effectRadius, peak, z, angle } = context;
     const originX = Number.isFinite(effect.originX) ? Number(effect.originX) : effect.x;
     const originY = Number.isFinite(effect.originY) ? Number(effect.originY) : effect.y;
-    const radius = Math.max(92, Math.min(360, Number(effect.rangeRadius || effect.radius || effectRadius)));
+    const radius = Math.max(92, Number(effect.rangeRadius || effect.radius || effectRadius));
     let drew = false;
     const t = Math.max(0, Math.min(1, progress));
     const fade = Math.max(0, 1 - Math.max(0, t - 0.82) / 0.18);
     const activeAlpha = alpha * fade * (0.76 + peak * 0.18);
     const phase = Number(effect.seed || 0) * 0.13 + Number(angle || 0) * 0.22 + t * Math.PI * 4.6;
-    const swirlRadius = Math.max(92, Math.min(164, radius * 0.72));
+    const swirlRadius = radius * 0.98;
 
-    renderer.drawGfxCircle?.(originX, originY, swirlRadius * 0.88, "#160b07", activeAlpha * 0.04, "#f97316", activeAlpha * 0.18, 3, z + 4, "add", 64);
+    renderer.drawGfxCircle?.(originX, originY, radius, "#160b07", activeAlpha * 0.04, "#f97316", activeAlpha * 0.18, 3, z + 4, "add", 64);
     renderer.drawGfxCircle?.(originX, originY, swirlRadius * 0.42, "#160b07", activeAlpha * 0.025, "#fde68a", activeAlpha * 0.16, 2, z + 6, "add", 40);
 
     for (let i = 0; i < 3; i += 1) {
       const a = phase + (Math.PI * 2 * i) / 3;
       const start = a - 0.58;
       const end = a + 0.98;
-      const outer = swirlRadius * (0.82 + (i % 2) * 0.03);
+      const outer = swirlRadius * (0.98 + (i % 2) * 0.02);
       const inner = swirlRadius * 0.54;
       renderer.drawGfxCleaveRibbon?.(originX, originY, inner, outer, start, end, "#fff7ed", activeAlpha * 0.11, "#fde68a", activeAlpha * 0.22, 3, z + 22 + i * 8, "add", 14);
       drew = renderPixelArc(renderer, originX, originY, outer, start + 0.08, end - 0.05, "#fff7ed", activeAlpha * 0.3, z + 36 + i * 8, {
@@ -3725,10 +3902,12 @@
 
   function renderSkillEffectPolishLayer(renderer, context) {
     if (!renderer || !context || !context.s || context.alpha <= 0.02) return false;
-    if (context.s.includes("drone_bolt") || context.s.includes("single_laser")) return false;
+    if (context.s.includes("drone_bolt") || context.s.includes("single_laser") || context.s.includes("adaptive_continuous_laser")) return false;
     if (context.s.includes("warrior_forward_whirlwind_launch")) return false;
     if (
       context.s.includes("frost") ||
+      context.s.includes("flame_wave") ||
+      context.s.includes("flame_breath") ||
       context.s.includes("freeze") ||
       context.s.includes("ice") ||
       context.s.includes("meteor") ||
@@ -3766,6 +3945,7 @@
     renderRangerArrowRainEffect,
     renderRangerVolleyEffect,
     renderMageStyledSkillEffect,
+    renderMageFlameEffect,
     renderMageFrostEffect,
     renderMageMeteorEffect,
     renderMageChainEffect,
@@ -3799,6 +3979,7 @@
     renderCommonStyledEffect,
     renderCommonWarningEffect,
     renderCommonImpactEffect,
+    renderExplosionRangeBoundary,
     renderCrispCommonStyledEffect,
     renderCrispPrimaryClassStyledEffect,
     renderCrispRangerEffect,

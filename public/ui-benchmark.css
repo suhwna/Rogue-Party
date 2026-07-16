@@ -873,13 +873,35 @@ body:has(#joinOverlay:not(.hidden)) .center-banner {
 }
 
 .center-banner.lethal-cast {
-  min-width: 430px !important;
-  border-color: rgba(248, 113, 113, 0.72) !important;
-  background: rgba(69, 10, 10, 0.94) !important;
-  color: #fff7ed !important;
-  font-size: 15px !important;
+  min-width: 520px !important;
+  padding: 13px 22px !important;
+  border: 2px solid #67e8f9 !important;
+  background: rgba(24, 6, 10, 0.96) !important;
+  color: #ecfeff !important;
+  font-size: 20px !important;
   font-weight: 900 !important;
-  box-shadow: 0 0 0 1px rgba(248, 113, 113, 0.2), 0 10px 34px rgba(127, 29, 29, 0.48) !important;
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.34), 0 0 28px rgba(239, 68, 68, 0.68), 0 10px 34px rgba(0, 0, 0, 0.6) !important;
+  animation: boss-field-banner-pulse 520ms ease-in-out infinite alternate;
+}
+
+body.boss-field-warning .stage::before {
+  inset: 0 !important;
+  z-index: 22 !important;
+  height: auto !important;
+  border: 12px solid rgba(239, 68, 68, 0.72);
+  background: radial-gradient(circle at center, transparent 42%, rgba(127, 29, 29, 0.16) 72%, rgba(69, 10, 10, 0.48) 100%) !important;
+  box-shadow: inset 0 0 72px rgba(220, 38, 38, 0.62), inset 0 0 0 3px rgba(254, 202, 202, 0.22);
+  animation: boss-field-edge-pulse 620ms ease-in-out infinite alternate;
+}
+
+@keyframes boss-field-banner-pulse {
+  from { border-color: #67e8f9; filter: brightness(1); }
+  to { border-color: #cffafe; filter: brightness(1.22); }
+}
+
+@keyframes boss-field-edge-pulse {
+  from { opacity: 0.62; }
+  to { opacity: 1; }
 }
 
 .bottom-hud {
@@ -1028,6 +1050,16 @@ body:has(#joinOverlay:not(.hidden)) .center-banner {
 .skill-slot.ready {
   border-color: color-mix(in srgb, var(--skill-color, var(--rp-gold)) 62%, var(--rp-line)) !important;
   box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--skill-color, var(--rp-gold)) 72%, transparent) !important;
+}
+
+.skill-slot.equipment-modified {
+  border-color: rgba(250, 204, 21, 0.58) !important;
+}
+
+.choice-type-pill.equipment-modified {
+  border-color: rgba(250, 204, 21, 0.42) !important;
+  color: #fde68a !important;
+  background: rgba(113, 63, 18, 0.28) !important;
 }
 
 .skill-slot.locked {
@@ -1690,12 +1722,45 @@ body:has(#joinOverlay:not(.hidden)) .center-banner {
 
 .run-ascension-stats {
   display: grid;
-  grid-template-columns: repeat(6, minmax(52px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 5px;
+}
+
+.run-ascension-reward-note {
+  color: #d9bd7b !important;
+}
+
+.run-ascension-special-rules {
+  grid-column: 1 / -1;
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  padding: 7px 9px;
+  align-items: center;
+  border: 1px solid rgba(239, 68, 68, 0.34);
+  border-left: 3px solid #ef4444;
+  border-radius: 3px;
+  color: #fecaca;
+  background: rgba(69, 10, 10, 0.34);
+  font-size: 9px;
+}
+
+.run-ascension-special-rules strong {
+  flex: 0 0 auto;
+  color: #f87171;
+  font-size: 9px;
+}
+
+.run-ascension-special-rules span {
+  min-width: 0;
+  padding-left: 8px;
+  border-left: 1px solid rgba(248, 113, 113, 0.28);
+  white-space: nowrap;
 }
 
 .run-ascension-stats > span {
   display: grid;
+  min-width: 0;
   gap: 2px;
   padding: 5px 6px;
   border: 1px solid rgba(126, 159, 178, 0.18);
@@ -3346,10 +3411,10 @@ button[data-progression-action="equip-item"]::before { content: "check_circle" /
 button[data-progression-action="salvage-item"]::before { content: "delete_sweep" / ""; }
 button[data-progression-action="enhance-item"]::before { content: "upgrade" / ""; }
 button[data-progression-action="reforge-item"]::before { content: "autorenew" / ""; }
+button[data-progression-action="continue-reforge"]::before { content: "autorenew" / ""; }
 button[data-progression-action="apply-reforge"]::before { content: "check_circle" / ""; }
 button[data-progression-action="cancel-reforge"]::before { content: "undo" / ""; }
 button[data-progression-action="merge-rune"]::before { content: "merge" / ""; }
-button[data-progression-action="craft-boss"]::before { content: "construction" / ""; }
 button[data-progression-action="select-title"]::before { content: "workspace_premium" / ""; }
 button[data-progression-action="select-skin"]::before { content: "palette" / ""; }
 button[data-progression-action="tab"][data-tab="gear"]::before { content: "inventory_2" / ""; }
@@ -3367,10 +3432,10 @@ button[data-progression-action="equip-item"]::before,
 button[data-progression-action="salvage-item"]::before,
 button[data-progression-action="enhance-item"]::before,
 button[data-progression-action="reforge-item"]::before,
+button[data-progression-action="continue-reforge"]::before,
 button[data-progression-action="apply-reforge"]::before,
 button[data-progression-action="cancel-reforge"]::before,
 button[data-progression-action="merge-rune"]::before,
-button[data-progression-action="craft-boss"]::before,
 button[data-progression-action="select-title"]::before,
 button[data-progression-action="select-skin"]::before,
 button[data-progression-action="tab"]::before {

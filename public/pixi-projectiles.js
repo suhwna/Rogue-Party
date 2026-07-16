@@ -126,6 +126,59 @@
     }
   }
 
+  function drawCondensedStarlight(renderer, projectile, palette, z, now) {
+    const radius = Math.max(18, Number(projectile.radius || 32));
+    const angle = Number(projectile.angle || 0);
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const px = -uy;
+    const py = ux;
+    const phase = now / 520 + Number(projectile.id || 0) * 0.41;
+    const pulse = 0.98 + Math.sin(now / 140 + Number(projectile.id || 0)) * 0.025;
+    const style = String(projectile.style || "").toLowerCase();
+    const expanded = style.includes("expanded_star");
+    const empowered = style.includes("empowered_core");
+    const main = palette?.main || "#a78bfa";
+    const hot = palette?.hot || "#f5d0fe";
+    const dark = palette?.dark || "#211334";
+    const x = Number(projectile.x || 0);
+    const y = Number(projectile.y || 0);
+    const tailLength = radius * (expanded ? 3.45 : 3.05);
+
+    if (Number(projectile.splash || 0) > radius) {
+      renderer.drawGfxCircle(x, y, projectile.splash, "#000000", 0, main, 0.055, 1.5, z - 12, "add", 40);
+    }
+
+    renderer.drawGfxLine(x - ux * tailLength, y - uy * tailLength, x - ux * radius * 0.24, y - uy * radius * 0.24, Math.max(8, radius * 0.34), dark, 0.16, z - 8, "add");
+    renderer.drawGfxLine(x - ux * tailLength * 0.86, y - uy * tailLength * 0.86, x, y, Math.max(3, radius * 0.11), main, 0.34, z - 6, "add");
+    for (const side of [-1, 1]) {
+      renderer.drawGfxLine(
+        x - ux * radius * 1.5 + px * side * radius * 0.22,
+        y - uy * radius * 1.5 + py * side * radius * 0.22,
+        x - ux * radius * 0.15 + px * side * radius * 0.06,
+        y - uy * radius * 0.15 + py * side * radius * 0.06,
+        Math.max(1.5, radius * 0.035),
+        hot,
+        0.28,
+        z - 4,
+        "add"
+      );
+    }
+
+    renderer.drawGfxLine(x - ux * radius * 0.2, y - uy * radius * 0.2, x + ux * radius * 1.08, y + uy * radius * 1.08, Math.max(2, radius * 0.055), hot, 0.48, z + 1, "add");
+    renderer.drawGfxDiamond(x + ux * radius * 0.92, y + uy * radius * 0.92, radius * 0.11, "#ffffff", 0.8, z + 6, angle, main);
+
+    renderer.drawGfxCircle(x, y, radius * pulse, dark, 0.2, main, 0.42, Math.max(2, radius * 0.035), z - 2, "add", 28);
+    renderer.drawGfxCircle(x, y, radius * 0.7, dark, 0.32, hot, 0.16, Math.max(1.5, radius * 0.022), z, "add", 24);
+    renderer.drawGfxArc(x, y, radius * 0.84, phase, phase + Math.PI * 1.18, Math.max(2, radius * 0.035), hot, 0.5, z + 2, "add", 16);
+    renderer.drawGfxArc(x, y, radius * 0.84, phase + Math.PI, phase + Math.PI * 2.18, Math.max(2, radius * 0.035), main, 0.44, z + 3, "add", 16);
+    if (expanded) {
+      renderer.drawGfxArc(x, y, radius * 1.02, -phase * 0.72, -phase * 0.72 + Math.PI * 0.78, Math.max(1.5, radius * 0.025), hot, 0.26, z + 4, "add", 14);
+    }
+    renderer.drawGfxStar(x, y, radius * 0.49, hot, 0.74, z + 5, 8);
+    renderer.drawGfxDiamond(x, y, radius * (empowered ? 0.2 : 0.16), "#ffffff", empowered ? 0.92 : 0.78, z + 7, phase * 0.8, main);
+  }
+
   function drawArrow(renderer, projectile, tint, z, now) {
     const angle = projectile.angle || 0;
     const r = Math.max(7, projectile.radius || 6);
@@ -529,8 +582,11 @@
       projectileSpriteKey(renderer, projectile, tags);
       projectileScale(projectile, tags);
 
-      const skinOverride = !isHostileProjectile(projectile, tags) && skinEffects.renderProjectileOverride?.(renderer, projectile, now, tags);
-      if (skinOverride) {
+      const condensedStarlight = tags.style.includes("giant_star_orb");
+      const skinOverride = !condensedStarlight && !isHostileProjectile(projectile, tags) && skinEffects.renderProjectileOverride?.(renderer, projectile, now, tags);
+      if (condensedStarlight) {
+        drawCondensedStarlight(renderer, projectile, skinPalette, z, now);
+      } else if (skinOverride) {
         // A skin may replace the complete projectile silhouette and its splash preview.
       } else if (isHostileProjectile(projectile, tags)) {
         drawHostileProjectile(renderer, projectile, z, now);

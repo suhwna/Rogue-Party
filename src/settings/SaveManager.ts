@@ -288,22 +288,27 @@ function normalizeInventory(value: unknown): UserProgress["inventory"] {
       ? (item as Partial<EquipmentItem> & { lockedAffixIndex?: number })
       : {};
     const slots = ["weapon", "armor", "amulet", "core"] as const;
-    const rarities = ["common", "rare", "epic", "legendary", "mythic"] as const;
+    const rarities = ["common", "rare", "epic", "legendary", "mythic", "unique"] as const;
     const affixes = (Array.isArray(entry.affixes) ? entry.affixes : []).slice(0, 5).map((affix) => ({
       id: String(affix?.id || "power").slice(0, 32),
       value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
     }));
-    const legacyLocks = Number.isInteger(entry.lockedAffixIndex) && Number(entry.lockedAffixIndex) >= 0
-      ? [Number(entry.lockedAffixIndex)]
-      : [];
-    const lockedAffixIndices = [...new Set((Array.isArray(entry.lockedAffixIndices) ? entry.lockedAffixIndices : legacyLocks)
-      .map((index) => Math.floor(Number(index)))
-      .filter((index) => index >= 0 && index < affixes.length))]
-      .slice(0, Math.max(0, affixes.length - 1))
-      .sort((a, b) => a - b);
-    const previewAffixes = (Array.isArray(entry.reforgePreview?.affixes) ? entry.reforgePreview.affixes : []).slice(0, affixes.length).map((affix) => ({
-      id: String(affix?.id || "power").slice(0, 32),
+    const milestoneAffixes = (Array.isArray(entry.milestoneAffixes) ? entry.milestoneAffixes : []).slice(0, 4).map((affix) => ({
+      id: String(affix?.id || "vitality").slice(0, 32),
       value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
+      milestone: clampedWholeNumber(affix?.milestone, 5, 5, 20),
+      quality: normalizeMilestoneQuality(affix?.quality, entry.id, affix?.milestone, affix?.id),
+    }));
+    const lockedAffixIndices = [...new Set((entry.reforgeLockTarget === "milestone" && Array.isArray(entry.lockedAffixIndices) ? entry.lockedAffixIndices : [])
+      .map((index) => Math.floor(Number(index)))
+      .filter((index) => index >= 0 && index < milestoneAffixes.length))]
+      .slice(0, Math.max(0, milestoneAffixes.length - 1))
+      .sort((a, b) => a - b);
+    const previewMilestoneAffixes = (Array.isArray(entry.reforgePreview?.milestoneAffixes) ? entry.reforgePreview.milestoneAffixes : []).slice(0, milestoneAffixes.length).map((affix) => ({
+      id: String(affix?.id || "vitality").slice(0, 32),
+      value: Math.max(0, Math.min(2, Number(affix?.value) || 0)),
+      milestone: clampedWholeNumber(affix?.milestone, 5, 5, 20),
+      quality: normalizeMilestoneQuality(affix?.quality, entry.id, affix?.milestone, affix?.id),
     }));
     return {
       id: String(entry.id || "").slice(0, 96),
@@ -317,11 +322,13 @@ function normalizeInventory(value: unknown): UserProgress["inventory"] {
       itemLevel: Math.max(1, wholeNumber(entry.itemLevel, 1)),
       enhance: clampedWholeNumber(entry.enhance, 0, 0, 20),
       rerolls: wholeNumber(entry.rerolls, 0),
+      reforgeLockTarget: "milestone",
       lockedAffixIndices,
-      reforgePreview: previewAffixes.length === affixes.length && affixes.length > 0
-        ? { affixes: previewAffixes, cost: wholeNumber(entry.reforgePreview?.cost, 0) }
+      reforgePreview: previewMilestoneAffixes.length === milestoneAffixes.length && milestoneAffixes.length > 0
+        ? { milestoneAffixes: previewMilestoneAffixes, cost: wholeNumber(entry.reforgePreview?.cost, 0) }
         : null,
       affixes,
+      milestoneAffixes,
     } satisfies EquipmentItem;
   });
   const runes = (Array.isArray(source.runes) ? source.runes : []).slice(-180).map((rune) => {
@@ -421,6 +428,17 @@ function wholeNumber(value: unknown, fallback: number): number {
 
 function clampedWholeNumber(value: unknown, fallback: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, wholeNumber(value, fallback)));
+}
+
+function normalizeMilestoneQuality(value: unknown, itemId: unknown, milestone: unknown, affixId: unknown): number {
+  const saved = Math.floor(Number(value));
+  if (Number.isFinite(saved) && saved >= 1) return Math.min(100, saved);
+  let hash = 2166136261;
+  for (const char of `${String(itemId || "")}:milestone-quality:${String(milestone || "")}:${String(affixId || "")}`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return 1 + ((hash >>> 0) % 100);
 }
 
 function readStoredProgress(storage: Storage | undefined, key: string): unknown | null {

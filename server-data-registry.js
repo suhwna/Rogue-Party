@@ -6,7 +6,7 @@ const REWARD_EFFECTS = {
   rapid_loader: [{ op: "capAdd", key: "attackSpeed", value: 10, max: 500 }],
   splitter_core: [{ op: "capAdd", key: "projectileCountBonus", value: 1, max: 1 }],
   giant_lens: [{ op: "mul", key: "areaMul", value: 1.1 }],
-  sharp_eye: [{ op: "capAdd", key: "crit", value: 0.1, max: 0.85 }],
+  sharp_eye: [{ op: "capAdd", key: "crit", value: 0.05, max: 0.85 }],
   fatal_mark: [{ op: "mul", key: "critDamageMul", value: 1.1 }],
   living_moss: [{ op: "add", key: "regen", value: 0.5 }],
   heartstone: [{ op: "maxHpAdd", value: 25 }],

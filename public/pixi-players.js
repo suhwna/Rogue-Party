@@ -11,6 +11,9 @@
     alchemist: { color: "#a3ff4f", dark: "#102508", accent: "#67e8f9", glyph: "A" },
     assassin: { color: "#b68cff", dark: "#10091f", accent: "#f5d0fe", glyph: "S" },
   });
+  const PROJECTILE_AEGIS_ORBIT_RADIUS = 62;
+  const PROJECTILE_AEGIS_ORBIT_Y_SCALE = 0.68;
+  const PROJECTILE_AEGIS_PLATE_RADIUS = 18;
 
   function metaFor(player) {
     return CLASS_NEON[player?.classId || "warrior"] || CLASS_NEON.warrior;
@@ -129,7 +132,10 @@
   function drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, zIndex, skinPalette = null) {
     const meta = metaFor(player);
     const color = skinPalette?.main || classColor(player);
-    const accent = skinPalette?.hot || meta.accent;
+    const weaponGear = Array.isArray(player.gearAppearance)
+      ? player.gearAppearance.find((entry) => entry?.slot === "weapon")
+      : null;
+    const accent = skinPalette?.hot || gearColorFor(weaponGear) || meta.accent;
     const dark = skinPalette?.dark || meta.dark;
     const angle = Number(player.facing || 0);
     const classId = player.classId || "warrior";
@@ -210,8 +216,13 @@
   }
 
   const GEAR_RARITY_COLORS = Object.freeze({
-    common: "#cbd5e1", rare: "#38bdf8", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185",
+    common: "#cbd5e1", rare: "#38bdf8", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185", unique: "#5eead4",
   });
+  const GEAR_RARITY_RANK = Object.freeze({ common: 0, rare: 1, epic: 2, legendary: 3, mythic: 4, unique: 5 });
+
+  function gearColorFor(entry) {
+    return entry ? GEAR_RARITY_COLORS[entry.rarity] || GEAR_RARITY_COLORS.common : "";
+  }
 
   function renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, zIndex) {
     const gear = Array.isArray(player.gearAppearance) ? player.gearAppearance : [];
@@ -223,33 +234,39 @@
     const py = ux;
     const centerY = pos.y + bob + 2;
     const bySlot = new Map(gear.map((entry) => [entry.slot, entry]));
-    const colorFor = (entry) => GEAR_RARITY_COLORS[entry?.rarity] || GEAR_RARITY_COLORS.common;
+    const bestGear = gear.slice().sort((a, b) => (GEAR_RARITY_RANK[b?.rarity] || 0) - (GEAR_RARITY_RANK[a?.rarity] || 0))[0];
+    const trim = gearColorFor(bestGear);
+    const classId = player.classId || "warrior";
     const armor = bySlot.get("armor");
     if (armor) {
-      const color = colorFor(armor);
+      const color = gearColorFor(armor);
+      const plateFill = classId === "warrior" ? "#2b211b" : classId === "engineer" ? "#102a30" : "#111827";
       for (const side of [-1, 1]) {
-        const sx = pos.x + px * side * radius * 0.76 - ux * radius * 0.08;
-        const sy = centerY + py * side * radius * 0.76 - uy * radius * 0.08;
-        renderer.drawGfxDiamond(sx, sy, radius * 0.24, color, alpha * 0.82, zIndex + 1, angle + Math.PI / 4, "#f8fafc");
+        const sx = pos.x + px * side * radius * 0.66 - ux * radius * 0.04;
+        const sy = centerY + py * side * radius * 0.66 - uy * radius * 0.04;
+        renderer.drawGfxPath?.([
+          { x: sx + ux * radius * 0.3, y: sy + uy * radius * 0.3 },
+          { x: sx + px * side * radius * 0.22, y: sy + py * side * radius * 0.22 },
+          { x: sx - ux * radius * 0.28 + px * side * radius * 0.12, y: sy - uy * radius * 0.28 + py * side * radius * 0.12 },
+          { x: sx - ux * radius * 0.2 - px * side * radius * 0.13, y: sy - uy * radius * 0.2 - py * side * radius * 0.13 },
+        ], plateFill, alpha * 0.74, color, alpha * 0.66, 1.8, zIndex + 1, "normal");
       }
-    }
-    const weapon = bySlot.get("weapon");
-    if (weapon) {
-      const color = colorFor(weapon);
-      const sx = pos.x - px * radius * 0.86 - ux * radius * 0.2;
-      const sy = centerY - py * radius * 0.86 - uy * radius * 0.2;
-      renderer.drawGfxLine(sx, sy, sx + ux * radius * 1.18, sy + uy * radius * 1.18, 3.2, color, alpha * 0.72, zIndex + 2, "add");
-      renderer.drawGfxDiamond(sx + ux * radius * 1.22, sy + uy * radius * 1.22, radius * 0.12, "#f8fafc", alpha * 0.88, zIndex + 3, angle);
     }
     const amulet = bySlot.get("amulet");
     if (amulet) {
-      const color = colorFor(amulet);
-      renderer.drawGfxDiamond(pos.x + ux * radius * 0.18, centerY + uy * radius * 0.18, radius * 0.14, color, alpha * 0.9, zIndex + 4, now / 900, "#ffffff");
+      const color = gearColorFor(amulet);
+      const ax = pos.x + ux * radius * 0.28;
+      const ay = centerY + uy * radius * 0.28;
+      renderer.drawGfxCircle(ax, ay, radius * 0.105, "#111827", alpha * 0.82, color, alpha * 0.8, 1.4, zIndex + 3, "normal", 12);
+      renderer.drawGfxCircle(ax, ay, radius * 0.038, color, alpha * 0.74, color, 0, 0, zIndex + 4, "normal", 8);
     }
     const core = bySlot.get("core");
     if (core) {
-      const color = colorFor(core);
-      renderer.drawGfxCircle(pos.x - ux * radius * 0.52, centerY - uy * radius * 0.52, radius * 0.12, color, alpha * 0.48, "#ffffff", alpha * 0.68, 1.4, zIndex + 4, "add", 12);
+      const color = gearColorFor(core);
+      const cx = pos.x - ux * radius * 0.58;
+      const cy = centerY - uy * radius * 0.58;
+      renderer.drawGfxCircle(cx, cy, radius * 0.11, "#0f172a", alpha * 0.82, color, alpha * 0.64, 1.6, zIndex + 2, "normal", 12);
+      renderer.drawGfxLine(cx - px * radius * 0.12, cy - py * radius * 0.12, cx + px * radius * 0.12, cy + py * radius * 0.12, 1.4, color, alpha * 0.5, zIndex + 3, "normal");
     }
     const setCounts = gear.reduce((counts, entry) => {
       if (entry.setId) counts[entry.setId] = (counts[entry.setId] || 0) + 1;
@@ -257,9 +274,38 @@
     }, {});
     const completeSet = Object.entries(setCounts).find(([, count]) => count >= 4);
     if (completeSet) {
-      const pulse = 0.74 + Math.sin(now / 420) * 0.08;
-      const bestGear = gear.slice().sort((a, b) => Object.keys(GEAR_RARITY_COLORS).indexOf(b.rarity) - Object.keys(GEAR_RARITY_COLORS).indexOf(a.rarity))[0];
-      renderer.drawGfxRuneRing(pos.x, centerY, radius * 1.24, colorFor(bestGear), alpha * pulse * 0.42, zIndex + 5, now / 1200, 4);
+      for (let i = 0; i < 4; i += 1) {
+        const tickAngle = angle + Math.PI * 0.25 + (Math.PI * 0.5 * i);
+        const inner = radius * 0.95;
+        const outer = radius * 1.08;
+        renderer.drawGfxLine(
+          pos.x + Math.cos(tickAngle) * inner,
+          centerY + Math.sin(tickAngle) * inner,
+          pos.x + Math.cos(tickAngle) * outer,
+          centerY + Math.sin(tickAngle) * outer,
+          1.8,
+          trim,
+          alpha * 0.46,
+          zIndex + 4,
+          "normal",
+        );
+      }
+    }
+  }
+
+  function renderProjectileAegis(renderer, player, pos, radius, now, bob, alpha, zIndex) {
+    const charges = Math.max(0, Math.min(3, Math.floor(Number(player.projectileShieldCharges || 0))));
+    if (charges <= 0) return;
+    const sizeScale = Math.max(0.75, Number(player.sizeScale || 1));
+    const orbit = PROJECTILE_AEGIS_ORBIT_RADIUS * sizeScale;
+    const spin = now / 780 + renderer.hash(player.id) * 0.05;
+    for (let i = 0; i < charges; i += 1) {
+      const angle = spin + (Math.PI * 2 * i) / 3;
+      const x = pos.x + Math.cos(angle) * orbit;
+      const y = pos.y + bob + Math.sin(angle) * orbit * PROJECTILE_AEGIS_ORBIT_Y_SCALE;
+      const shieldSize = PROJECTILE_AEGIS_PLATE_RADIUS * sizeScale;
+      renderer.drawGfxCircle?.(x, y, shieldSize * 0.78, "#083344", alpha * 0.2, "#67e8f9", alpha * 0.5, 2, zIndex + i, "add", 12);
+      drawShield(renderer, x, y, angle + Math.PI, shieldSize, "#67e8f9", alpha, zIndex + 6 + i);
     }
   }
 
@@ -337,12 +383,17 @@
     const px = -uy;
     const py = ux;
     const pulse = 0.5 + Math.sin(now / 118 + renderer.hash(player.id)) * 0.5;
+    const adaptive = Array.isArray(player.gearAppearance)
+      && player.gearAppearance.some((entry) => entry?.special === "engineer_mecha_module");
+    const metal = adaptive ? "#22d3ee" : "#d6b76d";
+    const energy = adaptive ? "#a5f3fc" : "#67e8f9";
+    const plating = adaptive ? "#083344" : "#241a07";
     const cx = pos.x;
     const cy = pos.y + bob + 2;
-    const coreRadius = radius * 2.02;
-    renderer.drawGfxCircle(cx, cy + radius * 0.22, coreRadius * 0.72, "#0f172a", 0.15, "#d6b76d", 0.28, 2, z + 28, "add", 28);
-    renderer.drawGfxGear?.(cx, cy, coreRadius * (0.48 + pulse * 0.03), "#d6b76d", 0.34, z + 31, now / 520, 10);
-    renderer.drawGfxRuneRing?.(cx, cy, coreRadius * 0.58, "#67e8f9", 0.26, z + 32, -now / 720, 6);
+    const coreRadius = radius * (adaptive ? 2.22 : 2.02);
+    renderer.drawGfxCircle(cx, cy + radius * 0.22, coreRadius * 0.72, "#0f172a", 0.15, metal, 0.28, 2, z + 28, "add", 28);
+    renderer.drawGfxGear?.(cx, cy, coreRadius * (0.48 + pulse * 0.03), metal, 0.34, z + 31, now / 520, adaptive ? 12 : 10);
+    renderer.drawGfxRuneRing?.(cx, cy, coreRadius * 0.58, energy, 0.26, z + 32, -now / 720, adaptive ? 8 : 6);
 
     for (const side of [-1, 1]) {
       const sx = cx + px * side * radius * 1.04 - ux * radius * 0.05;
@@ -353,16 +404,22 @@
         { x: sx - ux * radius * 0.86 + px * side * radius * 0.2, y: sy - uy * radius * 0.86 + py * side * radius * 0.2 },
         { x: sx - ux * radius * 0.46 - px * side * radius * 0.34, y: sy - uy * radius * 0.46 - py * side * radius * 0.34 },
       ];
-      renderer.drawGfxPath?.(shoulder, "#241a07", 0.72, "#d6b76d", 0.82, 3, z + 36 + side, "normal");
-      renderer.drawGfxLine?.(sx - ux * radius * 0.42, sy - uy * radius * 0.42, sx + ux * radius * 0.5, sy + uy * radius * 0.5, 4, "#67e8f9", 0.42, z + 39 + side, "add");
+      renderer.drawGfxPath?.(shoulder, plating, 0.72, metal, 0.82, 3, z + 36 + side, "normal");
+      renderer.drawGfxLine?.(sx - ux * radius * 0.42, sy - uy * radius * 0.42, sx + ux * radius * 0.5, sy + uy * radius * 0.5, 4, energy, 0.42, z + 39 + side, "add");
 
       const bx = cx - ux * radius * 1.02 + px * side * radius * 0.62;
       const by = cy - uy * radius * 1.02 + py * side * radius * 0.62;
       renderer.drawGfxLine?.(bx, by, bx - ux * radius * (0.82 + pulse * 0.22), by - uy * radius * (0.82 + pulse * 0.22), 7, "#f97316", 0.22 + pulse * 0.08, z + 27 + side, "add");
-      renderer.drawGfxCircle?.(bx, by, radius * 0.14, "#67e8f9", 0.42, "#f8f3e9", 0.36, 1.4, z + 40 + side, "add", 10);
+      renderer.drawGfxCircle?.(bx, by, radius * 0.14, energy, 0.42, "#f8f3e9", 0.36, 1.4, z + 40 + side, "add", 10);
+      if (adaptive) {
+        const armX = cx - ux * radius * 0.15 + px * side * radius * 1.42;
+        const armY = cy - uy * radius * 0.15 + py * side * radius * 1.42;
+        renderer.drawGfxLine?.(armX, armY, armX + ux * radius * 1.15, armY + uy * radius * 1.15, 7, plating, 0.9, z + 38 + side, "normal");
+        renderer.drawGfxDiamond?.(armX + ux * radius * 1.28, armY + uy * radius * 1.28, radius * 0.22, metal, 0.9, z + 42 + side, angle, "#ecfeff");
+      }
     }
 
-    renderer.drawGfxCircle?.(cx + ux * radius * 0.64, cy + uy * radius * 0.64, radius * 0.19, "#67e8f9", 0.48, "#f8f3e9", 0.62, 2, z + 42, "add", 12);
+    renderer.drawGfxCircle?.(cx + ux * radius * 0.64, cy + uy * radius * 0.64, radius * 0.19, energy, 0.48, "#f8f3e9", 0.62, 2, z + 42, "add", 12);
     renderEngineerLaserChargeHud(renderer, player, cx, cy, radius, now, z);
   }
 
@@ -403,6 +460,7 @@
     const skinPalette = skinEffects.palette?.(player.skin) || null;
     drawClassSymbol(renderer, player, pos, radius, face, now, bob, alpha, z + 8, skinPalette);
     if (!skinPalette) renderEquipmentAppearance(renderer, player, pos, radius, now, bob, alpha, z + 29);
+    renderProjectileAegis(renderer, player, pos, radius, now, bob, alpha, z + 34);
     const skinAttackOverride = skinEffects.renderPlayerAttackOverride?.(renderer, player, pos, radius, now, bob, z);
     if (!skinAttackOverride) renderPlayerAttackEffect(renderer, player, pos, face, bob);
 

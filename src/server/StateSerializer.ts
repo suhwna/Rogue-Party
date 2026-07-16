@@ -213,6 +213,7 @@ export interface HazardLike {
   readonly mode?: string;
   readonly style?: string;
   readonly small?: boolean;
+  readonly iceMeteor?: boolean;
   readonly x: number;
   readonly y: number;
   readonly radius: number;
@@ -238,6 +239,7 @@ export interface HazardView {
   readonly mode: string;
   readonly style: string;
   readonly small: boolean;
+  readonly iceMeteor: boolean;
   readonly x: number;
   readonly y: number;
   readonly radius: number;
@@ -799,6 +801,7 @@ export function hazardView(hazard: HazardLike): HazardView {
     mode: hazard.mode || "",
     style: hazard.style || "",
     small: Boolean(hazard.small),
+    iceMeteor: Boolean(hazard.iceMeteor),
     x: round2(hazard.x),
     y: round2(hazard.y),
     radius: hazard.radius,

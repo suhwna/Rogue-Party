@@ -77,6 +77,10 @@ const partyList = document.querySelector("#partyList");
 const skillDock = document.querySelector("#skillDock");
 const relicDock = document.querySelector("#relicDock");
 const settingsButton = document.querySelector("#settingsButton");
+const pauseButton = document.querySelector("#pauseButton");
+const pauseOverlay = document.querySelector("#pauseOverlay");
+const pauseResumeButton = document.querySelector("#pauseResumeButton");
+const pauseLobbyButton = document.querySelector("#pauseLobbyButton");
 const settingsOverlay = document.querySelector("#settingsOverlay");
 const settingsCloseButton = document.querySelector("#settingsCloseButton");
 const settingsResetButton = document.querySelector("#settingsResetButton");
@@ -157,6 +161,11 @@ let lobbyPreviewStartedAt = performance.now();
 let localMapVote = "";
 let localMapVoteAt = 0;
 let screenShake = 0;
+const SCREEN_SHAKE_MAX = 10;
+const SCREEN_SHAKE_INTERVAL_MS = Object.freeze({ hit: 110, hurt: 90, blast: 90, skill: 70 });
+const lastScreenShakeAtByChannel = new Map();
+let lastHitShakeEventAt = -Infinity;
+let screenShakeHitStreak = 0;
 let roomEntryMode = "join";
 let loadingTimer = null;
 let roomListRefreshTimer = 0;
@@ -239,7 +248,7 @@ const LOBBY_VIEW_META = Object.freeze({
 });
 const masteryNodeDefs = Object.freeze(
   saveBridge.MASTERY_NODE_DEFS || [
-    { id: "damage", label: "공격력", description: "모든 공격의 피해량이 증가합니다." },
+    { id: "damage", label: "피해 증폭", description: "모든 피해 증가량에 합산됩니다." },
     { id: "maxHp", label: "최대 체력", description: "캐릭터의 최대 체력이 증가합니다." },
     { id: "regen", label: "체력 재생", description: "초당 체력 회복량이 증가합니다." },
     { id: "moveSpeed", label: "이동 속도", description: "캐릭터의 이동 속도가 증가합니다." },
@@ -252,11 +261,11 @@ const masteryNodeDefs = Object.freeze(
 const MAX_ASCENSION_LEVEL = saveBridge.MAX_ASCENSION_LEVEL || 5;
 const ASCENSION_DIFFICULTY_PROFILES = Object.freeze([
   Object.freeze({ hpMul: 1, damageMul: 1, speedMul: 1, spawnMul: 1, cadenceMul: 1, eliteBonus: 0, rewardMul: 1 }),
-  Object.freeze({ hpMul: 1.5, damageMul: 1.15, speedMul: 1.04, spawnMul: 1.12, cadenceMul: 0.94, eliteBonus: 0.06, rewardMul: 1.5 }),
-  Object.freeze({ hpMul: 2, damageMul: 1.28, speedMul: 1.08, spawnMul: 1.24, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
-  Object.freeze({ hpMul: 2.6, damageMul: 1.42, speedMul: 1.12, spawnMul: 1.38, cadenceMul: 0.82, eliteBonus: 0.2, rewardMul: 2.75 }),
-  Object.freeze({ hpMul: 3.3, damageMul: 1.58, speedMul: 1.17, spawnMul: 1.52, cadenceMul: 0.75, eliteBonus: 0.3, rewardMul: 3.75 }),
-  Object.freeze({ hpMul: 4.2, damageMul: 1.78, speedMul: 1.23, spawnMul: 1.68, cadenceMul: 0.68, eliteBonus: 0.42, rewardMul: 5 }),
+  Object.freeze({ hpMul: 2, damageMul: 2, speedMul: 1.08, spawnMul: 1.12, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
+  Object.freeze({ hpMul: 4, damageMul: 4, speedMul: 1.16, spawnMul: 1.24, cadenceMul: 0.76, eliteBonus: 0.24, rewardMul: 4 }),
+  Object.freeze({ hpMul: 8, damageMul: 8, speedMul: 1.24, spawnMul: 1.38, cadenceMul: 0.64, eliteBonus: 0.4, rewardMul: 8 }),
+  Object.freeze({ hpMul: 12, damageMul: 12, speedMul: 1.34, spawnMul: 1.52, cadenceMul: 0.5, eliteBonus: 0.6, rewardMul: 12 }),
+  Object.freeze({ hpMul: 16, damageMul: 16, speedMul: 1.46, spawnMul: 1.68, cadenceMul: 0.36, eliteBonus: 0.84, rewardMul: 16 }),
 ]);
 const defaultSettings = Object.freeze(clientRuntime.defaultSettings || {
   version: SETTINGS_VERSION,
@@ -286,7 +295,9 @@ const inputManager =
     skillSeqs,
     initialDashSeq: dashSeq,
     getSettings: () => userSettings,
-    isSpectator: () => Boolean(getSelf()?.spectator) || Boolean(settingsOverlay && !settingsOverlay.classList.contains("hidden")),
+    isSpectator: () => Boolean(getSelf()?.spectator)
+      || Boolean(settingsOverlay && !settingsOverlay.classList.contains("hidden"))
+      || Boolean(pauseOverlay && !pauseOverlay.classList.contains("hidden")),
     unlockAudio: () => {},
     onDashSeq: (nextDashSeq) => {
       dashSeq = nextDashSeq;
@@ -808,7 +819,7 @@ function requestProgressionConfirmation({ title, message, confirmLabel = "확인
 function showProgressionFeedback(message, action = null) {
   if (!message) return;
   const failed = /실패/.test(message);
-  const comparing = action?.action === "reforge-item";
+  const comparing = ["reforge-item", "continue-reforge"].includes(action?.action);
   document.querySelectorAll(".progression-feedback-toast").forEach((toast) => toast.remove());
   const toast = document.createElement("div");
   toast.className = `progression-feedback-toast${failed ? " failed" : ""}`;
@@ -822,7 +833,7 @@ function showProgressionFeedback(message, action = null) {
   if (action?.action === "equip-item" && action.itemId) target = lobbyClassDetail?.querySelector(`[data-equipped-item-id="${cssEscape(action.itemId)}"]`);
   if (action?.action === "equip-rune" && action.runeId) target = lobbyClassDetail?.querySelector(`[data-equipped-rune-id="${cssEscape(action.runeId)}"]`);
   if (action?.action === "spend-mastery" && action.nodeId) target = lobbyClassDetail?.querySelector(`[data-mastery-node="${cssEscape(action.nodeId)}"]`)?.closest(".growth-node");
-  if (["enhance-item", "reforge-item", "apply-reforge", "cancel-reforge", "lock-affix"].includes(action?.action) && action.itemId) {
+  if (["enhance-item", "reforge-item", "continue-reforge", "apply-reforge", "cancel-reforge", "lock-affix"].includes(action?.action) && action.itemId) {
     target = lobbyClassDetail?.querySelector(`[data-forge-item-id="${cssEscape(action.itemId)}"]`);
   }
   target ||= lobbyClassDetail?.querySelector(action?.action === "spend-mastery" ? ".growth-summary" : ".meta-bonus-strip");
@@ -830,6 +841,42 @@ function showProgressionFeedback(message, action = null) {
     target.classList.remove("progression-applied", "progression-failed");
     requestAnimationFrame(() => target.classList.add(failed ? "progression-failed" : "progression-applied"));
   }
+}
+
+function showEquipmentPickupToast(item) {
+  if (!item?.name) return;
+  const rarityMeta = {
+    common: { label: "일반", color: "#cbd5e1", glow: "rgba(203, 213, 225, 0.24)" },
+    rare: { label: "희귀", color: "#60a5fa", glow: "rgba(96, 165, 250, 0.3)" },
+    epic: { label: "영웅", color: "#c084fc", glow: "rgba(192, 132, 252, 0.32)" },
+    legendary: { label: "전설", color: "#fbbf24", glow: "rgba(251, 191, 36, 0.34)" },
+    mythic: { label: "신화", color: "#fb7185", glow: "rgba(251, 113, 133, 0.38)" },
+    unique: { label: "고유", color: "#5eead4", glow: "rgba(94, 234, 212, 0.42)" },
+  };
+  const slotLabels = { weapon: "무기", armor: "갑옷", amulet: "부적", core: "코어" };
+  const slotIcons = { weapon: "swords", armor: "shield", amulet: "diamond", core: "deployed_code" };
+  const rarity = rarityMeta[item.rarity] || rarityMeta.common;
+  document.querySelectorAll(".equipment-pickup-toast").forEach((toast) => toast.remove());
+  const toast = document.createElement("div");
+  toast.className = "equipment-pickup-toast";
+  toast.style.setProperty("--pickup-rarity", rarity.color);
+  toast.style.setProperty("--pickup-glow", rarity.glow);
+  toast.innerHTML = `
+    <span class="equipment-pickup-visual" aria-hidden="true"><span class="material-symbols-rounded equipment-pickup-icon">${slotIcons[item.slot] || "inventory_2"}</span></span>
+    <div class="equipment-pickup-copy">
+      <small></small>
+      <strong></strong>
+      <em>보유 장비에 추가됨</em>
+    </div>
+  `;
+  toast.querySelector("small").textContent = `${rarity.label} · ${slotLabels[item.slot] || "장비"} · Lv.${Math.max(1, Number(item.level || 1))}`;
+  toast.querySelector("strong").textContent = item.name;
+  document.body.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add("show"));
+  window.setTimeout(() => {
+    toast.classList.remove("show");
+    window.setTimeout(() => toast.remove(), 220);
+  }, 3000);
 }
 
 function submitProgressionAction(actionPayload, sourceElement = null) {
@@ -1080,6 +1127,30 @@ resultStartButton.addEventListener("click", () => {
   sendClientMessage({ type: "returnLobby" });
 });
 
+pauseButton?.addEventListener("click", () => {
+  if (!canSendMessage() || !state?.room?.canPause) return;
+  sendClientMessage({ type: "togglePause" });
+});
+
+pauseResumeButton?.addEventListener("click", () => {
+  if (!canSendMessage() || !state?.room?.paused) return;
+  sendClientMessage({ type: "togglePause" });
+});
+
+let pauseLobbyConfirmationTimer = 0;
+pauseLobbyButton?.addEventListener("click", () => {
+  if (!canSendMessage() || !state?.room?.canReturnLobby) return;
+  if (pauseLobbyButton.dataset.confirm !== "true") {
+    pauseLobbyButton.dataset.confirm = "true";
+    pauseLobbyButton.textContent = "정말 로비로 돌아가기";
+    clearTimeout(pauseLobbyConfirmationTimer);
+    pauseLobbyConfirmationTimer = window.setTimeout(resetPauseLobbyConfirmation, 3000);
+    return;
+  }
+  resetPauseLobbyConfirmation();
+  sendClientMessage({ type: "returnLobby" });
+});
+
 settingsButton?.addEventListener("click", () => {
   openSettings();
 });
@@ -1285,7 +1356,9 @@ if (inputManager) {
     if (event.target instanceof HTMLInputElement) return;
     keys.add(event.code);
     unlockAudio();
-    if (getSelf()?.spectator || (settingsOverlay && !settingsOverlay.classList.contains("hidden"))) return;
+    if (getSelf()?.spectator
+      || (settingsOverlay && !settingsOverlay.classList.contains("hidden"))
+      || (pauseOverlay && !pauseOverlay.classList.contains("hidden"))) return;
     if (matchesActionKey(event.code, "skillQ", ["KeyQ", "Digit1"]) && !event.repeat) skillSeqs.q += 1;
     if (matchesActionKey(event.code, "skillE", ["KeyE", "Digit2"]) && !event.repeat) skillSeqs.e += 1;
     if (matchesActionKey(event.code, "skillR", ["KeyR", "Digit3"]) && !event.repeat) skillSeqs.r += 1;
@@ -1545,6 +1618,9 @@ async function connect(options = {}) {
       if (message.message && !progressionActionResponse) setAccountSettingsMessage(message.message);
       if (["action-applied", "action-rejected", "action-unchanged"].includes(message.reason)) {
         showProgressionFeedback(message.message || (message.reason === "action-applied" ? "변경 사항이 적용되었습니다." : "변경 사항을 적용하지 못했습니다."), pendingProgressionAction);
+      }
+      if (message.reason === "equipment-drop" && message.equipmentPickup) {
+        showEquipmentPickupToast(message.equipmentPickup);
       }
       if (message.reason === "action-applied" || message.reason === "action-rejected" || message.reason === "action-unchanged") {
         progressionScrollLockUntil = Math.max(progressionScrollLockUntil, performance.now() + 350);
@@ -2001,7 +2077,7 @@ function renderGrowthMasteryPanel(self, classId) {
       <div class="growth-total-head">
         <div>
           <strong>통합 영구 증가치</strong>
-          <span>${escapeHtml(classDescriptions[safeClassId]?.label || safeClassId)} · 계정 + 공용 성장 + 장비</span>
+          <span>${escapeHtml(classDescriptions[safeClassId]?.label || safeClassId)} · 계정 + 공용 성장 + 장비 · 서버 상한 및 페널티 반영</span>
         </div>
         <b>합산 보너스</b>
       </div>
@@ -2034,17 +2110,31 @@ function combinePermanentBonuses(accountBonuses = {}, masteryBonuses = {}, equip
   const sources = [accountBonuses, masteryBonuses, equipmentBonuses];
   const multiply = (key) => sources.reduce((total, bonuses) => total * (Number(bonuses?.[key]) || 1), 1);
   const add = (key) => sources.reduce((total, bonuses) => total + (Number(bonuses?.[key]) || 0), 0);
+  const addMultiplier = (key) => 1 + sources.reduce((total, bonuses) => total + Math.max(0, (Number(bonuses?.[key]) || 1) - 1), 0);
   return {
-    damageMul: multiply("damageMul"),
-    maxHpMul: multiply("maxHpMul"),
+    attackBonus: add("attackBonus"),
+    maxHpBonus: add("maxHpBonus"),
+    damageMul: addMultiplier("damageMul"),
+    maxHpMul: multiply("maxHpMul") * (1 - Math.max(0, Number(equipmentBonuses.maxHpPenalty) || 0)),
     regenBonus: add("regenBonus"),
     speedMul: multiply("speedMul"),
     attackSpeed: Math.min(500, add("attackSpeed")),
     skillHaste: Math.min(500, add("skillHaste")),
-    armorBonus: add("armorBonus"),
+    armorBonus: equipmentBonuses.armorLockZero
+      ? 0
+      : Math.min(18, add("armorBonus") * (1 - Math.max(0, Number(equipmentBonuses.armorPenalty) || 0))),
+    armorLockZero: Number(equipmentBonuses.armorLockZero) || 0,
+    maxHpPenalty: Number(equipmentBonuses.maxHpPenalty) || 0,
+    armorPenalty: Number(equipmentBonuses.armorPenalty) || 0,
+    penaltiesApplied: true,
     critChanceBonus: add("critChanceBonus"),
-    critDamageMul: multiply("critDamageMul"),
+    critDamageMul: addMultiplier("critDamageMul"),
     areaMul: multiply("areaMul"),
+    eliteBossDamageMul: multiply("eliteBossDamageMul"),
+    statusDamageMul: multiply("statusDamageMul"),
+    burnDamageMul: multiply("burnDamageMul"),
+    constructDamageMul: multiply("constructDamageMul"),
+    constructDurationMul: multiply("constructDurationMul"),
   };
 }
 
@@ -2053,64 +2143,78 @@ function renderAscensionRunSetup(self = null) {
   const level = getSelectedAscensionLevel();
   const bestClear = clamp(Number(userProgress.records?.highestAscension || 0), 0, MAX_ASCENSION_LEVEL);
   const isHost = Boolean(state?.selfId && state.selfId === state?.room?.hostId);
-  const profile = ASCENSION_DIFFICULTY_PROFILES[level] || ASCENSION_DIFFICULTY_PROFILES[0];
-  const milestone = level <= 0
-    ? "기본 난이도. 추가 규칙 없이 원정을 시작합니다."
-    : level === 1
-      ? "강화된 적이 더 많이 등장하며 공격 주기가 6% 짧아집니다."
-      : level === 2
-        ? "정예 출현율이 크게 오르고 공격 주기가 12% 짧아집니다."
-        : level === 3
-          ? "플레이어 회복량이 35% 감소하고 적 압박이 급격히 강해집니다."
-          : level === 4
-            ? "보스가 주기적으로 추가 투사체 고리 패턴을 사용합니다."
-            : "최고 난이도. 적 투사체가 25% 빨라지고 보스 탄막 주기가 강화됩니다.";
+  const serverProfile = Number(state?.room?.ascensionLevel) === level ? state?.room?.ascensionProfile : null;
+  const profile = serverProfile || ASCENSION_DIFFICULTY_PROFILES[level] || ASCENSION_DIFFICULTY_PROFILES[0];
+  const specialRules = [];
+  if (level >= 3) specialRules.push("플레이어가 받는 모든 회복량 35% 감소");
+  if (level >= 4) specialRules.push("보스가 주기적으로 추가 투사체 고리 패턴 사용");
+  if (level >= 5) specialRules.push("적 투사체 속도 25% 증가");
   return `<section class="run-ascension-setup" aria-label="원정 승천 난이도">
     <div class="run-ascension-main">
       <span>원정 난이도</span>
       <strong>승천 ${level}</strong>
-      <small>${escapeHtml(milestone)}</small>
+      <small>${level > 0 ? "서버 적용 승천 배율" : "기본 난이도"}</small>
     </div>
-    <div class="run-ascension-stats" aria-label="현재 승천 누적 효과">
+    <div class="run-ascension-stats" aria-label="서버 적용 승천 단독 배율">
       <span>적 체력 <b>×${profile.hpMul.toFixed(2)}</b></span>
       <span>적 피해 <b>×${profile.damageMul.toFixed(2)}</b></span>
       <span>적 속도 <b>×${profile.speedMul.toFixed(2)}</b></span>
       <span>출현량 <b>×${profile.spawnMul.toFixed(2)}</b></span>
       <span>공격 주기 <b>×${profile.cadenceMul.toFixed(2)}</b></span>
       <span>정예 <b>+${Math.round(profile.eliteBonus * 100)}%p</b></span>
-      <span>보상 <b>×${profile.rewardMul.toFixed(2)}</b></span>
+      <span>승천 보상 <b>×${profile.rewardMul.toFixed(2)}</b></span>
     </div>
     <div class="run-ascension-control-wrap">
       <small>전 단계 즉시 선택 가능 · 최고 클리어 승천 ${bestClear}</small>
+      <small class="run-ascension-reward-note">결과 보정: 성공 ×2 · 실패 ×0.5</small>
       ${isHost ? `<div class="growth-ascension-controls" aria-label="승천 단계 선택">
         <button type="button" data-ascension-delta="-1" aria-label="승천 단계 내리기" ${level <= 0 ? "disabled" : ""}>-</button>
         <b>${level}</b>
         <button type="button" data-ascension-delta="1" aria-label="승천 단계 올리기" ${level >= MAX_ASCENSION_LEVEL ? "disabled" : ""}>+</button>
       </div>` : `<small class="growth-ascension-host-only">방장만 변경 가능</small>`}
     </div>
+    ${specialRules.length ? `<div class="run-ascension-special-rules">
+      <strong>특수 규칙</strong>
+      ${specialRules.map((rule) => `<span>${escapeHtml(rule)}</span>`).join("")}
+    </div>` : ""}
   </section>`;
 }
 
 function renderGrowthBonusChips(classId, bonuses, includeDefense = false) {
+  const maxHpPenalty = Math.max(0, Number(bonuses.maxHpPenalty) || 0);
+  const armorPenalty = Math.max(0, Number(bonuses.armorPenalty) || 0);
+  const effectiveMaxHpMul = (Number(bonuses.maxHpMul) || 1) * (bonuses.penaltiesApplied ? 1 : 1 - maxHpPenalty);
+  const effectiveArmorBonus = (Number(bonuses.armorBonus) || 0) * (bonuses.penaltiesApplied ? 1 : 1 - armorPenalty);
+  const armorValue = bonuses.armorLockZero ? "0 고정" : formatSignedFlat(effectiveArmorBonus);
   const chips = [
-    ["피해", formatSignedPercent((bonuses.damageMul || 1) - 1)],
-    ["체력", formatSignedPercent((bonuses.maxHpMul || 1) - 1)],
+    ["고정 공격력", formatSignedFlat(bonuses.attackBonus || 0)],
+    ["고정 체력", formatSignedFlat(bonuses.maxHpBonus || 0)],
+    ["피해 증폭", formatSignedPercent((bonuses.damageMul || 1) - 1)],
+    ["체력", formatSignedPercent(effectiveMaxHpMul - 1)],
     ["체젠", `${formatSignedFlat(bonuses.regenBonus || 0)}/s`],
     ["속도", formatSignedPercent((bonuses.speedMul || 1) - 1)],
     ["공격 속도", formatSignedFlat(bonuses.attackSpeed || 0)],
     ["스킬 가속", formatSignedFlat(bonuses.skillHaste || 0)],
-    ...(includeDefense ? [["방어", formatSignedFlat(bonuses.armorBonus || 0)], ["치명타", formatSignedPercent(bonuses.critChanceBonus || 0)]] : []),
+    ...(includeDefense ? [["방어", armorValue], ["치명타", formatSignedPercent(bonuses.critChanceBonus || 0)]] : []),
     ["치명 피해", formatSignedPercent((bonuses.critDamageMul || 1) - 1)],
-    ["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)]
+    ["범위", formatSignedPercent((bonuses.areaMul || 1) - 1)],
+    ["정예/보스 피해", formatSignedPercent((bonuses.eliteBossDamageMul || 1) - 1), (bonuses.eliteBossDamageMul || 1) > 1],
+    ["상태이상 피해", formatSignedPercent((bonuses.statusDamageMul || 1) - 1), (bonuses.statusDamageMul || 1) > 1],
+    ["화상 피해", formatSignedPercent((bonuses.burnDamageMul || 1) - 1), (bonuses.burnDamageMul || 1) > 1],
+    ["설치물 피해", formatSignedPercent((bonuses.constructDamageMul || 1) - 1), (bonuses.constructDamageMul || 1) > 1],
+    ["설치물 지속", formatSignedPercent((bonuses.constructDurationMul || 1) - 1), (bonuses.constructDurationMul || 1) > 1],
+    ["최대 체력 페널티", formatSignedPercent(-maxHpPenalty), maxHpPenalty > 0],
+    ["방어 페널티", bonuses.armorLockZero ? "0 고정" : formatSignedPercent(-armorPenalty), bonuses.armorLockZero || armorPenalty > 0],
   ];
   return chips
+    .filter(([, , visible = true]) => visible)
     .map(([label, value]) => `<span><small>${escapeHtml(label)}</small><b>${escapeHtml(value)}</b></span>`)
     .join("");
 }
 
 function getMasteryPreviewLabel(nodeId, classId, before, after) {
   const previewByNode = {
-    damage: ["공격력", (after.damageMul || 1) - (before.damageMul || 1)],
+    damage: ["피해 증폭", (after.damageMul || 1) - (before.damageMul || 1)],
     maxHp: ["최대 체력", (after.maxHpMul || 1) - (before.maxHpMul || 1)],
     regen: ["체력 재생", (after.regenBonus || 0) - (before.regenBonus || 0), "flat", "/s"],
     moveSpeed: ["이동 속도", (after.speedMul || 1) - (before.speedMul || 1)],
@@ -2289,7 +2393,8 @@ inputTimer = window.setInterval(() => {
   const pointer = inputManager ? inputManager.getPointer() : mouse;
   const aimX = camera.x - viewW / 2 + pointer.x;
   const aimY = camera.y - viewH / 2 + pointer.y;
-  const inputBlocked = Boolean(settingsOverlay && !settingsOverlay.classList.contains("hidden"));
+  const inputBlocked = Boolean(settingsOverlay && !settingsOverlay.classList.contains("hidden"))
+    || Boolean(pauseOverlay && !pauseOverlay.classList.contains("hidden"));
   const spectating = Boolean(self?.spectator) || inputBlocked;
   const move = spectating ? { mx: 0, my: 0 } : readMoveInput();
 
@@ -2330,6 +2435,7 @@ function updateUi(nextState) {
   const self = getSelf();
   renderTopHud(nextState);
   renderRunContextHud(nextState);
+  renderPauseMenu(nextState);
   startButton.classList.add("hidden");
   startButton.textContent = "START RUN";
   partyList.classList.toggle("lobby-hidden", nextState.room.status === "lobby");
@@ -2371,6 +2477,28 @@ function updateUi(nextState) {
   renderMapChoicesV2(nextState.room);
   renderResult(nextState);
   renderBanner(nextState);
+}
+
+function resetPauseLobbyConfirmation() {
+  clearTimeout(pauseLobbyConfirmationTimer);
+  if (!pauseLobbyButton) return;
+  delete pauseLobbyButton.dataset.confirm;
+  pauseLobbyButton.textContent = "로비로 돌아가기";
+}
+
+function renderPauseMenu(nextState) {
+  const room = nextState?.room || {};
+  const canPause = Boolean(room.canPause);
+  const paused = Boolean(room.paused);
+  pauseButton?.classList.toggle("hidden", !canPause);
+  if (pauseButton) {
+    pauseButton.dataset.icon = paused ? "play_arrow" : "pause";
+    pauseButton.setAttribute("aria-label", paused ? "계속하기" : "일시정지");
+    pauseButton.title = paused ? "계속하기" : "일시정지";
+  }
+  pauseOverlay?.classList.toggle("hidden", !paused);
+  document.body.classList.toggle("solo-paused", paused);
+  if (!paused) resetPauseLobbyConfirmation();
 }
 
 function renderLobbyPanel(nextState, self) {
@@ -2482,6 +2610,13 @@ function renderLobbyArenaMode(classId, self = null) {
   if (!canTest) lobbyArenaFocused = false;
   const safeClassId = classDescriptions[classId] ? classId : "warrior";
   const meta = classDescriptions[safeClassId] || classDescriptions.warrior;
+  const adjustedBaseSkills = self?.classId === safeClassId
+    ? getLobbyTestWithPending(self).baseSkills.map((skill) => [
+        String(skill.slot || "").toUpperCase(),
+        skill.name,
+        `${skill.text || ""}${skill.equipmentLabel ? ` · 장비 변형: ${skill.equipmentLabel}` : ""}`
+      ])
+    : meta.skills || [];
 
   lobbyPanel.classList.toggle("arena-focus", lobbyArenaFocused);
   lobbyArenaDock?.classList.toggle("hidden", !lobbyArenaFocused);
@@ -2497,10 +2632,10 @@ function renderLobbyArenaMode(classId, self = null) {
     button.disabled = !canTest;
   });
 
-  const renderKey = `${safeClassId}|${(meta.skills || []).map((skill) => skill.slice(0, 2).join(":")).join("|")}`;
+  const renderKey = `${safeClassId}|${adjustedBaseSkills.map((skill) => skill.join(":")).join("|")}`;
   if (!lobbyArenaSkillList || renderedLobbyArenaKey === renderKey) return;
   renderedLobbyArenaKey = renderKey;
-  lobbyArenaSkillList.innerHTML = (meta.skills || [])
+  lobbyArenaSkillList.innerHTML = adjustedBaseSkills
     .map(
       ([key, name, detail]) =>
         `<span title="${escapeHtml(detail || name)}"><b>${escapeHtml(key)}</b><strong>${escapeHtml(name)}</strong></span>`
@@ -3179,15 +3314,15 @@ function renderSkillDock(self) {
       const cooldownMax = Math.max(0.1, Number(slot.cooldownMax || cooldown || 1));
       const cooldownRatio = slot.unlocked ? clamp01(cooldown / cooldownMax) : 1;
       const cooldownAngle = Math.round(cooldownRatio * 360);
-      const cooldownText = slot.unlocked && cooldown > 0 ? cooldown.toFixed(1) : "";
+      const cooldownText = slot.active ? "사용 중" : slot.unlocked && cooldown > 0 ? cooldown.toFixed(1) : "";
       const chargeText = Number(slot.maxCharges || 0) > 1 ? `${Math.max(0, Number(slot.charges || 0))}/${Number(slot.maxCharges)}` : "";
       const icon = slot.unlocked ? slot.icon || slot.slot : "";
-      const classes = ["skill-slot", slot.unlocked ? "" : "locked", slot.ready ? "ready" : "", cooldown > 0 ? "cooling" : ""]
+      const classes = ["skill-slot", slot.unlocked ? "" : "locked", slot.ready ? "ready" : "", slot.active ? "active" : "", cooldown > 0 ? "cooling" : ""]
         .filter(Boolean)
         .join(" ");
 
       return `
-        <div class="${classes}" style="--cooldown-angle:${cooldownAngle}deg;--skill-color:${escapeHtml(self.color || "#facc15")}">
+        <div class="${classes} ${slot.equipmentModified ? "equipment-modified" : ""}" title="${escapeHtml(slot.unlocked ? `${slot.name}${slot.equipmentLabel ? ` · ${slot.equipmentLabel}` : ""}\n${slot.text || ""}` : "잠김")}" style="--cooldown-angle:${cooldownAngle}deg;--skill-color:${escapeHtml(self.color || "#facc15")}">
           <div class="skill-icon" aria-hidden="true">${escapeHtml(icon || "-")}</div>
           <div class="cooldown-cover"></div>
           <kbd>${escapeHtml(slot.slot)}</kbd>
@@ -3416,6 +3551,7 @@ function renderSkillChoices(choices) {
           <span class="choice-copy">
             <span class="choice-meta-row">
               <span class="choice-type-pill">${escapeHtml(typeLabel)}</span>
+              ${choice.equipmentModified ? `<span class="choice-type-pill equipment-modified">장비 변형 · ${escapeHtml(choice.equipmentLabel || "고유 효과")}</span>` : ""}
             </span>
             <strong>${escapeHtml(choice.name)}</strong>
             <span>${escapeHtml(choice.text)}</span>
@@ -4108,6 +4244,7 @@ function formatDuration(seconds) {
 
 function renderBanner(nextState) {
   centerBanner.classList.remove("lethal-cast");
+  document.body.classList.remove("boss-field-warning");
   if (nextState.room.status === "lobby") {
     centerBanner.textContent = nextState.room.allReady
       ? "전원 준비 완료 · 방장 시작 가능"
@@ -4150,7 +4287,8 @@ function renderBanner(nextState) {
   const lethalCaster = (nextState.enemies || []).find((enemy) => Number(enemy.lethalCastTime || 0) > 0);
   if (lethalCaster) {
     centerBanner.classList.add("lethal-cast");
-    centerBanner.textContent = `즉사 패턴 시전 ${Number(lethalCaster.lethalCastTime).toFixed(1)}초 · 파란 안전지대로 이동`;
+    document.body.classList.add("boss-field-warning");
+    centerBanner.textContent = `파란 원으로 도망치세요 · ${Number(lethalCaster.lethalCastTime).toFixed(1)}초`;
     centerBanner.classList.remove("hidden");
     return;
   }
@@ -4443,12 +4581,14 @@ function ingestEffects(effects) {
     const delay = Math.max(0, Number(effect.delay || 0));
     const shake = getEffectShake(effect);
     const ttl = Number.isFinite(effect.duration) ? Math.max(0.12, effect.duration) : ttlByKind[effect.kind] || 0.62;
-    if (isAttachedFrostBreathEffect(effect) && delay <= 0) {
+    if (isAttachedContinuousEffect(effect) && delay <= 0) {
       const existing = floatingEffects.find(
-        (item) => isAttachedFrostBreathEffect(item) && String(item.ownerId) === String(effect.ownerId)
+        (item) => isSameAttachedContinuousEffect(item, effect)
       );
       if (existing) {
-        const stableAge = Math.min(Math.max(0, existing.age || 0), 0.08);
+        const stableAge = isAttachedAdaptiveMechaLaser(effect)
+          ? 0
+          : Math.min(Math.max(0, existing.age || 0), 0.08);
         const stableSeed = existing.seed;
         Object.assign(existing, effect, {
           age: stableAge,
@@ -4467,7 +4607,7 @@ function ingestEffects(effects) {
       ttl,
       pendingShake: delay > 0 ? shake : 0
     });
-    if (delay <= 0) screenShake = Math.max(screenShake, shake);
+    if (delay <= 0) requestScreenShake(effect, shake);
   }
   if (seenEffectIds.size > 500) {
     const keep = new Set(floatingEffects.map((effect) => effect.id));
@@ -4478,37 +4618,107 @@ function ingestEffects(effects) {
 }
 
 function getEffectShake(effect) {
-  if (effect.kind === "explosion" || effect.kind === "meteor") return 12;
-  if (effect.kind === "spin") return 10;
-  if (effect.kind === "slash") return String(effect.style || "").startsWith("warrior_cleave") ? 10 : 6;
-  if (effect.kind === "dash" && effect.style === "shield_charge") return 13;
-  if (effect.kind === "dash" && effect.style === "warrior_dash") return 9;
-  if (effect.kind === "dash" && (effect.style === "martial_rising" || effect.style === "martial_dash")) return 7;
-  if (effect.kind === "dash" && (effect.style === "shadow_lunge" || effect.style === "shadow_dash")) return 5;
-  if (effect.kind === "dash" && effect.style === "mage_blink") return 5;
-  if (effect.kind === "freeze") return 3;
-  if (effect.kind === "death") return 5;
+  if (effect.kind === "impact" && effect.style === "giant_star_orb_wall_impact") return 7;
+  if (effect.kind === "impact" && effect.style === "giant_star_orb_impact") return 3;
+  if (effect.kind === "explosion" || effect.kind === "meteor") return effect.heavy ? 10 : 8;
+  if (effect.kind === "spin") return 8;
+  if (effect.kind === "slash") return String(effect.style || "").startsWith("warrior_cleave") ? 8 : 5;
+  if (effect.kind === "dash" && effect.style === "shield_charge") return 10;
+  if (effect.kind === "dash" && effect.style === "warrior_dash") return 7;
+  if (effect.kind === "dash" && (effect.style === "martial_rising" || effect.style === "martial_dash")) return 6;
+  if (effect.kind === "dash" && (effect.style === "shadow_lunge" || effect.style === "shadow_dash")) return 4;
+  if (effect.kind === "dash" && effect.style === "mage_blink") return 4;
+  if (effect.kind === "freeze") return 2;
+  if (effect.kind === "death") return 3;
   if (effect.kind === "impact" && (effect.style === "player_hit" || effect.style === "player_poison_hit")) {
-    return effect.playerId === selfId ? (effect.heavy ? 12 : 8) : 3;
+    return effect.playerId === selfId ? (effect.heavy ? 10 : 6) : 0;
   }
-  if (effect.kind === "impact" && effect.style === "critical_hit") return 10;
-  if (effect.kind === "impact" && effect.style === "heavy_hit") return 7;
-  if (effect.kind === "impact" && effect.style === "enemy_hit") return 3;
-  if (effect.kind === "impact" && effect.style === "shield_slam") return 8;
+  if (effect.kind === "impact" && effect.style === "critical_hit") return 5.5;
+  if (effect.kind === "impact" && effect.style === "heavy_hit") return 4;
+  if (effect.kind === "impact" && effect.style === "enemy_hit") return 1.8;
+  if (effect.kind === "impact" && effect.style === "shield_slam") return 6;
   if (effect.kind === "impact" && effect.style === "cleave_execute") return 7;
-  if (effect.kind === "impact" && (effect.style || "").includes("impact")) return 4;
+  if (effect.kind === "impact" && (effect.style || "").includes("impact")) return 2.5;
   return 0;
 }
 
+function getScreenShakeChannel(effect) {
+  const style = String(effect?.style || "");
+  if (effect?.kind === "impact" && (style === "enemy_hit" || style === "heavy_hit" || style === "critical_hit")) return "hit";
+  if (effect?.kind === "impact" && (style === "player_hit" || style === "player_poison_hit")) return "hurt";
+  if (effect?.kind === "explosion" || effect?.kind === "meteor") return "blast";
+  return "skill";
+}
+
+function requestScreenShake(effect, strength, now = performance.now()) {
+  let amount = Math.max(0, Number(strength) || 0);
+  if (amount <= 0) return;
+  const channel = getScreenShakeChannel(effect);
+  if (channel === "hit") {
+    const gap = now - lastHitShakeEventAt;
+    screenShakeHitStreak = gap < 220 ? Math.min(6, screenShakeHitStreak + 1) : 0;
+    lastHitShakeEventAt = now;
+    amount *= Math.max(0.32, 1 - screenShakeHitStreak * 0.13);
+  }
+  const lastAppliedAt = lastScreenShakeAtByChannel.get(channel) ?? -Infinity;
+  if (now - lastAppliedAt < SCREEN_SHAKE_INTERVAL_MS[channel]) return;
+  lastScreenShakeAtByChannel.set(channel, now);
+  screenShake = Math.max(screenShake, Math.min(SCREEN_SHAKE_MAX, amount));
+}
+
 function isAttachedFrostBreathEffect(effect) {
-  return effect?.style === "frost_breath_aura" && effect.ownerId !== undefined && effect.ownerId !== null;
+  return (effect?.style === "frost_breath_aura" || effect?.style === "flame_breath_aura")
+    && effect.ownerId !== undefined
+    && effect.ownerId !== null;
+}
+
+function isAttachedAdaptiveMechaLaser(effect) {
+  return String(effect?.style || "").includes("adaptive_continuous_laser")
+    && effect.ownerId !== undefined
+    && effect.ownerId !== null;
+}
+
+function isAttachedContinuousEffect(effect) {
+  return isAttachedFrostBreathEffect(effect) || isAttachedAdaptiveMechaLaser(effect);
+}
+
+function isSameAttachedContinuousEffect(left, right) {
+  if (String(left?.ownerId) !== String(right?.ownerId)) return false;
+  return (isAttachedFrostBreathEffect(left) && isAttachedFrostBreathEffect(right))
+    || (isAttachedAdaptiveMechaLaser(left) && isAttachedAdaptiveMechaLaser(right));
 }
 
 function syncAttachedFloatingEffect(effect) {
-  if (!isAttachedFrostBreathEffect(effect) || !state?.players) return;
+  if (!isAttachedContinuousEffect(effect) || !state?.players) return;
   const owner = state.players.find((player) => String(player.id) === String(effect.ownerId));
   if (!owner || owner.spectator) return;
   const position = getVisualPosition(visuals.players, owner);
+  if (isAttachedAdaptiveMechaLaser(effect)) {
+    const isSelf = String(owner.id) === String(selfId);
+    const pointer = isSelf ? (inputManager ? inputManager.getPointer() : mouse) : null;
+    const camera = isSelf ? getCamera() : null;
+    const targetX = pointer && camera
+      ? camera.x - viewW / 2 + pointer.x
+      : Number.isFinite(effect.aimX) ? effect.aimX : effect.toX;
+    const targetY = pointer && camera
+      ? camera.y - viewH / 2 + pointer.y
+      : Number.isFinite(effect.aimY) ? effect.aimY : effect.toY;
+    const dx = targetX - position.x;
+    const dy = targetY - position.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const ux = dx / length;
+    const uy = dy / length;
+    const muzzleDistance = Math.max(0, Number(effect.muzzleDistance || 42));
+    const beamLength = Math.max(1, Number(effect.beamLength || Math.hypot(effect.toX - effect.fromX, effect.toY - effect.fromY)));
+    effect.fromX = position.x + ux * muzzleDistance;
+    effect.fromY = position.y + uy * muzzleDistance;
+    effect.toX = effect.fromX + ux * beamLength;
+    effect.toY = effect.fromY + uy * beamLength;
+    effect.x = (effect.fromX + effect.toX) * 0.5;
+    effect.y = (effect.fromY + effect.toY) * 0.5;
+    effect.angle = Math.atan2(uy, ux);
+    return;
+  }
   effect.x = position.x;
   effect.y = position.y;
 }
@@ -4519,7 +4729,7 @@ function updateFloatingEffects(dt) {
     const wasDelayed = effect.age < 0;
     effect.age += dt;
     if (wasDelayed && effect.age >= 0 && effect.pendingShake > 0) {
-      screenShake = Math.max(screenShake, effect.pendingShake);
+      requestScreenShake(effect, effect.pendingShake);
       effect.pendingShake = 0;
     }
     if (effect.kind === "damage" || effect.kind === "heal" || effect.kind === "xp" || (effect.kind === "poison" && effect.value)) {
@@ -7733,7 +7943,7 @@ function drawHazards() {
       drawAlchemyElixirMistHazard(x, y, hazard);
     } else if (hazard.type === "meteor") {
       drawMeteorHazard(x, y, hazard);
-    } else if (hazard.type === "fire_pool") {
+    } else if (hazard.type === "fire_pool" || hazard.type === "ice_pool") {
       drawFirePoolHazard(x, y, hazard.radius, hazard);
     } else if (hazard.type === "engineer_turret") {
       drawEngineerTurretHazard(x, y, hazard);
@@ -8472,14 +8682,40 @@ function drawPoisonPoolHazard(x, y, radius) {
 
 function drawFirePoolHazard(x, y, radius, hazard = {}) {
   const now = performance.now();
+  const ice = hazard.type === "ice_pool";
+  const palette = ice
+    ? {
+        core: "rgba(224,242,254,0.22)",
+        main: "rgba(56,189,248,0.22)",
+        dark: "rgba(8,47,73,0.16)",
+        clear: "rgba(2,132,199,0)",
+        edge: "rgba(56,189,248,0.7)",
+        flameLow: "rgba(8,47,73,0.18)",
+        flameMid: "rgba(56,189,248,0.52)",
+        flameHigh: "rgba(224,242,254,0.66)",
+        spark: "rgba(224,242,254,0.5)",
+        floor: [8, 47, 73]
+      }
+    : {
+        core: "rgba(254,215,170,0.22)",
+        main: "rgba(251,146,60,0.22)",
+        dark: "rgba(194,65,12,0.16)",
+        clear: "rgba(127,29,29,0)",
+        edge: "rgba(251,146,60,0.7)",
+        flameLow: "rgba(194,65,12,0.18)",
+        flameMid: "rgba(251,146,60,0.52)",
+        flameHigh: "rgba(254,240,138,0.66)",
+        spark: "rgba(254,240,138,0.5)",
+        floor: [127, 29, 29]
+      };
   const ttl = Math.max(0.1, Number(hazard.timer || 1));
   const lifePulse = 0.96 + Math.sin(now / 130) * 0.04;
   const edgeRadius = radius * lifePulse;
   const fill = ctx.createRadialGradient(x, y, radius * 0.08, x, y, edgeRadius);
-  fill.addColorStop(0, "rgba(254,215,170,0.22)");
-  fill.addColorStop(0.34, "rgba(251,146,60,0.22)");
-  fill.addColorStop(0.68, "rgba(194,65,12,0.16)");
-  fill.addColorStop(1, "rgba(127,29,29,0)");
+  fill.addColorStop(0, palette.core);
+  fill.addColorStop(0.34, palette.main);
+  fill.addColorStop(0.68, palette.dark);
+  fill.addColorStop(1, palette.clear);
   ctx.fillStyle = fill;
   ctx.beginPath();
   ctx.arc(x, y, edgeRadius, 0, Math.PI * 2);
@@ -8487,7 +8723,7 @@ function drawFirePoolHazard(x, y, radius, hazard = {}) {
 
   ctx.save();
   ctx.globalCompositeOperation = "source-over";
-  ctx.strokeStyle = "rgba(251,146,60,0.7)";
+  ctx.strokeStyle = palette.edge;
   ctx.lineWidth = 3;
   ctx.beginPath();
   for (let i = 0; i <= 22; i += 1) {
@@ -8509,9 +8745,9 @@ function drawFirePoolHazard(x, y, radius, hazard = {}) {
     const flameHeight = radius * (0.16 + ((i * 11) % 7) * 0.018) * (0.78 + Math.sin(now / 120 + i) * 0.18);
     const flameWidth = flameHeight * 0.42;
     const flame = ctx.createLinearGradient(fx, fy + flameHeight * 0.4, fx, fy - flameHeight);
-    flame.addColorStop(0, "rgba(194,65,12,0.18)");
-    flame.addColorStop(0.45, "rgba(251,146,60,0.52)");
-    flame.addColorStop(1, "rgba(254,240,138,0.66)");
+    flame.addColorStop(0, palette.flameLow);
+    flame.addColorStop(0.45, palette.flameMid);
+    flame.addColorStop(1, palette.flameHigh);
     ctx.fillStyle = flame;
     ctx.beginPath();
     ctx.moveTo(fx, fy - flameHeight);
@@ -8521,7 +8757,7 @@ function drawFirePoolHazard(x, y, radius, hazard = {}) {
     ctx.fill();
   }
 
-  ctx.fillStyle = "rgba(254,240,138,0.5)";
+  ctx.fillStyle = palette.spark;
   for (let i = 0; i < 8; i += 1) {
     const angle = (Math.PI * 2 * i) / 8 + now / 780;
     const sparkRadius = radius * (0.2 + ((i * 23) % 68) / 100);
@@ -8533,7 +8769,7 @@ function drawFirePoolHazard(x, y, radius, hazard = {}) {
   }
   ctx.restore();
 
-  ctx.fillStyle = `rgba(127,29,29,${Math.min(0.22, 0.06 + ttl * 0.02)})`;
+  ctx.fillStyle = `rgba(${palette.floor.join(",")},${Math.min(0.22, 0.06 + ttl * 0.02)})`;
   ctx.beginPath();
   ctx.arc(x, y, radius * 0.74, 0, Math.PI * 2);
   ctx.fill();
@@ -8610,6 +8846,51 @@ function drawArrowProjectile(projectile, color, style) {
 function drawArcaneProjectile(projectile, color, style) {
   const radius = Math.max(7, projectile.radius || 11);
   const pulse = 1 + Math.sin(performance.now() / 110 + Number(projectile.id || 0)) * 0.08;
+
+  if (String(style || "").includes("giant_star_orb")) {
+    const phase = performance.now() / 520 + Number(projectile.id || 0) * 0.41;
+    if (Number(projectile.splash || 0) > radius) {
+      ctx.strokeStyle = hexToRgba(color, 0.08);
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(0, 0, projectile.splash, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.lineCap = "round";
+    ctx.strokeStyle = hexToRgba(color, 0.16);
+    ctx.lineWidth = Math.max(8, radius * 0.34);
+    ctx.beginPath();
+    ctx.moveTo(-radius * 2.5, 0);
+    ctx.lineTo(-radius * 0.2, 0);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(33, 19, 52, 0.42)";
+    ctx.strokeStyle = hexToRgba(color, 0.5);
+    ctx.lineWidth = Math.max(2, radius * 0.035);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.98, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(245, 208, 254, 0.66)";
+    ctx.lineWidth = Math.max(2, radius * 0.035);
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.82, phase, phase + Math.PI * 1.2);
+    ctx.stroke();
+    ctx.fillStyle = "rgba(245, 208, 254, 0.78)";
+    ctx.beginPath();
+    for (let i = 0; i < 16; i += 1) {
+      const a = (Math.PI * 2 * i) / 16 - Math.PI / 2;
+      const r = i % 2 === 0 ? radius * 0.5 : radius * 0.2;
+      if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+      else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+    ctx.beginPath();
+    ctx.arc(0, 0, radius * 0.12, 0, Math.PI * 2);
+    ctx.fill();
+    return;
+  }
 
   ctx.fillStyle = hexToRgba(color, 0.18);
   ctx.beginPath();
@@ -10129,6 +10410,7 @@ function drawFieldPickups() {
     epic: { color: "#c084fc", core: "#581c87", rank: 2 },
     legendary: { color: "#fbbf24", core: "#78350f", rank: 3 },
     mythic: { color: "#fb7185", core: "#881337", rank: 4 },
+    unique: { color: "#5eead4", core: "#134e4a", rank: 5 },
   };
   for (const pickup of state.fieldPickups || []) {
     const position = getVisualPosition(visuals.fieldPickups, pickup);
@@ -10441,26 +10723,32 @@ function drawMeteorImpactEffect(effect, color, progress) {
   const baseRadius = effect.radius || 150;
   const shockRadius = baseRadius * (0.28 + progress * 0.92);
   const flash = 1 - progress;
+  const iceMeteor = Boolean(effect.iceMeteor);
+  const coreInner = iceMeteor ? [240, 249, 255] : [255, 247, 237];
+  const coreMiddle = iceMeteor ? [56, 189, 248] : [251, 191, 36];
+  const coreOuter = iceMeteor ? [8, 47, 73] : [194, 65, 12];
+  const hot = iceMeteor ? [224, 242, 254] : [254, 215, 170];
+  const main = iceMeteor ? [56, 189, 248] : [251, 146, 60];
 
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
 
   const core = ctx.createRadialGradient(effect.x, effect.y, 0, effect.x, effect.y, baseRadius * 0.5);
-  core.addColorStop(0, `rgba(255,247,237,${0.8 * flash})`);
-  core.addColorStop(0.34, `rgba(251,191,36,${0.58 * flash + 0.12})`);
-  core.addColorStop(1, "rgba(194,65,12,0)");
+  core.addColorStop(0, `rgba(${coreInner.join(",")},${0.8 * flash})`);
+  core.addColorStop(0.34, `rgba(${coreMiddle.join(",")},${0.58 * flash + 0.12})`);
+  core.addColorStop(1, `rgba(${coreOuter.join(",")},0)`);
   ctx.fillStyle = core;
   ctx.beginPath();
   ctx.arc(effect.x, effect.y, baseRadius * (0.34 + progress * 0.16), 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.strokeStyle = `rgba(254,215,170,${0.92 * flash + 0.12})`;
+  ctx.strokeStyle = `rgba(${hot.join(",")},${0.92 * flash + 0.12})`;
   ctx.lineWidth = 12 - progress * 7;
   ctx.beginPath();
   ctx.ellipse(effect.x, effect.y, shockRadius * 1.18, shockRadius * 0.56, 0, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.strokeStyle = "rgba(251,146,60,0.82)";
+  ctx.strokeStyle = `rgba(${main.join(",")},0.82)`;
   ctx.lineWidth = 4;
   for (let i = 0; i < 16; i += 1) {
     const angle = (Math.PI * 2 * i) / 16 + (effect.seed || 0);
@@ -10472,7 +10760,7 @@ function drawMeteorImpactEffect(effect, color, progress) {
     ctx.stroke();
   }
 
-  ctx.fillStyle = `rgba(254,215,170,${0.8 * flash})`;
+  ctx.fillStyle = `rgba(${hot.join(",")},${0.8 * flash})`;
   for (let i = 0; i < 12; i += 1) {
     const angle = (Math.PI * 2 * i) / 12 + progress * 0.7;
     const dist = baseRadius * (0.24 + progress * (0.58 + (i % 4) * 0.04));

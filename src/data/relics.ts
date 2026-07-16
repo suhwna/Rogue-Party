@@ -69,7 +69,7 @@ export const RELIC_DEFINITIONS = [
   {
     id: "sharp_eye",
     name: "예리한 눈",
-    text: "치명타 확률이 10% 증가합니다.",
+    text: "치명타 확률이 5% 증가합니다.",
     target: "공용 · 치명타",
     maxLevel: 5,
     icon: "확",

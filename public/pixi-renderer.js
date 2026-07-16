@@ -85,6 +85,8 @@
     return (
       s.includes("mage") ||
       s.includes("frost") ||
+      s.includes("flame_wave") ||
+      s.includes("flame_breath") ||
       s.includes("freeze") ||
       s.includes("ice") ||
       s.includes("meteor") ||
@@ -2382,8 +2384,11 @@
         const progress = pixiEffects.effectProgress
           ? pixiEffects.effectProgress(effect)
           : Math.max(0, Math.min(1, effect.age / Math.max(0.1, effect.ttl || 0.7)));
-        const alpha = Math.max(0, 1 - progress);
         const style = effect.style || "";
+        const continuousLaser = String(style).includes("adaptive_continuous_laser");
+        const alpha = continuousLaser
+          ? (progress < 0.78 ? 1 : Math.max(0, (1 - progress) / 0.22))
+          : Math.max(0, 1 - progress);
         const isNumericEffect = ["damage", "heal", "xp", "poison"].includes(String(effect.kind || ""));
         const effectSkinPalette = isNumericEffect ? null : pixiSkinEffects.resolveEffectPalette?.(this, effect) || null;
         const color = effectSkinPalette?.main || effect.color || "#f8f3e9";
@@ -3964,8 +3969,8 @@
       const peak = Math.sin(t * Math.PI);
       const fade = Math.max(0, 1 - Math.max(0, t - 0.82) / 0.18);
       const palette = this.warriorSkillPalette(color);
-      const baseRadius = Math.max(118, Number(effect.rangeRadius || effect.radius || radius || 130));
-      const slashRadius = Math.max(92, Math.min(250, baseRadius * 0.82));
+      const hitRadius = Math.max(118, Number(effect.rangeRadius || effect.radius || radius || 130));
+      const slashRadius = hitRadius * 0.96;
       const startAngle = -Math.PI * 0.72 + Number(effect.angle || 0) * 0.22 + Number(effect.seed || 0) * 0.13;
       const bladeAngle = startAngle + Math.PI * 2.1 * sweepEase;
       const trailSpan = Math.PI * (0.72 + peak * 0.18);
@@ -3973,11 +3978,11 @@
       const hiltBack = Math.max(10, slashRadius * 0.09);
       const hiltX = x - Math.cos(bladeAngle) * hiltBack;
       const hiltY = y - Math.sin(bladeAngle) * hiltBack;
-      const swordReach = slashRadius * (0.88 + peak * 0.06);
+      const swordReach = hitRadius * (0.91 + peak * 0.05);
       const z = y + 126;
       const activeAlpha = alpha * fade * (0.76 + peak * 0.18);
 
-      this.drawGfxCircle(x, y, baseRadius, palette.shadow, activeAlpha * 0.014, palette.edge, activeAlpha * 0.13, 2.5, z - 30, "add", 96);
+      this.drawGfxCircle(x, y, hitRadius, palette.shadow, activeAlpha * 0.014, palette.edge, activeAlpha * 0.13, 2.5, z - 30, "add", 96);
       this.drawGfxCircle(x, y, slashRadius * 0.36, palette.shadow, activeAlpha * 0.035, palette.tint, activeAlpha * 0.13, 2, z - 18, "add", 42);
       this.drawGfxCleaveRibbon(x, y, slashRadius * 0.38, slashRadius * 1.03, trailStart, bladeAngle, palette.tint, activeAlpha * 0.07, palette.edge, activeAlpha * 0.2, 3, z - 4, "add", 26);
       this.drawGfxArc(x, y, slashRadius * 1.04, trailStart + 0.04, bladeAngle, 7, palette.blade, activeAlpha * 0.36, z + 4, "add", 30);
@@ -3999,7 +4004,7 @@
       const t = Math.max(0, Math.min(1, progress));
       const peak = Math.sin(t * Math.PI);
       const fade = Math.max(0, 1 - Math.max(0, t - 0.78) / 0.22);
-      const launchRadius = Math.max(72, Math.min(180, Number(effect.radius || effect.rangeRadius || radius || 110)));
+      const launchRadius = Math.max(72, Number(effect.rangeRadius || effect.radius || radius || 110));
       const angle = Number(effect.angle || 0);
       const palette = this.warriorSkillPalette(color);
       const z = y + 104;

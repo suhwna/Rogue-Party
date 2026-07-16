@@ -31,6 +31,12 @@ const WARRIOR_TAUNT_DAMAGE_MUL = 0.72;
 const WARRIOR_TAUNT_SIZE_SCALE = 1.3;
 const WARRIOR_CLEAVE_EXECUTE_THRESHOLD = 0.25;
 const WARRIOR_CHARGE_GATHER_RADIUS_MUL = 1.6;
+const WARRIOR_REPEAT_CLEAVE_EFFECT_DELAY = 0.92;
+const WARRIOR_REPEAT_CLEAVE_IMPACT_DELAY = 0.26;
+const PROJECTILE_AEGIS_ORBIT_RADIUS = 62;
+const PROJECTILE_AEGIS_ORBIT_Y_SCALE = 0.68;
+const PROJECTILE_AEGIS_PLATE_RADIUS = 18;
+const PROJECTILE_AEGIS_ROTATION_MS = 780;
 const RELIC_DROP_CHANCE = 0.008;
 const HEALTH_POTION_DROP_CHANCE = 0.012;
 const XP_MAGNET_DROP_CHANCE = 0.006;
@@ -72,11 +78,11 @@ const MAX_GROWTH_NODE_LEVEL = 9999;
 const MAX_ASCENSION_LEVEL = 5;
 const ASCENSION_DIFFICULTY_PROFILES = Object.freeze([
   Object.freeze({ hpMul: 1, damageMul: 1, speedMul: 1, spawnMul: 1, cadenceMul: 1, eliteBonus: 0, rewardMul: 1 }),
-  Object.freeze({ hpMul: 1.5, damageMul: 1.15, speedMul: 1.04, spawnMul: 1.12, cadenceMul: 0.94, eliteBonus: 0.06, rewardMul: 1.5 }),
-  Object.freeze({ hpMul: 2, damageMul: 1.28, speedMul: 1.08, spawnMul: 1.24, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
-  Object.freeze({ hpMul: 2.6, damageMul: 1.42, speedMul: 1.12, spawnMul: 1.38, cadenceMul: 0.82, eliteBonus: 0.2, rewardMul: 2.75 }),
-  Object.freeze({ hpMul: 3.3, damageMul: 1.58, speedMul: 1.17, spawnMul: 1.52, cadenceMul: 0.75, eliteBonus: 0.3, rewardMul: 3.75 }),
-  Object.freeze({ hpMul: 4.2, damageMul: 1.78, speedMul: 1.23, spawnMul: 1.68, cadenceMul: 0.68, eliteBonus: 0.42, rewardMul: 5 }),
+  Object.freeze({ hpMul: 2, damageMul: 2, speedMul: 1.08, spawnMul: 1.12, cadenceMul: 0.88, eliteBonus: 0.12, rewardMul: 2 }),
+  Object.freeze({ hpMul: 4, damageMul: 4, speedMul: 1.16, spawnMul: 1.24, cadenceMul: 0.76, eliteBonus: 0.24, rewardMul: 4 }),
+  Object.freeze({ hpMul: 8, damageMul: 8, speedMul: 1.24, spawnMul: 1.38, cadenceMul: 0.64, eliteBonus: 0.4, rewardMul: 8 }),
+  Object.freeze({ hpMul: 12, damageMul: 12, speedMul: 1.34, spawnMul: 1.52, cadenceMul: 0.5, eliteBonus: 0.6, rewardMul: 12 }),
+  Object.freeze({ hpMul: 16, damageMul: 16, speedMul: 1.46, spawnMul: 1.68, cadenceMul: 0.36, eliteBonus: 0.84, rewardMul: 16 }),
 ]);
 const ACCOUNT_PROGRESS_ACTIONS = new Set([
   "spend-mastery",
@@ -86,13 +92,13 @@ const ACCOUNT_PROGRESS_ACTIONS = new Set([
   "salvage-items",
   "enhance-item",
   "reforge-item",
+  "continue-reforge",
   "apply-reforge",
   "cancel-reforge",
   "lock-affix",
   "equip-rune",
   "unequip-rune",
   "merge-rune",
-  "craft-boss",
   "select-title",
   "select-skin",
 ]);
@@ -118,6 +124,14 @@ const BOSS_VENOM_POISON_RATIO = 0.5;
 const ENEMY_BURN_DURATION = 2;
 const ENEMY_BURN_TICK_DISPLAY_INTERVAL = 0.45;
 const ENEMY_BURN_TOTAL_DAMAGE_RATIO = 0.8;
+const MAGE_CHAIN_BASE_JUMPS = 5;
+const MAGE_CHAIN_BASE_RANGE = 260;
+const MAGE_CHAIN_BASE_CURSOR_ACQUIRE = 390;
+const MAGE_CHAIN_BASE_SELF_ACQUIRE = 500;
+const MAGE_CHAIN_GEAR_JUMPS = 9;
+const MAGE_CHAIN_GEAR_RANGE = 380;
+const MAGE_CHAIN_GEAR_CURSOR_ACQUIRE = 560;
+const MAGE_CHAIN_GEAR_SELF_ACQUIRE = 680;
 const RANGER_PIERCE_GROWTH_FULL_KILLS = 20;
 const RANGER_PIERCE_GROWTH_HALF_KILLS = 50;
 const RANGER_PIERCE_GROWTH_CAP = 100;
@@ -866,6 +880,10 @@ const ENGINEER_MECHA_HAND_LASER_WIDTH = 5.5;
 const ENGINEER_MECHA_LASER_MODULE_SHOTS = 3;
 const ENGINEER_MECHA_GIANT_LASER_WIDTH = 88;
 const ENGINEER_MECHA_GIANT_LASER_COLOR = "#c084fc";
+const ENGINEER_ADAPTIVE_MECHA_DURATION_MUL = 0.92;
+const ENGINEER_ADAPTIVE_LASER_KNOCKBACK = 2.5;
+const ENGINEER_ADAPTIVE_LASER_MAX_PUSH = 4;
+const ENGINEER_SWARM_AUXILIARY_DAMAGE_MUL = 0.4;
 
 const skillUpgrades = {
   "warrior": [
@@ -1012,7 +1030,7 @@ const skillUpgrades = {
       "slot": "r",
       "minLevel": 4,
       "name": "레인 에로우",
-      "text": "R: 넓은 조준 지점에 3.2초 동안 화살비를 내려 다수의 적을 지속 타격합니다."
+      "text": "R: 넓은 조준 지점에 3.2초 동안 화살비를 내려 다수의 적을 지속 타격합니다. 화살비가 끝난 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "ranger_rain_slow",
@@ -1177,7 +1195,7 @@ const skillUpgrades = {
       "slot": "e",
       "minLevel": 2,
       "name": "메카 탑승",
-      "text": "E: 8.5초 동안 메카에 탑승해 방어력과 방어막을 얻고, 빠른 양손 레이저 기본공격을 사용합니다."
+      "text": "E: 8.5초 동안 메카에 탑승해 방어력과 방어막을 얻고, 빠른 양손 레이저 기본공격을 사용합니다. 탑승이 끝난 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "engineer_rail_turret",
@@ -1227,7 +1245,7 @@ const skillUpgrades = {
       "slot": "f",
       "minLevel": 6,
       "name": "호위 드론",
-      "text": "F: 14초 동안 주변을 비행하며 적을 빠르게 지원 사격하는 드론을 호출합니다."
+      "text": "F: 14초 동안 주변을 비행하며 적을 빠르게 지원 사격하는 드론을 호출합니다. 마지막 드론이 사라진 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "engineer_drone_missile",
@@ -1712,12 +1730,12 @@ const relics = [
   {
     id: "sharp_eye",
     name: "예리한 눈",
-    text: "치명타 확률이 10% 증가합니다.",
+    text: "치명타 확률이 5% 증가합니다.",
     target: "공용 · 치명타",
     maxLevel: 5,
     icon: "확",
     apply(player) {
-      player.crit = Math.min(0.85, player.crit + 0.1);
+      player.crit = Math.min(0.85, player.crit + 0.05);
     }
   },
   {
@@ -2493,6 +2511,11 @@ function handleMessage(client, message) {
     return;
   }
 
+  if (message.type === "togglePause") {
+    toggleSoloPause(room, player);
+    return;
+  }
+
   if (message.type === "start") {
     startRunFromLobby(room, player);
   }
@@ -2578,8 +2601,9 @@ function startRunFromLobby(room, player) {
 }
 
 function returnRoomToLobby(room, player) {
-  if (room.status !== "gameover") return;
   if (!room.players.has(player.id)) return;
+  const returningFromGameover = room.status === "gameover";
+  if (!returningFromGameover && !(room.status === "combat" && isSoloRoomOwner(room, player))) return;
 
   room.wave = 0;
   room.stageIndex = 0;
@@ -2619,6 +2643,8 @@ function returnRoomToLobby(room, player) {
   room.clearSummary = null;
   room.choiceDeadline = 0;
   room.pausedStatus = null;
+  room.paused = false;
+  room.pauseStartedAt = 0;
   room.advancementStartedAt = 0;
   room.advancementDeadline = 0;
   room.restartAt = 0;
@@ -2647,6 +2673,37 @@ function returnRoomToLobby(room, player) {
   ensureLobbyTrainingArena(room);
   room.ascensionLevel = getRoomAscensionLevel(room);
   pushEvent(room, `${player.name} 님이 방 로비로 돌아왔습니다.`);
+}
+
+function isSoloRoomOwner(room, player) {
+  const activePlayers = getActivePlayers(room);
+  return room.hostId === player?.id
+    && activePlayers.length === 1
+    && activePlayers[0]?.id === player.id
+    && !activePlayers[0]?.bot
+    && getBotPlayers(room).length === 0;
+}
+
+function shiftPauseDeadlines(room, pausedForMs) {
+  if (!Number.isFinite(pausedForMs) || pausedForMs <= 0) return;
+  if (room.runStartedAt) room.runStartedAt += pausedForMs;
+  if (room.survival?.nextSpawnAt) room.survival.nextSpawnAt += pausedForMs;
+  if (room.survival?.executionSpawnAt) room.survival.executionSpawnAt += pausedForMs;
+}
+
+function toggleSoloPause(room, player) {
+  if (room.status !== "combat" || !isSoloRoomOwner(room, player)) return;
+  const now = Date.now();
+  if (room.paused) {
+    shiftPauseDeadlines(room, now - Number(room.pauseStartedAt || now));
+    room.paused = false;
+    room.pauseStartedAt = 0;
+    pushEvent(room, "전투를 계속합니다.");
+    return;
+  }
+  room.paused = true;
+  room.pauseStartedAt = now;
+  pushEvent(room, "전투가 일시정지되었습니다.");
 }
 
 function changePlayerClass(room, player, classId) {
@@ -2741,7 +2798,7 @@ function sanitizeAccountActionPayload(value, fallbackClassId) {
   };
 }
 
-function sendAccountProgress(player, session, reason, message = "") {
+function sendAccountProgress(player, session, reason, message = "", extra = {}) {
   const client = player ? clients.get(String(player.id)) : null;
   if (!client || !session) return;
   send(client, {
@@ -2754,6 +2811,7 @@ function sendAccountProgress(player, session, reason, message = "") {
     progress: session.progress,
     reason,
     message,
+    ...(extra && typeof extra === "object" ? extra : {}),
   });
 }
 
@@ -2907,7 +2965,7 @@ function sanitizeGrowthLoadout(loadout, fallbackClassId = "warrior") {
 
 function sanitizeGearAppearance(source) {
   const allowedSlots = new Set(["weapon", "armor", "amulet", "core"]);
-  const allowedRarities = new Set(["common", "rare", "epic", "legendary", "mythic"]);
+  const allowedRarities = new Set(["common", "rare", "epic", "legendary", "mythic", "unique"]);
   return (Array.isArray(source) ? source : []).slice(0, 4).map((entry) => ({
     slot: allowedSlots.has(String(entry?.slot || "")) ? String(entry.slot) : "core",
     rarity: allowedRarities.has(String(entry?.rarity || "")) ? String(entry.rarity) : "common",
@@ -2933,25 +2991,25 @@ function sanitizeGearBonuses(source) {
   const legacyCooldownMul = clampNumber(bonuses.skillCooldownMul || 1, 0.1, 1);
   const legacySkillHaste = Math.max(0, (100 / legacyCooldownMul) - 100);
   return {
-    attackBonus: clampNumber(bonuses.attackBonus || 0, 0, 80),
-    maxHpBonus: clampNumber(bonuses.maxHpBonus || 0, 0, 500),
-    damageMul: clampNumber(bonuses.damageMul || 1, 1, 1.6),
-    maxHpMul: clampNumber(bonuses.maxHpMul || 1, 1, 1.5),
-    regenBonus: clampNumber(bonuses.regenBonus || 0, 0, 2.5),
-    speedMul: clampNumber(bonuses.speedMul || 1, 1, 1.25),
+    attackBonus: clampNumber(bonuses.attackBonus || 0, 0, 1000),
+    maxHpBonus: clampNumber(bonuses.maxHpBonus || 0, 0, 10000),
+    damageMul: clampNumber(bonuses.damageMul || 1, 1, 10),
+    maxHpMul: clampNumber(bonuses.maxHpMul || 1, 1, 10),
+    regenBonus: clampNumber(bonuses.regenBonus || 0, 0, 100),
+    speedMul: clampNumber(bonuses.speedMul || 1, 1, 5),
     attackSpeed: clampNumber(bonuses.attackSpeed || 0, 0, 500),
     skillHaste: clampNumber(bonuses.skillHaste ?? legacySkillHaste, 0, 500),
     armorBonus: clampNumber(bonuses.armorBonus || 0, 0, 10),
-    critChanceBonus: clampNumber(bonuses.critChanceBonus || 0, 0, 0.22),
-    critDamageMul: clampNumber(bonuses.critDamageMul || 1, 1, 1.6),
-    eliteBossDamageMul: clampNumber(bonuses.eliteBossDamageMul || legacyEliteBossDamageMul, 1, 1.75),
+    critChanceBonus: clampNumber(bonuses.critChanceBonus || 0, 0, 0.85),
+    critDamageMul: clampNumber(bonuses.critDamageMul || 1, 1, 10),
+    eliteBossDamageMul: clampNumber(bonuses.eliteBossDamageMul || legacyEliteBossDamageMul, 1, 10),
     bossFinisherMul: clampNumber(bonuses.bossFinisherMul || 1, 1, 1.45),
     bossFinisherThreshold: clampNumber(bonuses.bossFinisherThreshold || 0, 0, 0.2),
-    statusDamageMul: clampNumber(bonuses.statusDamageMul || 1, 1, 1.45),
-    areaMul: clampNumber(bonuses.areaMul || 1, 1, 1.5),
-    constructDamageMul: clampNumber(bonuses.constructDamageMul || 1, 1, 1.5),
-    constructDurationMul: clampNumber(bonuses.constructDurationMul || 1, 1, 1.45),
-    burnDamageMul: clampNumber(bonuses.burnDamageMul || 1, 1, 1.75),
+    statusDamageMul: clampNumber(bonuses.statusDamageMul || 1, 1, 10),
+    areaMul: clampNumber(bonuses.areaMul || 1, 1, 5),
+    constructDamageMul: clampNumber(bonuses.constructDamageMul || 1, 1, 10),
+    constructDurationMul: clampNumber(bonuses.constructDurationMul || 1, 1, 10),
+    burnDamageMul: clampNumber(bonuses.burnDamageMul || 1, 1, 10),
     turretKillDurationBonus: clampNumber(bonuses.turretKillDurationBonus || 0, 0, 2),
     wallBounceBonus: clamp(Math.floor(Number(bonuses.wallBounceBonus) || 0), 0, 2),
     poisonStackCapBonus: clamp(Math.floor(Number(bonuses.poisonStackCapBonus) || 0), 0, 2),
@@ -2963,7 +3021,41 @@ function sanitizeGearBonuses(source) {
     vanguardWhirlwindGuard: clamp(Math.floor(Number(bonuses.vanguardWhirlwindGuard) || 0), 0, 1),
     hunterRainBarrage: clamp(Math.floor(Number(bonuses.hunterRainBarrage) || 0), 0, 1),
     arcanistPiercingFragments: clamp(Math.floor(Number(bonuses.arcanistPiercingFragments) || 0), 0, 1),
-    mechanistTurretMine: clamp(Math.floor(Number(bonuses.mechanistTurretMine) || 0), 0, 1)
+    mechanistTurretMine: clamp(Math.floor(Number(bonuses.mechanistTurretMine) || 0), 0, 1),
+    projectileShieldCharges: clamp(Math.floor(Number(bonuses.projectileShieldCharges) || 0), 0, 3),
+    projectileShieldCooldown: clampNumber(bonuses.projectileShieldCooldown || 0, 0, 15),
+    poisonSpread: clamp(Math.floor(Number(bonuses.poisonSpread) || 0), 0, 1),
+    commonDrone: clamp(Math.floor(Number(bonuses.commonDrone) || 0), 0, 1),
+    periodicShieldRatio: clampNumber(bonuses.periodicShieldRatio || 0, 0, 0.18),
+    killCooldownRefund: clampNumber(bonuses.killCooldownRefund || 0, 0, 0.8),
+    lifeSteal: clampNumber(bonuses.lifeSteal || 0, 0, 0.036),
+    armorLockZero: clamp(Math.floor(Number(bonuses.armorLockZero) || 0), 0, 1),
+    maxHpPenalty: clampNumber(bonuses.maxHpPenalty || 0, 0, 0.3),
+    armorPenalty: clampNumber(bonuses.armorPenalty || 0, 0, 0.55),
+    basicAttackDamageMul: clampNumber(bonuses.basicAttackDamageMul || 1, 1, 2),
+    skillsDisabled: clamp(Math.floor(Number(bonuses.skillsDisabled) || 0), 0, 1),
+    primaryDisabled: clamp(Math.floor(Number(bonuses.primaryDisabled) || 0), 0, 1),
+    dashChargeBonus: clamp(Math.floor(Number(bonuses.dashChargeBonus) || 0), 0, 1),
+    xpMagnet: clamp(Math.floor(Number(bonuses.xpMagnet) || 0), 0, 1),
+    warriorExecutionThreshold: clampNumber(bonuses.warriorExecutionThreshold || 0.25, 0.25, 0.35),
+    warriorCleaveRepeat: clamp(Math.floor(Number(bonuses.warriorCleaveRepeat) || 0), 0, 1),
+    warriorShoutDamageMul: clampNumber(bonuses.warriorShoutDamageMul || 0, 0, 2.2),
+    warriorWhirlwindPull: clamp(Math.floor(Number(bonuses.warriorWhirlwindPull) || 0), 0, 1),
+    warriorCollisionCharge: clamp(Math.floor(Number(bonuses.warriorCollisionCharge) || 0), 0, 1),
+    rangerPrimaryHoming: clamp(Math.floor(Number(bonuses.rangerPrimaryHoming) || 0), 0, 1),
+    rangerRadialQ: clamp(Math.floor(Number(bonuses.rangerRadialQ) || 0), 0, 1),
+    rangerLaserFire: clamp(Math.floor(Number(bonuses.rangerLaserFire) || 0), 0, 1),
+    rangerRainPull: clamp(Math.floor(Number(bonuses.rangerRainPull) || 0), 0, 1),
+    rangerPierceCapBonus: clampNumber(bonuses.rangerPierceCapBonus || 0, 0, 60),
+    mageGiantOrb: clamp(Math.floor(Number(bonuses.mageGiantOrb) || 0), 0, 1),
+    mageFlameWave: clamp(Math.floor(Number(bonuses.mageFlameWave) || 0), 0, 1),
+    mageMeteorGrowthCapBonus: clampNumber(bonuses.mageMeteorGrowthCapBonus || 0, 0, 360),
+    mageIceMeteor: clamp(Math.floor(Number(bonuses.mageIceMeteor) || 0), 0, 1),
+    mageChainBoost: clamp(Math.floor(Number(bonuses.mageChainBoost) || 0), 0, 1),
+    engineerMechaModule: clamp(Math.floor(Number(bonuses.engineerMechaModule) || 0), 0, 1),
+    engineerMineFire: clamp(Math.floor(Number(bonuses.engineerMineFire) || 0), 0, 1),
+    engineerDroneBonus: clamp(Math.floor(Number(bonuses.engineerDroneBonus) || 0), 0, 2),
+    engineerPermanentDrone: clamp(Math.floor(Number(bonuses.engineerPermanentDrone) || 0), 0, 1)
   };
 }
 
@@ -3045,7 +3137,7 @@ function calculateAccountLevelBonuses(accountLevel) {
     speedMul: roundBonus(1 + Math.min(0.15, gainedLevels * 0.003)),
     skillHaste: roundBonus(Math.min(20, gainedLevels * 0.3)),
     armorBonus: roundBonus(Math.min(6, gainedLevels * 0.12)),
-    critChanceBonus: roundBonus(Math.min(0.15, gainedLevels * 0.003)),
+    critChanceBonus: roundBonus(Math.min(0.1, gainedLevels * 0.003)),
     critDamageMul: roundBonus(1 + Math.min(0.5, gainedLevels * 0.01)),
     areaMul: roundBonus(1 + Math.min(0.25, gainedLevels * 0.005))
   };
@@ -3066,13 +3158,15 @@ function applyPlayerGrowthBonuses(player, room) {
   player.growthLoadout = loadout;
   player.attackPowerBonus = gear.attackBonus;
   player.damageMul += (accountBonuses.damageMul - 1) + (bonuses.damageMul - 1) + (gear.damageMul - 1);
-  player.maxHp = Math.max(1, Math.round((player.maxHp + gear.maxHpBonus) * accountBonuses.maxHpMul * bonuses.maxHpMul * gear.maxHpMul));
+  player.maxHp = Math.max(1, Math.round((player.maxHp + gear.maxHpBonus) * accountBonuses.maxHpMul * bonuses.maxHpMul * gear.maxHpMul * (1 - gear.maxHpPenalty)));
   player.hp = player.maxHp;
   player.regen += accountBonuses.regenBonus + bonuses.regenBonus + gear.regenBonus;
   player.speedMul *= accountBonuses.speedMul * bonuses.speedMul * gear.speedMul;
   player.attackSpeed = Math.min(500, (player.attackSpeed || 0) + bonuses.attackSpeed + gear.attackSpeed);
   player.skillHaste = Math.min(500, (player.skillHaste || 0) + accountBonuses.skillHaste + bonuses.skillHaste + gear.skillHaste);
-  player.armor = clamp((player.armor || 0) + accountBonuses.armorBonus + bonuses.armorBonus + gear.armorBonus, 0, 18);
+  player.armor = gear.armorLockZero
+    ? 0
+    : clamp(((player.armor || 0) + accountBonuses.armorBonus + bonuses.armorBonus + gear.armorBonus) * (1 - gear.armorPenalty), 0, 18);
   player.crit = clamp((player.crit || 0) + accountBonuses.critChanceBonus + bonuses.critChanceBonus + gear.critChanceBonus, 0, 0.85);
   player.critDamageMul += (accountBonuses.critDamageMul - 1) + (bonuses.critDamageMul - 1) + (gear.critDamageMul - 1);
   player.projectileSpeedMul = bonuses.projectileSpeedMul;
@@ -3102,6 +3196,42 @@ function applyPlayerGrowthBonuses(player, room) {
   player.hunterRainBarrage = gear.hunterRainBarrage;
   player.arcanistPiercingFragments = gear.arcanistPiercingFragments;
   player.mechanistTurretMine = gear.mechanistTurretMine;
+  player.projectileShieldMaxCharges = gear.projectileShieldCharges;
+  player.projectileShieldCharges = gear.projectileShieldCharges;
+  player.projectileShieldCooldown = gear.projectileShieldCooldown;
+  player.projectileShieldRespawnTimer = 0;
+  player.poisonSpread = gear.poisonSpread;
+  player.commonDrone = gear.commonDrone;
+  player.periodicShieldRatio = gear.periodicShieldRatio;
+  player.periodicShieldTimer = gear.periodicShieldRatio > 0 ? 2.5 : 0;
+  player.onKillCooldownRefund += gear.killCooldownRefund;
+  player.lifeSteal += gear.lifeSteal;
+  player.armorLockZero = Boolean(gear.armorLockZero);
+  player.basicAttackDamageMul = gear.basicAttackDamageMul;
+  player.skillsDisabled = Boolean(gear.skillsDisabled);
+  player.primaryDisabled = Boolean(gear.primaryDisabled && !gear.skillsDisabled);
+  player.dashChargeBonus = gear.dashChargeBonus;
+  player.xpMagnet = Boolean(gear.xpMagnet);
+  player.warriorExecutionThreshold = gear.warriorExecutionThreshold;
+  player.warriorCleaveRepeat = gear.warriorCleaveRepeat;
+  player.warriorShoutDamageMul = gear.warriorShoutDamageMul;
+  player.warriorWhirlwindPull = gear.warriorWhirlwindPull;
+  player.warriorCollisionCharge = gear.warriorCollisionCharge;
+  player.rangerPrimaryHoming = gear.rangerPrimaryHoming;
+  player.rangerRadialQ = gear.rangerRadialQ;
+  player.rangerLaserFire = gear.rangerLaserFire;
+  player.rangerRainPull = gear.rangerRainPull;
+  player.rangerPierceCapBonus = gear.rangerPierceCapBonus;
+  player.mageGiantOrb = gear.mageGiantOrb;
+  player.mageFlameWave = gear.mageFlameWave;
+  player.mageMeteorGrowthCapBonus = gear.mageMeteorGrowthCapBonus;
+  player.mageIceMeteor = gear.mageIceMeteor;
+  player.mageChainBoost = gear.mageChainBoost;
+  player.engineerMechaModule = gear.engineerMechaModule;
+  player.engineerMineFire = gear.engineerMineFire;
+  player.engineerDroneBonus = gear.engineerDroneBonus;
+  player.engineerPermanentDrone = gear.engineerPermanentDrone;
+  resetDashCharges(player);
   player.cosmeticTitle = loadout.cosmetic.title;
   player.cosmeticSkin = loadout.cosmetic.skin;
   player.appearanceColor = SKIN_COLORS[loadout.cosmetic.skin] || "";
@@ -3192,7 +3322,7 @@ function getAbyssDifficulty(room) {
     speedMul: (1 + Math.min(0.24, depth * 0.012)) * profile.speedMul * modifier.speedMul,
     cadenceMul: profile.cadenceMul,
     threatMul: (1 + depth * 0.08) * (1 + ascension * 0.16) * modifier.threatMul,
-    eliteBonus: Math.min(0.55, depth * 0.012 + profile.eliteBonus + modifier.eliteBonus),
+    eliteBonus: Math.min(0.9, depth * 0.012 + profile.eliteBonus + modifier.eliteBonus),
     rewardMul: profile.rewardMul * (modifierId ? 1.15 : 1)
   };
 }
@@ -3209,9 +3339,13 @@ function calculateRunRewardSummary(result) {
   const abyssReward = abyssDepth > 0 ? abyssDepth * 18 + Math.floor(Math.pow(abyssDepth, 1.22) * 8) : 0;
   const ascensionMultiplier = ASCENSION_DIFFICULTY_PROFILES[ascensionLevel]?.rewardMul || 1;
   const challengeMultiplier = result?.challengeModifierId ? 1.15 : 1;
+  const outcomeMultiplier = result?.outcome === "victory" ? 2 : 0.5;
+  const rewardBase = progressReward + victoryReward + abyssReward;
+  const shardReward = rewardBase * ascensionMultiplier * challengeMultiplier * 1.45;
+  const accountXpReward = rewardBase * ascensionMultiplier * challengeMultiplier * 1.75 + stagesCleared * 3 + highestLevel * 6;
   return {
-    earnedShards: Math.max(3, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier * challengeMultiplier * 1.45)),
-    earnedAccountXp: Math.max(10, Math.floor((progressReward + victoryReward + abyssReward) * ascensionMultiplier * challengeMultiplier * 1.75 + stagesCleared * 3 + highestLevel * 6)),
+    earnedShards: Math.max(result?.outcome === "victory" ? 6 : 1, Math.floor(shardReward * outcomeMultiplier)),
+    earnedAccountXp: Math.max(result?.outcome === "victory" ? 20 : 5, Math.floor(accountXpReward * outcomeMultiplier)),
     abyssDepth,
     ascensionLevel,
     rewardBreakdown: [
@@ -3219,7 +3353,8 @@ function calculateRunRewardSummary(result) {
       { id: "victory", label: "승리 보너스", value: victoryReward },
       { id: "abyss", label: "심연 보너스", value: abyssReward },
       { id: "ascension", label: "승천 배율", value: `${Math.round(ascensionMultiplier * 100)}%` },
-      { id: "challenge", label: "도전 배율", value: `${Math.round(challengeMultiplier * 100)}%` }
+      { id: "challenge", label: "도전 배율", value: `${Math.round(challengeMultiplier * 100)}%` },
+      { id: "outcome", label: result?.outcome === "victory" ? "런 성공 보너스" : "생존 실패 감산", value: `${Math.round(outcomeMultiplier * 100)}%` }
     ]
   };
 }
@@ -3288,6 +3423,7 @@ function createPlayer(id, name, classId, room) {
     },
     attackTimer: 0,
     skillTimers: { q: 0, e: 0, r: 0, f: 0 },
+    deferredSkillCooldowns: {},
     dashTimer: 0,
     dashCharges: getDashMaxChargesForClass(classId),
     dashRechargeTimer: 0,
@@ -3437,6 +3573,8 @@ function startRun(room) {
   room.clearSummary = null;
   room.choiceDeadline = 0;
   room.pausedStatus = null;
+  room.paused = false;
+  room.pauseStartedAt = 0;
   room.advancementStartedAt = 0;
   room.advancementDeadline = 0;
   room.restartAt = 0;
@@ -3551,6 +3689,7 @@ function resetPlayerForRun(player, room) {
   if (player.bot) player.botBrain = createBotBrain();
   player.attackTimer = 0;
   player.skillTimers = { q: 0, e: 0, r: 0, f: 0 };
+  player.deferredSkillCooldowns = {};
   player.dashTimer = 0;
   resetDashCharges(player);
   player.dashMove = null;
@@ -3631,6 +3770,7 @@ function configurePlayerForLobbyTest(player, room, classId) {
   player.hp = player.maxHp;
   player.shield = 0;
   player.skillTimers = { q: 0, e: 0, r: 0, f: 0 };
+  player.deferredSkillCooldowns = {};
   player.dashTimer = 0;
   resetDashCharges(player);
   player.ready = false;
@@ -3650,28 +3790,24 @@ function isLobbyToggleableSkillUpgrade(upgrade) {
   return Boolean(upgrade && !upgrade.slot && Array.isArray(upgrade.requires) && upgrade.requires.length > 0);
 }
 
-function getLobbySkillRootUpgrade(classId, upgradeId, visited = new Set()) {
+function getLobbySkillRootUpgrade(player, classId, upgradeId, visited = new Set()) {
   if (!upgradeId || visited.has(upgradeId)) return null;
   if (upgradeId === `${classId}_primary`) {
-    return {
-      id: upgradeId,
-      slot: "q",
-      name: getPrimarySkillName({ classId }),
-      text: classId === "engineer" ? "Q: 조준 위치에 자동 터렛을 던져 설치합니다." : "Q: 기본 공격"
-    };
+    return getPrimarySkillDefinition({ ...player, classId });
   }
   visited.add(upgradeId);
   const upgrade = getSkillUpgradeByIdForClass(classId, upgradeId);
   if (!upgrade) return null;
-  if (upgrade.slot) return upgrade;
+  if (upgrade.slot) return getEquipmentAdjustedSkillView(player, upgrade);
   for (const requiredId of upgrade.requires || []) {
-    const root = getLobbySkillRootUpgrade(classId, requiredId, visited);
+    const root = getLobbySkillRootUpgrade(player, classId, requiredId, visited);
     if (root) return root;
   }
   return null;
 }
 
-function getLobbyBaseSkillViews(classId) {
+function getLobbyBaseSkillViews(player) {
+  const classId = sanitizeStartingClass(player.classId);
   const baseBySlot = new Map(
     (skillUpgrades[classId] || [])
       .filter((upgrade) => upgrade && !DISABLED_SKILL_UPGRADES.has(upgrade.id) && isLobbyBaseSkillUpgrade(upgrade))
@@ -3681,21 +3817,18 @@ function getLobbyBaseSkillViews(classId) {
   return SKILL_SLOTS.map((slot) => {
     if (slot === "q") {
       return {
-        id: `${classId}_primary`,
-        slot,
-        name: getPrimarySkillName({ classId }),
-        text: classId === "engineer" ? "Q: 조준 위치에 자동 터렛을 던져 설치합니다." : "Q: 기본 공격",
+        ...getPrimarySkillDefinition(player),
         fixed: true
       };
     }
     const upgrade = baseBySlot.get(slot);
-    return {
+    return getEquipmentAdjustedSkillView(player, {
       id: upgrade?.id || `${classId}_${slot}_skill`,
       slot,
       name: upgrade?.name || `${slot.toUpperCase()} Skill`,
       text: upgrade?.text || "",
       fixed: true
-    };
+    });
   });
 }
 
@@ -3834,11 +3967,14 @@ function getLobbyTestView(player) {
   const skillItems = (skillUpgrades[classId] || [])
     .filter((upgrade) => !DISABLED_SKILL_UPGRADES.has(upgrade.id) && isLobbyToggleableSkillUpgrade(upgrade))
     .map((upgrade) => {
-      const root = getLobbySkillRootUpgrade(classId, upgrade.id);
+      const adjusted = getEquipmentAdjustedSkillView(player, upgrade);
+      const root = getLobbySkillRootUpgrade(player, classId, upgrade.id);
       return {
         id: upgrade.id,
-        name: upgrade.name,
-        text: upgrade.text,
+        name: adjusted.name,
+        text: adjusted.text,
+        equipmentModified: Boolean(adjusted.equipmentModified),
+        equipmentLabel: adjusted.equipmentLabel || "",
         slot: "",
         baseSlot: root?.slot || "",
         baseSkillId: root?.id || "",
@@ -3858,7 +3994,7 @@ function getLobbyTestView(player) {
     });
 
   return {
-    baseSkills: getLobbyBaseSkillViews(classId),
+    baseSkills: getLobbyBaseSkillViews(player),
     skills: skillItems,
     relics: relicItems
   };
@@ -6558,6 +6694,16 @@ function updateRoom(room, dt, now) {
     return;
   }
 
+  if (room.paused) {
+    if (room.status !== "combat" || getActivePlayers(room).length !== 1 || getBotPlayers(room).length > 0) {
+      shiftPauseDeadlines(room, now - Number(room.pauseStartedAt || now));
+      room.paused = false;
+      room.pauseStartedAt = 0;
+    } else {
+      return;
+    }
+  }
+
   updateBots(room, dt, now);
 
   if (room.status === "choice") {
@@ -6589,6 +6735,9 @@ function updateRoom(room, dt, now) {
 
   updateProjectiles(room, dt);
   updateHazards(room, dt);
+  for (const player of getActivePlayers(room)) {
+    updateDeferredSkillCooldowns(room, player);
+  }
   updateRelicChests(room);
   updateEnemies(room, dt, now);
   updateFieldPickups(room, dt);
@@ -6855,6 +7004,7 @@ function updatePlayer(room, player, dt, now) {
   if (player.martialChiTimer <= 0) player.martialChi = 0;
   player.stealthTimer = Math.max(0, (player.stealthTimer || 0) - dt);
   if (player.shieldTimer <= 0) player.shield = 0;
+  updateEquipmentPassives(room, player, dt);
 
   if (player.poisonTimer > 0 && player.immunityTimer <= 0) {
     const activeWindow = player.poisonTimer;
@@ -6923,7 +7073,25 @@ function updatePlayer(room, player, dt, now) {
     }
   }
 
-  if (player.input.attacking && player.attackTimer <= 0) {
+  const adaptiveMechaLaserActive = Boolean(
+    player.input.attacking &&
+    !player.primaryDisabled &&
+    player.classId === "engineer" &&
+    player.engineerMechaModule &&
+    isEngineerMechaActive(player)
+  );
+  if (adaptiveMechaLaserActive) {
+    const adaptiveDef = {
+      ...def,
+      damage: def.damage * Math.max(1, player.basicAttackDamageMul || 1)
+    };
+    runWithEffectOwner(room, player.id, () => updateAdaptiveMechaContinuousLaser(room, player, adaptiveDef, dt));
+  } else {
+    player.adaptiveMechaLaserTick = 0;
+    player.adaptiveMechaLaserVisualTick = 0;
+  }
+
+  if (!adaptiveMechaLaserActive && player.input.attacking && player.attackTimer <= 0 && !player.primaryDisabled) {
     runWithEffectOwner(room, player.id, () => performAttack(room, player, now));
     player.attackTimer = def.attackCd * player.cooldownMul * getAttackCooldownMultiplier(player);
   }
@@ -6949,24 +7117,33 @@ function updateMageFrostBreathAura(room, player, dt) {
   if (player.mageFrostBreathTick > 0) return;
 
   const radius = 142 * (player.areaMul || 1);
+  const flameBreath = Boolean(player.mageFlameWave);
   let touched = false;
   for (const enemy of room.enemies) {
     if (enemy.hp <= 0 || distance(player, enemy) > radius + enemy.radius) continue;
-    enemy.slowTimer = Math.max(enemy.slowTimer || 0, 0.72);
+    if (flameBreath) {
+      applyBurnToEnemy(room, enemy, player.id, getPlayerAttackDamage(player, "mage") * 0.12, {
+        duration: 1.1,
+        totalDamageRatio: 0.18,
+        attackDamageRatio: 0.2
+      });
+    } else {
+      enemy.slowTimer = Math.max(enemy.slowTimer || 0, 0.72);
+    }
     touched = true;
   }
 
   addEffect(room, "slow", player.x, player.y, {
-    color: "#93c5fd",
+    color: flameBreath ? "#fb923c" : "#93c5fd",
     radius,
     rangeRadius: radius,
     ownerId: player.id,
-    style: "frost_breath_aura",
-    duration: 1.15,
+    style: flameBreath ? "flame_breath_aura" : "frost_breath_aura",
+    duration: 0.72,
     passive: true,
     active: touched
   });
-  player.mageFrostBreathTick = 0.24;
+  player.mageFrostBreathTick = 0.48;
 }
 
 function syncPlayerInputSequences(player) {
@@ -7023,19 +7200,13 @@ function performDash(room, player, now) {
     player.immunityTimer = Math.max(player.immunityTimer, 0.58);
     addEffect(room, "arcane", startX, startY, { color: classes.mage.color, radius: 74, style: "blink_depart" });
     addEffect(room, "arcane", player.x, player.y, { color: classes.mage.color, radius: 96, style: "blink_arrive" });
-    for (const enemy of room.enemies) {
-      if (enemy.hp <= 0) continue;
-      if (Math.min(distance(enemy, { x: startX, y: startY }), distance(enemy, player)) > enemy.radius + 118) continue;
-      enemy.slowTimer = Math.max(enemy.slowTimer, 1.45);
-      dealDamage(room, enemy, def.damage * 0.54, player.id);
-    }
     return;
   }
 
   const dashOptions =
     player.classId === "warrior"
       ? {
-          contactRadius: 58 * player.areaMul,
+          contactRadius: 58,
           damageMul: 1.15,
           knockback: 280,
           pushScale: 1.65,
@@ -7078,7 +7249,9 @@ function beginPlayerDashMove(room, player, dir, startX, startY, endX, endY, dash
     damageMul: options.damageMul || 0.86,
     knockback: options.knockback || 180,
     pushScale: options.pushScale || 1,
+    pushMaxDistance: options.pushMaxDistance || 0,
     gather: Boolean(options.gather),
+    collisionBurst: Boolean(options.collisionBurst),
     gatherScale: options.gatherScale || 1,
     impactScale: options.impactScale || 1.04,
     carriedEnemies: [],
@@ -7172,7 +7345,11 @@ function applyWarriorDashContacts(room, player, dash, prevX, prevY) {
           addMeleeImpact(room, enemy, "shield_gather", dash.impactScale || 1.04);
         } else {
           const pushDir = getWarriorDashPushDirection(enemy, prevX, prevY, player.x, player.y, dir, dash.style === "shield_charge");
-          applyWarriorDashPush(room, player, enemy, pushDir, dash.pushScale || 1);
+          applyWarriorDashPush(room, player, enemy, pushDir, dash.pushScale || 1, {
+            collisionBurst: dash.collisionBurst,
+            ownerId: player.id,
+            maxDistance: dash.pushMaxDistance || 0
+          });
           addMeleeImpact(room, enemy, "shield_slam", dash.impactScale || 1.04);
         }
       }
@@ -7188,6 +7365,74 @@ function applyWarriorDashContacts(room, player, dash, prevX, prevY) {
       applyWarriorDashGather(room, player, enemy, dash, dir);
     }
   }
+}
+
+function triggerWarriorChargeCollision(room, player, enemy, collidedEnemy = null) {
+  if (!player || player.hp <= 0 || !enemy || enemy.hp <= 0) return;
+  const bonusDamage = getPlayerAttackDamage(player, "warrior") * 1.45;
+  dealDamage(room, enemy, bonusDamage, player.id, { skillTag: "warrior_collision_charge", noVulnerable: true });
+  if (collidedEnemy?.hp > 0) {
+    dealDamage(room, collidedEnemy, bonusDamage * 0.72, player.id, { skillTag: "warrior_collision_charge", noVulnerable: true });
+  }
+  addEffect(room, "explosion", enemy.x, enemy.y, {
+    color: classes.warrior.color,
+    radius: 96 * (player.areaMul || 1),
+    style: "warrior_charge_collision"
+  });
+}
+
+function updateEquipmentPassives(room, player, dt) {
+  if (!player || player.hp <= 0) return;
+
+  if ((player.projectileShieldMaxCharges || 0) > 0 && (player.projectileShieldCharges || 0) <= 0) {
+    player.projectileShieldRespawnTimer = Math.max(0, (player.projectileShieldRespawnTimer || 0) - dt);
+    if (player.projectileShieldRespawnTimer <= 0) {
+      player.projectileShieldCharges = player.projectileShieldMaxCharges;
+      addEffect(room, "shield", player.x, player.y, {
+        color: "#67e8f9",
+        radius: 72,
+        style: "equipment_projectile_aegis_restore"
+      });
+    }
+  }
+
+  if ((player.periodicShieldRatio || 0) > 0) {
+    player.periodicShieldTimer = Math.max(0, (player.periodicShieldTimer || 0) - dt);
+    if (player.periodicShieldTimer <= 0) {
+      const shield = Math.max(18, Math.round(player.maxHp * player.periodicShieldRatio));
+      player.shield = Math.max(player.shield || 0, shield);
+      player.shieldTimer = Math.max(player.shieldTimer || 0, 8);
+      player.periodicShieldTimer = 12;
+      addEffect(room, "shield", player.x, player.y, {
+        value: shield,
+        color: "#93c5fd",
+        radius: 62,
+        style: "equipment_periodic_shield"
+      });
+    }
+  }
+
+  const activeInTraining = room.status === "lobby" && room.enemies.some((enemy) => enemy.trainingDummy);
+  const canSpawn = room.status === "combat" || activeInTraining;
+  ensureEquipmentDrone(room, player, "common_gear_drone", Boolean(player.commonDrone), Math.PI * 0.35, canSpawn);
+  ensureEquipmentDrone(room, player, "permanent_engineer_drone", Boolean(player.engineerPermanentDrone && player.classId === "engineer"), -Math.PI * 0.35, canSpawn);
+  if (!canSpawn) return;
+}
+
+function ensureEquipmentDrone(room, player, gearDroneType, enabled, phase, canSpawn) {
+  const existing = room.hazards.find((hazard) => hazard.ownerId === player.id && hazard.gearDroneType === gearDroneType && !hazard.dead);
+  if (!enabled) {
+    if (existing) existing.dead = true;
+    return;
+  }
+  if (existing || !canSpawn) return;
+  deployEngineerDrone(room, player, classes.engineer, phase);
+  const drone = room.hazards[room.hazards.length - 1];
+  if (!drone || drone.type !== "engineer_drone") return;
+  drone.gearDroneType = gearDroneType;
+  drone.timer = 999999;
+  drone.kamikaze = false;
+  drone.style = gearDroneType === "common_gear_drone" ? "drone_support_gear" : "drone_permanent";
 }
 
 function applyWarriorDashGather(room, player, enemy, dash, dir) {
@@ -7307,7 +7552,9 @@ function getDashMaxChargesForClass(classId) {
 }
 
 function getDashMaxCharges(player) {
-  return getDashMaxChargesForClass(player.classId);
+  const gearBonus = Math.max(0, Math.floor(player.dashChargeBonus || 0));
+  const mechaBonus = player.engineerMechaModule && isEngineerMechaActive(player) ? 1 : 0;
+  return getDashMaxChargesForClass(player.classId) + gearBonus + mechaBonus;
 }
 
 function getDashCooldown(player) {
@@ -7402,15 +7649,16 @@ function getBoundedDashEndpoint(room, startX, startY, dirX, dirY, distanceAmount
   };
 }
 
-function applyWarriorDashPush(room, player, enemy, dir, scale = 1) {
+function applyWarriorDashPush(room, player, enemy, dir, scale = 1, options = {}) {
   const shieldCharge = scale > 2;
   const typeResist = enemy.type === "boss" ? 0.36 : enemy.elite ? 0.68 : enemy.type === "guardian" || enemy.type === "brute" ? 0.82 : 1;
   const push = 116 * typeResist * scale;
   startEnemyKnockback(room, enemy, dir.x, dir.y, push, {
     duration: clamp(push / (shieldCharge ? 760 : 920), shieldCharge ? 0.4 : 0.18, shieldCharge ? 0.62 : 0.3),
-    maxDistance: shieldCharge ? 520 : 260,
+    maxDistance: options.maxDistance > 0 ? options.maxDistance : shieldCharge ? 520 : 260,
     style: shieldCharge ? "shield_charge_push" : "warrior_dash_push",
-    interruptCharge: true
+    interruptCharge: true,
+    collisionBurst: options.collisionBurst ? { ownerId: options.ownerId || player.id, triggered: false } : null
   });
 }
 
@@ -7474,6 +7722,7 @@ function startEnemyKnockback(room, enemy, dirX, dirY, distanceAmount, options = 
     elapsed: 0,
     duration,
     style: options.style || "hit_knockback",
+    collisionBurst: options.collisionBurst || null,
     key: `${Math.round(enemy.x)}:${Math.round(enemy.y)}:${Math.round(combinedDistance)}:${Date.now()}`
   };
 
@@ -7499,7 +7748,31 @@ function updateEnemyKnockback(room, enemy, dt) {
   const step = Math.max(0, nextEase - previousEase) * move.distance;
 
   if (step > 0) {
+    const previousX = enemy.x;
+    const previousY = enemy.y;
+    const requestedX = previousX + move.dirX * step;
+    const requestedY = previousY + move.dirY * step;
+    const collidedEnemy = move.collisionBurst && !move.collisionBurst.triggered
+      ? room.enemies.find((other) => {
+          if (other.id === enemy.id || other.hp <= 0) return false;
+          const contactDistance = enemy.radius + other.radius + 3;
+          const along = (other.x - previousX) * move.dirX + (other.y - previousY) * move.dirY;
+          if (along <= Math.max(6, contactDistance * 0.18) || along > step + contactDistance) return false;
+          return distanceToSegment(other, previousX, previousY, requestedX, requestedY) <= contactDistance;
+        })
+      : null;
     moveEnemyBy(room, enemy, move.dirX * step, move.dirY * step);
+    if (move.collisionBurst && !move.collisionBurst.triggered) {
+      const actualForward = (enemy.x - previousX) * move.dirX + (enemy.y - previousY) * move.dirY;
+      const hitWall = step >= 3 && actualForward < step * 0.7;
+      if (hitWall || collidedEnemy) {
+        move.collisionBurst.triggered = true;
+        const owner = room.players.get(move.collisionBurst.ownerId);
+        triggerWarriorChargeCollision(room, owner, enemy, collidedEnemy);
+        enemy.knockbackMove = null;
+        return true;
+      }
+    }
   }
 
   if (nextProgress >= 1) {
@@ -7606,6 +7879,7 @@ function enemyKnockbackEase(progress, style = "") {
 
 function performAttack(room, player, now) {
   const def = classes[player.classId];
+  const basicDamageMul = Math.max(1, player.basicAttackDamageMul || 1);
   const aim = getAimVector(player);
   player.lastAttackAt = now;
 
@@ -7633,7 +7907,7 @@ function performAttack(room, player, now) {
       if (distance > reach + enemy.radius) continue;
       const dot = (dx / (distance || 1)) * aim.x + (dy / (distance || 1)) * aim.y;
       if (dot > -0.05) {
-        const dealt = dealDamage(room, enemy, def.damage * 1.18, player.id, { knockback: 90 });
+        const dealt = dealDamage(room, enemy, def.damage * basicDamageMul * 1.18, player.id, { knockback: 90, basicAttack: true });
         if (dealt > 0) addMeleeImpact(room, enemy, "blade_impact", 0.9);
       }
     }
@@ -7741,8 +8015,13 @@ function performAttack(room, player, now) {
   if (player.classId === "engineer") {
     const mechaActive = isEngineerMechaActive(player);
     if (mechaActive) {
-      fireEngineerMechaHandLasers(room, player, aim, def);
-      triggerEngineerLaserModule(room, player, aim, def);
+      const boostedDef = basicDamageMul > 1 ? { ...def, damage: def.damage * basicDamageMul } : def;
+      if (player.engineerMechaModule) {
+        fireAdaptiveMechaContinuousLaser(room, player, aim, boostedDef);
+        return;
+      }
+      fireEngineerMechaHandLasers(room, player, aim, boostedDef);
+      triggerEngineerLaserModule(room, player, aim, boostedDef);
       return;
     }
     const projectileSpeed = def.projectileSpeed * (player.projectileSpeedMul || 1);
@@ -7755,7 +8034,7 @@ function performAttack(room, player, now) {
       vx: aim.x * projectileSpeed,
       vy: aim.y * projectileSpeed,
       distanceLeft: getPlayerProjectileTravelDistance(room, projectileRadius),
-      damage: def.damage * getEngineerMechaAttackDamageMul(player) * 1.1,
+      damage: def.damage * basicDamageMul * getEngineerMechaAttackDamageMul(player) * 1.1,
       radius: projectileRadius,
       pierce: 0,
       splash: 0,
@@ -7763,6 +8042,7 @@ function performAttack(room, player, now) {
       slow: 0,
       chain: 0,
       style: "engineer_bolt",
+      basicAttack: true,
       hostile: false,
       dead: false
     }, aim, { originDistance: 30, spreadStep: 0.12 });
@@ -7817,7 +8097,7 @@ function performAttack(room, player, now) {
     vx: aim.x * def.projectileSpeed * (player.projectileSpeedMul || 1),
     vy: aim.y * def.projectileSpeed * (player.projectileSpeedMul || 1),
     distanceLeft: getPlayerProjectileTravelDistance(room, radius),
-    damage: def.damage * (player.classId === "ranger" ? 1.08 : player.classId === "mage" ? 1.12 : 1),
+    damage: def.damage * basicDamageMul * (player.classId === "ranger" ? 1.08 : player.classId === "mage" ? 1.12 : 1),
     radius,
     pierce: 0,
     splash: player.classId === "mage" ? 98 * player.areaMul + player.splashBonus : 0,
@@ -7830,6 +8110,11 @@ function performAttack(room, player, now) {
         : player.classId === "ranger"
           ? "arrow"
           : "novice_bolt",
+    basicAttack: true,
+    homing: Boolean(player.classId === "ranger" && player.rangerPrimaryHoming),
+    homingRange: player.rangerPrimaryHoming ? 720 : 0,
+    homingTurnRate: player.rangerPrimaryHoming ? 13.5 : 0,
+    homingAcquireDot: -0.68,
     hostile: false,
     dead: false
   };
@@ -8023,6 +8308,9 @@ function canUseSkillSlot(player, slot) {
 }
 
 function canTriggerSkillSlot(player, slot) {
+  if (player.skillsDisabled) return false;
+  if (player.deferredSkillCooldowns?.[slot]) return false;
+  if (player.engineerPermanentDrone && player.classId === "engineer" && slot === "f") return false;
   if (slot === "r" && player.classId === "engineer" && hasUpgrade(player, "engineer_mine_field")) {
     return canUseSkillSlot(player, slot) && (player.engineerMineCharges || 0) > 0;
   }
@@ -8038,6 +8326,14 @@ function getSkillCooldown(player, slot) {
 }
 
 function applySkillCooldown(player, slot) {
+  const deferredType = getDeferredSkillCooldownType(player, slot);
+  if (deferredType) {
+    if (!player.deferredSkillCooldowns) player.deferredSkillCooldowns = {};
+    player.deferredSkillCooldowns[slot] = { type: deferredType };
+    player.skillTimers[slot] = 0;
+    return 0;
+  }
+
   if (slot === "r" && player.classId === "engineer" && hasUpgrade(player, "engineer_mine_field")) {
     if ((player.engineerMineCharges || 0) < getEngineerMineMaxCharges(player) && (player.skillTimers[slot] || 0) <= 0) {
       player.skillTimers[slot] = getSkillCooldown(player, slot);
@@ -8069,6 +8365,36 @@ function applySkillCooldown(player, slot) {
     player.warriorChargeChainCooldown = 0;
   }
   return skillSystem.applySkillCooldown(player, slot, classes);
+}
+
+function getDeferredSkillCooldownType(player, slot) {
+  if (player.classId === "ranger" && slot === "r" && hasUpgrade(player, "ranger_trap")) return "arrow_rain";
+  if (player.classId !== "engineer") return "";
+  if (slot === "q") return "engineer_turret";
+  if (slot === "e" && hasUpgrade(player, "engineer_mecha")) return "engineer_mecha";
+  if (slot === "f" && hasUpgrade(player, "engineer_drone") && !player.engineerPermanentDrone) return "engineer_drone";
+  return "";
+}
+
+function updateDeferredSkillCooldowns(room, player) {
+  const deferred = player.deferredSkillCooldowns;
+  if (!deferred) return;
+  for (const [slot, entry] of Object.entries(deferred)) {
+    let active = false;
+    if (entry.type === "engineer_mecha") {
+      active = (player.engineerMechaTimer || 0) > 0;
+    } else {
+      active = room.hazards.some((hazard) =>
+        !hazard.dead &&
+        hazard.ownerId === player.id &&
+        hazard.type === entry.type &&
+        hazard.cooldownSourceSlot === slot
+      );
+    }
+    if (active) continue;
+    player.skillTimers[slot] = getSkillCooldown(player, slot);
+    delete deferred[slot];
+  }
 }
 
 function updateWarriorChargeChain(player, dt) {
@@ -8137,7 +8463,7 @@ function performSkill(room, player, slot, now) {
       });
       for (const enemy of room.enemies) {
         if (distance(player, enemy) <= radius + enemy.radius) {
-          const dealt = dealDamage(room, enemy, def.damage * 2.55, player.id, { knockback: 175 });
+          const dealt = dealDamage(room, enemy, def.damage * 2.55, player.id, { knockback: 175, skillTag: "warrior_whirlwind" });
           if (dealt > 0) addMeleeImpact(room, enemy, "spin_impact", 1.08);
         }
       }
@@ -8198,6 +8524,13 @@ function performSkill(room, player, slot, now) {
             interruptCharge: true
           });
         }
+        if ((player.warriorShoutDamageMul || 0) > 0) {
+          const dealt = dealDamage(room, enemy, def.damage * player.warriorShoutDamageMul, player.id, {
+            knockback: 72,
+            skillTag: "warrior_destructive_shout"
+          });
+          if (dealt > 0) addMeleeImpact(room, enemy, "shout_impact", 0.86);
+        }
       }
       if (hasUpgrade(player, "warrior_taunt_bastion")) {
         const tauntShield = Math.max(72, player.maxHp * 0.38) + (hasUpgrade(player, "warrior_colossus") ? Math.max(40, player.maxHp * 0.18) : 0);
@@ -8220,11 +8553,13 @@ function performSkill(room, player, slot, now) {
     if (slot === "r" && hasUpgrade(player, "warrior_charge")) {
       const startX = player.x;
       const startY = player.y;
-      const gatherCharge = hasUpgrade(player, "warrior_charge_gather");
+      const collisionCharge = Boolean(player.warriorCollisionCharge);
+      const gatherCharge = hasUpgrade(player, "warrior_charge_gather") && !collisionCharge;
       const chainCharge = hasUpgrade(player, "warrior_charge_collision");
       player.warriorChargeSucceeded = false;
       const chargeDistance =
         365 *
+        (collisionCharge ? 0.48 : 1) *
         Math.min(1.12, player.speedMul) *
         (player.dashDistanceMul || 1) *
         (hasUpgrade(player, "warrior_colossus") ? 1.12 : 1);
@@ -8264,11 +8599,13 @@ function performSkill(room, player, slot, now) {
         contactRadius,
         gatherRadius,
         damageMul:
-          2.48 *
+          (collisionCharge ? 3.05 : 2.48) *
           (hasUpgrade(player, "warrior_colossus") ? 1.1 : 1),
-        knockback: 520 * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
-        pushScale: 3.65 * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
+        knockback: (collisionCharge ? 980 : 520) * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
+        pushScale: (collisionCharge ? 8.4 : 3.65) * (hasUpgrade(player, "warrior_colossus") ? 1.22 : 1),
+        pushMaxDistance: collisionCharge ? 900 : 0,
         gather: gatherCharge,
+        collisionBurst: collisionCharge,
         gatherScale: (gatherCharge ? 1.22 : 1) * (hasUpgrade(player, "warrior_colossus") ? 1.14 : 1),
         impactScale: gatherCharge ? 1.62 : 1.78
       });
@@ -8308,7 +8645,7 @@ function performSkill(room, player, slot, now) {
           const dealt = dealDamage(room, enemy, def.damage * 3.7 * bossExecutionBonus, player.id, {
             knockback: 220
           });
-          const executionReady = dealt > 0 && hasExecution && canWarriorCleaveExecute(enemy);
+          const executionReady = dealt > 0 && hasExecution && canWarriorCleaveExecute(enemy, player);
           if (dealt > 0 && hasUpgrade(player, "warrior_cleave_guard")) {
             player.shield = Math.min(player.maxHp * 0.3, player.shield + 7);
             player.shieldTimer = Math.max(player.shieldTimer, 3.2);
@@ -8321,6 +8658,13 @@ function performSkill(room, player, slot, now) {
       }
       pushEvent(room, `${player.name} 님이 광역 베기를 사용했습니다.`);
       if (hasUpgrade(player, "warrior_worldsplitter")) performWarriorFollowupCleave(room, player, aim, def, reach, swingSide);
+      if (player.warriorCleaveRepeat) {
+        const repeatDef = { ...def, damage: def.damage * 0.72 };
+        performWarriorHorizontalFollowupCleave(room, player, aim, repeatDef, reach, -swingSide, {
+          effectDelay: WARRIOR_REPEAT_CLEAVE_EFFECT_DELAY,
+          impactDelay: WARRIOR_REPEAT_CLEAVE_IMPACT_DELAY
+        });
+      }
       if (executionHits > 0) pushEvent(room, `${player.name} 님이 처형의 호를 발동했습니다.`);
       return;
     }
@@ -8347,7 +8691,11 @@ function performSkill(room, player, slot, now) {
       const homingShot = hasUpgrade(player, "ranger_multishot");
       const fireArrow = hasUpgrade(player, "ranger_storm_quiver");
       const gearVolleyBonus = Math.max(0, Math.floor(player.rangerVolleyBonus || 0));
-      const spread = getProjectileSpreadAngles(7 + gearVolleyBonus, homingShot ? 0.38 : 0.3, player);
+      const radialShot = Boolean(player.rangerRadialQ);
+      const radialCount = 12 + getProjectileCountBonus(player);
+      const spread = radialShot
+        ? Array.from({ length: radialCount }, (_, index) => (Math.PI * 2 * index) / radialCount)
+        : getProjectileSpreadAngles(7 + gearVolleyBonus, homingShot ? 0.38 : 0.3, player);
       for (let index = 0; index < spread.length; index += 1) {
         const angle = spread[index];
         const lane = index - (spread.length - 1) / 2;
@@ -8367,7 +8715,7 @@ function performSkill(room, player, slot, now) {
           vx: dir.x * projectileSpeed,
           vy: dir.y * projectileSpeed,
           distanceLeft: getPlayerProjectileTravelDistance(room, 9),
-          damage: def.damage * (homingShot ? 1.18 : 1.24),
+          damage: def.damage * (radialShot ? 0.72 : homingShot ? 1.18 : 1.24),
           radius: 9,
           pierce: 0,
           splash: fireArrow ? 86 * player.areaMul + player.splashBonus : 0,
@@ -8382,7 +8730,7 @@ function performSkill(room, player, slot, now) {
           homingAcquireDot: -0.62,
           homingDelay: projectileHoming ? 0.05 + Math.abs(lane) * 0.018 : 0,
           homingTargetOffset: projectileHoming ? Math.max(-18, Math.min(18, lane * 5.5)) : 0,
-          style: fireArrow ? "fire_arrow" : "arrow_fan",
+          style: fireArrow ? "fire_arrow" : radialShot ? "arrow_radial" : "arrow_fan",
           hostile: false,
           dead: false
         });
@@ -8391,7 +8739,7 @@ function performSkill(room, player, slot, now) {
         angle: Math.atan2(aim.y, aim.x),
         color: classes.ranger.color,
         radius: 58,
-        style: fireArrow ? "fire_arrow" : "ranger_barrage"
+        style: fireArrow ? "fire_arrow" : radialShot ? "ranger_radial_barrage" : "ranger_barrage"
       });
       pushEvent(room, `${player.name} 님이 연발 사격을 사용했습니다.`);
       return;
@@ -8460,6 +8808,7 @@ function performSkill(room, player, slot, now) {
         id: nextHazardId++,
         type: "arrow_rain",
         ownerId: player.id,
+        cooldownSourceSlot: "r",
         x: targetX,
         y: targetY,
         radius,
@@ -8472,6 +8821,7 @@ function performSkill(room, player, slot, now) {
         chain: lightning ? 1 : 0,
         slowDuration: heavyRain ? 1.15 : 0,
         poisonGarden: plague,
+        pullEnemies: Boolean(player.rangerRainPull),
         color: classes.ranger.color,
         dead: false
       });
@@ -8552,6 +8902,46 @@ function performSkill(room, player, slot, now) {
       const bolts = 10 + getProjectileCountBonus(player);
       const splitShardCount = (splitCore ? 3 : 2) + (piercingFragments ? 2 : 0);
       const splitDamageMul = Math.min(splitCore ? 0.2 : 0.15, 0.5 / splitShardCount);
+      if (player.mageGiantOrb) {
+        const expandedStar = homingStar;
+        const empoweredCore = splitCore;
+        const giantRadius = 64 * player.areaMul * (expandedStar ? 1.5 : 1);
+        const giantSplash = (210 * player.areaMul + player.splashBonus) * (expandedStar ? 1.5 : 1);
+        room.projectiles.push({
+          id: nextProjectileId++,
+          ownerId: player.id,
+          classId: "mage",
+          x: player.x + aim.x * 44,
+          y: player.y + aim.y * 44,
+          vx: aim.x * 620,
+          vy: aim.y * 620,
+          distanceLeft: getPlayerProjectileTravelDistance(room, giantRadius),
+          damage: def.damage * 4.8,
+          radius: giantRadius,
+          pierce: 999,
+          splash: giantSplash,
+          poison: false,
+          slow: 0,
+          chain: 0,
+          forceCrit: empoweredCore,
+          splitOnHit: gearSplit,
+          splitDepth: 0,
+          splitShardCount,
+          splitDamageMul: Math.min(splitDamageMul, 0.12),
+          splitShardPierce: piercingFragments ? 1 : 0,
+          style: `giant_star_orb${expandedStar ? " expanded_star" : ""}${empoweredCore ? " empowered_core" : ""}`,
+          hostile: false,
+          dead: false
+        });
+        addEffect(room, "star", player.x + aim.x * 54, player.y + aim.y * 54, {
+          color: classes.mage.color,
+          radius: giantRadius * 2.35,
+          angle: Math.atan2(aim.y, aim.x),
+          style: "giant_star_orb_launch"
+        });
+        pushEvent(room, `${player.name} 님이 응축 별빛을 발사했습니다.`);
+        return;
+      }
       for (let i = 0; i < bolts; i += 1) {
         const angle = (Math.PI * 2 * i) / bolts;
         const lane = i - (bolts - 1) / 2;
@@ -8598,12 +8988,19 @@ function performSkill(room, player, slot, now) {
 
     if (slot === "e" && hasUpgrade(player, "mage_frost")) {
       const shatterReaction = hasUpgrade(player, "mage_frost_shatter");
+      const flameWave = Boolean(player.mageFlameWave);
       const radius = 285 * player.areaMul;
-      addEffect(room, "slow", player.x, player.y, { color: "#93c5fd", radius, rangeRadius: radius, style: "frost_wave" });
+      addEffect(room, "slow", player.x, player.y, {
+        color: flameWave ? "#fb923c" : "#93c5fd",
+        radius,
+        rangeRadius: radius,
+        style: flameWave ? "flame_wave" : "frost_wave"
+      });
       for (const enemy of room.enemies) {
         if (distance(player, enemy) <= radius + enemy.radius) {
-          enemy.slowTimer = Math.max(enemy.slowTimer, 3.2);
-          if (shatterReaction) {
+          const burningBeforeHit = (enemy.burnTimer || 0) > 0;
+          if (!flameWave) enemy.slowTimer = Math.max(enemy.slowTimer, 3.2);
+          if (shatterReaction && !flameWave) {
             const freezeDuration = enemy.type === "boss" ? 0.55 : enemy.elite ? 0.9 : 1.32;
             enemy.freezeTimer = Math.max(enemy.freezeTimer || 0, freezeDuration);
             addEffect(room, "freeze", enemy.x, enemy.y, {
@@ -8612,18 +9009,32 @@ function performSkill(room, player, slot, now) {
               style: "frost_shatter"
             });
           }
-          dealDamage(room, enemy, def.damage * (shatterReaction ? 1.66 : 1.22), player.id, {
+          const dealt = dealDamage(room, enemy, def.damage * (shatterReaction ? 1.66 : 1.22), player.id, {
+            element: flameWave ? "burn" : undefined,
+            skillTag: flameWave ? "mage_flame_wave" : "mage_frost_wave",
             interruptBossCast: true
           });
+          if (flameWave && dealt > 0) {
+            applyBurnToEnemy(room, enemy, player.id, dealt, { duration: 3.6, totalDamageRatio: 0.48 });
+            if (shatterReaction && burningBeforeHit) {
+              addEffect(room, "explosion", enemy.x, enemy.y, { color: "#f97316", radius: 92 * player.areaMul, style: "flame_shatter" });
+              damageEnemiesInRadius(room, player, enemy.x, enemy.y, 92 * player.areaMul, def.damage * 0.74, {
+                element: "burn",
+                skillTag: "mage_flame_shatter",
+                noVulnerable: true
+              });
+            }
+          }
         }
       }
-      pushEvent(room, `${player.name} 님이 빙결 파동을 사용했습니다.`);
+      pushEvent(room, `${player.name} 님이 ${flameWave ? "화염" : "빙결"} 파동을 사용했습니다.`);
       return;
     }
 
     if (slot === "r" && hasUpgrade(player, "mage_meteor")) {
       const growthStacks = hasUpgrade(player, "mage_meteor_growth") ? Math.max(0, player.mageMeteorGrowthStacks || 0) : 0;
-      const meteorGrowthMul = 1 + Math.min(500, growthStacks) * 0.001;
+      const meteorGrowthCap = 500 + Math.max(0, player.mageMeteorGrowthCapBonus || 0);
+      const meteorGrowthMul = 1 + Math.min(meteorGrowthCap, growthStacks) * 0.001;
       const impactDelay = 1;
       const impactTail = 0.42;
       const meteorRadius =
@@ -8648,12 +9059,15 @@ function performSkill(room, player, slot, now) {
         growth: hasUpgrade(player, "mage_meteor_growth"),
         wildfire: hasUpgrade(player, "mage_wildfire") || hasUpgrade(player, "mage_apocalypse"),
         apocalypse: hasUpgrade(player, "mage_apocalypse"),
+        iceMeteor: Boolean(player.mageIceMeteor),
+        style: "meteor",
         dead: false
       });
       addEffect(room, "meteor", player.input.aimX, player.input.aimY, {
-        color: classes.mage.color,
+        color: player.mageIceMeteor ? "#93c5fd" : classes.mage.color,
         radius: meteorRadius,
         style: "meteor_call",
+        iceMeteor: Boolean(player.mageIceMeteor),
         impactAt: impactDelay,
         duration: impactDelay + impactTail
       });
@@ -8664,12 +9078,12 @@ function performSkill(room, player, slot, now) {
     if (slot === "f" && hasUpgrade(player, "mage_chain")) {
       const pureCurrent = hasUpgrade(player, "mage_chain_no_falloff");
       const empoweredCurrent = hasUpgrade(player, "mage_chain_paralyze");
-      const chainBoost = pureCurrent || empoweredCurrent || hasUpgrade(player, "mage_chain_overload");
+      const gearChainBoost = Boolean(player.mageChainBoost);
       const chainColor = empoweredCurrent ? "#ff2d55" : "#9ee6ff";
       const chainStyle = empoweredCurrent ? "chain_lightning empowered_current red_lightning" : "chain_lightning";
       const source =
-        nearestEnemy(room, player.input.aimX, player.input.aimY, chainBoost ? 640 : 480) ||
-        nearestEnemy(room, player.x, player.y, chainBoost ? 760 : 620);
+        nearestEnemy(room, player.input.aimX, player.input.aimY, gearChainBoost ? MAGE_CHAIN_GEAR_CURSOR_ACQUIRE : MAGE_CHAIN_BASE_CURSOR_ACQUIRE) ||
+        nearestEnemy(room, player.x, player.y, gearChainBoost ? MAGE_CHAIN_GEAR_SELF_ACQUIRE : MAGE_CHAIN_BASE_SELF_ACQUIRE);
       if (source) {
         addEffect(room, "chain", (player.x + source.x) / 2, (player.y + source.y) / 2, {
           color: chainColor,
@@ -8680,11 +9094,11 @@ function performSkill(room, player, slot, now) {
           toY: round2(source.y),
           style: chainStyle
         });
-        dealDamage(room, source, def.damage * (chainBoost ? 2.66 : 2.2), player.id, { forceCrit: empoweredCurrent });
-        chainLightning(room, player.id, source, def.damage * (chainBoost ? 1.72 : 1.44), chainBoost ? 13 : 9, {
-          range: chainBoost ? 455 : 390,
-          falloff: pureCurrent ? 0 : chainBoost ? 0.08 : 0.11,
-          minDamageMul: pureCurrent ? 1 : chainBoost ? 0.55 : 0.42,
+        dealDamage(room, source, def.damage * 2.2, player.id, { forceCrit: empoweredCurrent });
+        chainLightning(room, player.id, source, def.damage * 1.44, gearChainBoost ? MAGE_CHAIN_GEAR_JUMPS : MAGE_CHAIN_BASE_JUMPS, {
+          range: gearChainBoost ? MAGE_CHAIN_GEAR_RANGE : MAGE_CHAIN_BASE_RANGE,
+          falloff: pureCurrent ? 0 : 0.11,
+          minDamageMul: pureCurrent ? 1 : 0.42,
           forceCrit: empoweredCurrent,
           color: chainColor,
           style: chainStyle
@@ -8729,6 +9143,7 @@ function spawnWarriorForwardWhirlwind(room, player, aim, sourceRadius, baseDamag
     tick: 0.02,
     tickInterval: 0.04,
     damage: baseDamage * 1.55 * (options.damageMul || 1),
+    pullEnemies: Boolean(player.warriorWhirlwindPull),
     hitIds: [],
     color: classes.warrior.color,
     style: options.style || "warrior_forward_whirlwind",
@@ -8863,6 +9278,26 @@ function castRangerPierceLaser(room, player, aim, damage, width) {
       color: classes.ranger.color,
       radius: hit.enemy.radius + 28,
       style: "ranger_laser_arrow_hit"
+    });
+  }
+  if (player.rangerLaserFire) {
+    room.hazards.push({
+      id: nextHazardId++,
+      type: "fire_line",
+      ownerId: player.id,
+      x: (fromX + toX) * 0.5,
+      y: (fromY + toY) * 0.5,
+      angle: Math.atan2(aim.y, aim.x),
+      length,
+      width: Math.max(36, width * 0.72),
+      timer: 4.2,
+      tick: 0.08,
+      damage: Math.max(1, getPlayerAttackDamage(player, "ranger") * 0.055),
+      burnTime: 3.2,
+      burnAttackRatio: 0.65,
+      style: "ranger_laser_fire_line",
+      hostile: false,
+      dead: false
     });
   }
   return hitCount;
@@ -9079,12 +9514,13 @@ function triggerAssassinEchoAroundMarked(room, player, x, y, radius, damage, lim
   return hits;
 }
 
-function canWarriorCleaveExecute(enemy) {
-  return enemy.hp > 0 && enemy.type !== "boss" && enemy.hp <= enemy.maxHp * WARRIOR_CLEAVE_EXECUTE_THRESHOLD;
+function canWarriorCleaveExecute(enemy, player = null) {
+  const threshold = clamp(player?.warriorExecutionThreshold || WARRIOR_CLEAVE_EXECUTE_THRESHOLD, WARRIOR_CLEAVE_EXECUTE_THRESHOLD, 0.35);
+  return enemy.hp > 0 && enemy.type !== "boss" && enemy.hp <= enemy.maxHp * threshold;
 }
 
 function triggerWarriorCleaveExecution(room, player, enemy, reach, angle) {
-  if (!canWarriorCleaveExecute(enemy)) return false;
+  if (!canWarriorCleaveExecute(enemy, player)) return false;
   const radius = enemy.radius + Math.min(56, Math.max(34, reach * 0.22));
   addEffect(room, "impact", enemy.x, enemy.y, {
     color: "#ef4444",
@@ -9102,9 +9538,9 @@ function triggerWarriorCleaveExecution(room, player, enemy, reach, angle) {
   return enemy.hp <= 0;
 }
 
-function performWarriorFollowupCleave(room, player, aim, def, reach, swingSide) {
-  const followupDelay = 0.16;
-  const followupImpactDelay = 0.40;
+function performWarriorFollowupCleave(room, player, aim, def, reach, swingSide, options = {}) {
+  const followupDelay = Math.max(0, Number(options.effectDelay ?? 0.16));
+  const followupImpactDelay = Math.max(0.05, Number(options.impactDelay ?? 0.4));
   const lineReach = reach * 1.95;
   const startX = clamp(player.x - aim.x * 26, 36, room.world.w - 36);
   const startY = clamp(player.y - aim.y * 26, 36, room.world.h - 36);
@@ -9118,7 +9554,7 @@ function performWarriorFollowupCleave(room, player, aim, def, reach, swingSide) 
     angle,
     color: classes.warrior.color,
     radius: lineReach,
-    style: "warrior_cleave_vertical",
+    style: options.style || "warrior_cleave_vertical",
     fromX: round2(startX),
     fromY: round2(startY),
     toX: round2(endX),
@@ -9150,6 +9586,42 @@ function performWarriorFollowupCleave(room, player, aim, def, reach, swingSide) 
   return 0;
 }
 
+function performWarriorHorizontalFollowupCleave(room, player, aim, def, reach, swingSide, options = {}) {
+  const effectDelay = Math.max(0, Number(options.effectDelay ?? WARRIOR_REPEAT_CLEAVE_EFFECT_DELAY));
+  const impactDelay = Math.max(0.05, Number(options.impactDelay ?? WARRIOR_REPEAT_CLEAVE_IMPACT_DELAY));
+  const angle = Math.atan2(aim.y, aim.x);
+  addEffect(room, "slash", player.x + aim.x * reach * 0.55, player.y + aim.y * reach * 0.55, {
+    angle,
+    color: classes.warrior.color,
+    radius: reach * 1.16,
+    style: "warrior_cleave_repeat_horizontal",
+    originX: round2(player.x),
+    originY: round2(player.y),
+    reach: round2(reach),
+    arcDot: -0.25,
+    rangeType: "cone",
+    delay: effectDelay,
+    duration: 0.46,
+    swingSide
+  });
+  room.hazards.push({
+    id: nextHazardId++,
+    type: "warrior_followup_cleave",
+    mode: "horizontal",
+    ownerId: player.id,
+    x: player.x,
+    y: player.y,
+    aimX: aim.x,
+    aimY: aim.y,
+    reach,
+    arcDot: -0.25,
+    damage: def.damage * 1.95,
+    armTime: effectDelay + impactDelay,
+    timer: effectDelay + impactDelay + 0.3,
+    dead: false
+  });
+}
+
 function updateWarriorFollowupCleaveHazard(room, hazard, dt) {
   const owner = room.players.get(hazard.ownerId);
   if (!owner || owner.hp <= 0) {
@@ -9162,15 +9634,29 @@ function updateWarriorFollowupCleaveHazard(room, hazard, dt) {
   let hits = 0;
   for (const enemy of room.enemies) {
     if (enemy.hp <= 0) continue;
-    if (distanceToSegment(enemy, hazard.fromX, hazard.fromY, hazard.toX, hazard.toY) > (hazard.width || 48) + enemy.radius) continue;
+    if (hazard.mode === "horizontal") {
+      const dx = enemy.x - hazard.x;
+      const dy = enemy.y - hazard.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const dot = (dx / dist) * (hazard.aimX || 0) + (dy / dist) * (hazard.aimY || 0);
+      if (dist > (hazard.reach || 0) + enemy.radius || dot <= (hazard.arcDot ?? -0.25)) continue;
+    } else if (distanceToSegment(enemy, hazard.fromX, hazard.fromY, hazard.toX, hazard.toY) > (hazard.width || 48) + enemy.radius) {
+      continue;
+    }
     const bossExecutionBonus = hasUpgrade(owner, "warrior_cleave_execution") && (enemy.type === "boss" || enemy.bossId) ? 1.35 : 1;
     const dealt = dealDamage(room, enemy, (hazard.damage || classes.warrior.damage * 1.95) * bossExecutionBonus, owner.id, {
       knockback: 180
     });
     if (dealt <= 0) continue;
-    const executionReady = hasUpgrade(owner, "warrior_cleave_execution") && canWarriorCleaveExecute(enemy);
+    const executionReady = hasUpgrade(owner, "warrior_cleave_execution") && canWarriorCleaveExecute(enemy, owner);
     hits += 1;
-    if (executionReady) triggerWarriorCleaveExecution(room, owner, enemy, hazard.width * 2.5, Math.atan2(hazard.toY - hazard.fromY, hazard.toX - hazard.fromX));
+    if (executionReady) {
+      const executionReach = hazard.mode === "horizontal" ? hazard.reach : hazard.width * 2.5;
+      const executionAngle = hazard.mode === "horizontal"
+        ? Math.atan2(hazard.aimY || 0, hazard.aimX || 1)
+        : Math.atan2(hazard.toY - hazard.fromY, hazard.toX - hazard.fromX);
+      triggerWarriorCleaveExecution(room, owner, enemy, executionReach, executionAngle);
+    }
     addMeleeImpact(room, enemy, executionReady ? "cleave_execute" : "cleave_followup_impact", executionReady ? 1.56 : 1.18);
   }
   if (hits > 0 && hasUpgrade(owner, "warrior_cleave_guard")) {
@@ -9683,7 +10169,8 @@ function isEngineerMechaActive(player) {
 }
 
 function getEngineerMechaDuration(player) {
-  return 8.5 * (hasUpgrade(player, "engineer_reinforced_frame") ? 1.08 : 1);
+  const equipmentDurationMul = player.engineerMechaModule ? ENGINEER_ADAPTIVE_MECHA_DURATION_MUL : 1;
+  return 8.5 * equipmentDurationMul * (hasUpgrade(player, "engineer_reinforced_frame") ? 1.08 : 1);
 }
 
 function getEngineerMechaAttackDamageMul(player) {
@@ -9713,6 +10200,10 @@ function getAttackSpeedCooldownMultiplier(player) {
 
 function getEngineerMechaLaserAreaMul(player) {
   return clamp(Math.max(0.4, player.areaMul || 1), 0.75, 2.05);
+}
+
+function getAdaptiveMechaLaserRadius(player) {
+  return 18 * Math.max(0.4, Number(player?.areaMul) || 1);
 }
 
 function fireEngineerMechaHandLasers(room, player, aim, def) {
@@ -9879,9 +10370,17 @@ function performEngineerSkill(room, player, slot, aim, def) {
   }
 
   if (slot === "f" && hasUpgrade(player, "engineer_drone")) {
-    deployEngineerDrone(room, player, def, 0);
-    if (hasUpgrade(player, "engineer_drone_swarm")) deployEngineerDrone(room, player, def, Math.PI);
-    trimOwnedHazards(room, player.id, "engineer_drone", hasUpgrade(player, "engineer_drone_swarm") ? 2 : 1);
+    const baseCount = hasUpgrade(player, "engineer_drone_swarm") ? 2 : 1;
+    const droneCount = baseCount + Math.max(0, Math.floor(player.engineerDroneBonus || 0));
+    for (let index = 0; index < droneCount; index += 1) {
+      const swarmAuxiliary = index >= baseCount;
+      deployEngineerDrone(room, player, def, (Math.PI * 2 * index) / droneCount, {
+        cooldownSourceSlot: "f",
+        damageMul: swarmAuxiliary ? ENGINEER_SWARM_AUXILIARY_DAMAGE_MUL : 1,
+        swarmAuxiliary
+      });
+    }
+    trimOwnedSkillDrones(room, player.id, droneCount);
     if (hasUpgrade(player, "engineer_interceptor")) {
       player.shield = Math.max(player.shield, 32);
       player.shieldTimer = Math.max(player.shieldTimer, 4.4);
@@ -10318,6 +10817,7 @@ function deployEngineerTurret(room, player, x, y, def, mini = false) {
     id: nextHazardId++,
     type: "engineer_turret",
     ownerId: player.id,
+    cooldownSourceSlot: "q",
     x,
     y,
     radius: mini ? 17 : 23,
@@ -10389,6 +10889,87 @@ function updateEngineerMineCharges(player) {
   }
 }
 
+function trimOwnedSkillDrones(room, ownerId, maxCount) {
+  const drones = room.hazards.filter((hazard) => hazard.ownerId === ownerId && hazard.type === "engineer_drone" && !hazard.gearDroneType && !hazard.dead);
+  while (drones.length > maxCount) {
+    const oldest = drones.shift();
+    if (oldest) oldest.dead = true;
+  }
+}
+
+function fireAdaptiveMechaContinuousLaser(room, player, aim, def) {
+  const probeDistance = Math.hypot(room.world.w, room.world.h);
+  const muzzleX = player.x + aim.x * 42;
+  const muzzleY = player.y + aim.y * 42;
+  const endpoint = getMapBoundedMovementEndpoint(room, { x: muzzleX, y: muzzleY }, aim.x * probeDistance, aim.y * probeDistance, 4, 4);
+  const beamRadius = getAdaptiveMechaLaserRadius(player);
+  const attackCycle = Math.max(0.08, def.attackCd * player.cooldownMul * getAttackCooldownMultiplier(player));
+  const tickInterval = clamp(attackCycle / 4, 0.055, 0.12);
+  const tickDamage = def.damage * 0.82 * (tickInterval / attackCycle);
+  for (const enemy of room.enemies) {
+    if (enemy.hp <= 0 || distanceToSegment(enemy, muzzleX, muzzleY, endpoint.x, endpoint.y) > beamRadius + enemy.radius) continue;
+    const dealt = dealDamage(room, enemy, tickDamage, player.id, {
+      skillTag: "engineer_adaptive_continuous_laser",
+      basicAttack: true,
+      noVulnerable: true
+    });
+    if (dealt > 0 && enemy.type !== "boss") {
+      startEnemyKnockback(room, enemy, aim.x, aim.y, ENGINEER_ADAPTIVE_LASER_KNOCKBACK, {
+        duration: 0.05,
+        maxDistance: ENGINEER_ADAPTIVE_LASER_MAX_PUSH,
+        style: "adaptive_laser_push"
+      });
+    }
+  }
+  return { muzzleX, muzzleY, endpoint, beamRadius, tickInterval };
+}
+
+function updateAdaptiveMechaContinuousLaser(room, player, def, dt) {
+  const aim = getAimVector(player);
+  player.lastAttackAt = Date.now();
+  player.adaptiveMechaLaserTick = Math.max(0, Number(player.adaptiveMechaLaserTick || 0) - dt);
+  player.adaptiveMechaLaserVisualTick = Math.max(0, Number(player.adaptiveMechaLaserVisualTick || 0) - dt);
+
+  let beam = null;
+  if (player.adaptiveMechaLaserTick <= 0) {
+    beam = fireAdaptiveMechaContinuousLaser(room, player, aim, def);
+    player.adaptiveMechaLaserTick = beam.tickInterval;
+  }
+  if (player.adaptiveMechaLaserVisualTick > 0) return;
+
+  if (!beam) {
+    const probeDistance = Math.hypot(room.world.w, room.world.h);
+    const muzzleX = player.x + aim.x * 42;
+    const muzzleY = player.y + aim.y * 42;
+    beam = {
+      muzzleX,
+      muzzleY,
+      endpoint: getMapBoundedMovementEndpoint(room, { x: muzzleX, y: muzzleY }, aim.x * probeDistance, aim.y * probeDistance, 4, 4),
+      beamRadius: getAdaptiveMechaLaserRadius(player)
+    };
+  }
+  const beamLength = Math.hypot(beam.endpoint.x - beam.muzzleX, beam.endpoint.y - beam.muzzleY);
+  addEffect(room, "shot", (beam.muzzleX + beam.endpoint.x) / 2, (beam.muzzleY + beam.endpoint.y) / 2, {
+    color: "#38bdf8",
+    fromX: round2(beam.muzzleX),
+    fromY: round2(beam.muzzleY),
+    toX: round2(beam.endpoint.x),
+    toY: round2(beam.endpoint.y),
+    aimX: round2(player.input.aimX),
+    aimY: round2(player.input.aimY),
+    beamLength: round2(beamLength),
+    muzzleDistance: 42,
+    hitRadius: round2(beam.beamRadius),
+    width: round2(beam.beamRadius * 2),
+    radius: beamLength * 0.5,
+    angle: Math.atan2(aim.y, aim.x),
+    rangeType: "line",
+    style: "engineer_mecha_hand_laser adaptive_continuous_laser",
+    duration: 0.14
+  });
+  player.adaptiveMechaLaserVisualTick = 0.05;
+}
+
 function consumeEngineerMineCharge(player) {
   const maxCharges = getEngineerMineMaxCharges(player);
   if (maxCharges <= 1) {
@@ -10458,6 +11039,7 @@ function deployEngineerMine(room, player, x, y, def, options = {}) {
     armTimeMax: armTime,
     damage: def.damage * damageMul,
     charged,
+    leaveFire: Boolean(player.engineerMineFire),
     style: passive ? (charged ? "auto_charged_mine" : "auto_shock_mine") : charged ? "charged_mine" : "shock_mine",
     color: classes.engineer.color,
     dead: false
@@ -10467,22 +11049,25 @@ function deployEngineerMine(room, player, x, y, def, options = {}) {
   addEngineerDeviceThrowEffect(room, player, x, y, passive ? "auto_mine" : charged ? "charged_mine" : "mine", 0.48);
 }
 
-function deployEngineerDrone(room, player, def, phase = 0) {
+function deployEngineerDrone(room, player, def, phase = 0, options = {}) {
+  const swarmAuxiliary = Boolean(options.swarmAuxiliary);
   room.hazards.push({
     id: nextHazardId++,
     type: "engineer_drone",
     ownerId: player.id,
+    cooldownSourceSlot: options.cooldownSourceSlot || "",
     x: player.x + Math.cos(phase) * 68,
     y: player.y + Math.sin(phase) * 68,
-    radius: 17,
+    radius: swarmAuxiliary ? 14 : 17,
     timer: (hasUpgrade(player, "engineer_factory") ? 18 : 14) * getEngineerDurationMul(player),
     fireTimer: 0,
     fireRate: 0.4 * getEngineerFireRateMul(player),
-    damage: def.damage * (hasUpgrade(player, "engineer_interceptor") ? 0.92 : 0.78),
+    damage: def.damage * (hasUpgrade(player, "engineer_interceptor") ? 0.92 : 0.78) * Math.max(0.1, Number(options.damageMul) || 1),
     range: (hasUpgrade(player, "engineer_interceptor") ? 520 : 430) * player.rangeMul,
     orbitPhase: phase,
     missileMode: hasUpgrade(player, "engineer_drone_missile"),
     kamikaze: hasUpgrade(player, "engineer_drone_kamikaze"),
+    swarmAuxiliary,
     style: hasUpgrade(player, "engineer_drone_missile") ? "drone_missile" : "drone_guard",
     overclockTimer: 0,
     color: classes.engineer.color,
@@ -10647,6 +11232,25 @@ function updateEngineerMine(room, hazard, dt = 0) {
       addMeleeImpact(room, enemy, "shield_slam", 0.82);
       addEffect(room, "slow", enemy.x, enemy.y, { color: classes.engineer.color, radius: enemy.radius + 14 });
     }
+  }
+  if (hazard.leaveFire) {
+    room.hazards.push({
+      id: nextHazardId++,
+      type: "fire_pool",
+      ownerId: hazard.ownerId,
+      x: hazard.x,
+      y: hazard.y,
+      radius: blastRadius * 0.82,
+      timer: hazard.charged ? 5.2 : 4.4,
+      tick: 0.08,
+      damage: Math.max(1, getPlayerAttackDamage(owner, "engineer") * 0.065),
+      burnTime: 3.2,
+      burnAttackRatio: 0.55,
+      color: "#f97316",
+      style: "engineer_mine_fire",
+      hostile: false,
+      dead: false
+    });
   }
   hazard.dead = true;
   return true;
@@ -10979,7 +11583,11 @@ function applyBurnToEnemy(room, enemy, ownerId, sourceDamage, options = {}) {
   const duration = Math.max(0.1, Number.isFinite(options.duration) ? options.duration : ENEMY_BURN_DURATION);
   const totalDamageRatio = Number.isFinite(options.totalDamageRatio) ? options.totalDamageRatio : ENEMY_BURN_TOTAL_DAMAGE_RATIO;
   const baseDamage = Number.isFinite(sourceDamage) ? sourceDamage : 0;
-  const nextDps = (Math.max(0, baseDamage) * Math.max(0, totalDamageRatio)) / duration;
+  const owner = room.players.get(ownerId);
+  const attackDamageRatio = Math.max(0, Number(options.attackDamageRatio) || 0);
+  const sourceBasedTotal = Math.max(0, baseDamage) * Math.max(0, totalDamageRatio);
+  const attackBasedTotal = owner ? getPlayerAttackDamage(owner, owner.classId) * attackDamageRatio : 0;
+  const nextDps = Math.max(sourceBasedTotal, attackBasedTotal) / duration;
   if (nextDps <= 0) return;
   const wasInactive = (enemy.burnTimer || 0) <= 0;
   const stronger = nextDps >= (enemy.burnDps || 0);
@@ -11063,7 +11671,58 @@ function removeOwnedHazards(room, ownerId, type) {
   }
 }
 
+function getProjectileAegisVisualHash(value) {
+  const text = String(value || "0");
+  let hash = 0;
+  for (let i = 0; i < text.length; i += 1) hash = (hash * 31 + text.charCodeAt(i)) % 9973;
+  return hash / 9973;
+}
+
+function tryBlockHostileProjectileWithAegis(room, projectile, fromX, fromY, now) {
+  let closestBlock = null;
+  const travelX = projectile.x - fromX;
+  const travelY = projectile.y - fromY;
+  const travelLengthSq = travelX * travelX + travelY * travelY || 1;
+
+  for (const player of getActiveLivingPlayers(room)) {
+    const charges = Math.max(0, Math.min(3, Math.floor(Number(player.projectileShieldCharges || 0))));
+    if (charges <= 0) continue;
+    const sizeScale = Math.max(0.75, Number(player.sizeScale || 1));
+    const orbit = PROJECTILE_AEGIS_ORBIT_RADIUS * sizeScale;
+    const plateRadius = PROJECTILE_AEGIS_PLATE_RADIUS * sizeScale;
+    const spin = now / PROJECTILE_AEGIS_ROTATION_MS + getProjectileAegisVisualHash(player.id) * 0.05;
+
+    for (let i = 0; i < charges; i += 1) {
+      const angle = spin + (Math.PI * 2 * i) / 3;
+      const plate = {
+        x: player.x + Math.cos(angle) * orbit,
+        y: player.y + Math.sin(angle) * orbit * PROJECTILE_AEGIS_ORBIT_Y_SCALE
+      };
+      if (!collisionSystem.segmentIntersectsCircle(plate, plateRadius, fromX, fromY, projectile.x, projectile.y, projectile.radius || 0)) continue;
+      const t = clamp(((plate.x - fromX) * travelX + (plate.y - fromY) * travelY) / travelLengthSq, 0, 1);
+      if (!closestBlock || t < closestBlock.t) closestBlock = { player, plate, t };
+    }
+  }
+
+  if (!closestBlock) return false;
+  const { player, plate } = closestBlock;
+  player.projectileShieldCharges = Math.max(0, (player.projectileShieldCharges || 0) - 1);
+  if (player.projectileShieldCharges <= 0) {
+    player.projectileShieldRespawnTimer = Math.max(1, player.projectileShieldCooldown || 12);
+  }
+  projectile.x = plate.x;
+  projectile.y = plate.y;
+  projectile.dead = true;
+  addEffect(room, "shield", plate.x, plate.y, {
+    color: "#67e8f9",
+    radius: 46,
+    style: "equipment_projectile_aegis_block"
+  });
+  return true;
+}
+
 function updateProjectiles(room, dt) {
+  const now = Date.now();
   for (const projectile of room.projectiles) {
     if (projectile.dead) continue;
     const prevX = projectile.x;
@@ -11080,6 +11739,7 @@ function updateProjectiles(room, dt) {
     }
 
     if (projectile.hostile) {
+      if (tryBlockHostileProjectileWithAegis(room, projectile, prevX, prevY, now)) continue;
       for (const player of getActiveLivingPlayers(room)) {
         if (!collisionSystem.circlesOverlap(projectile, projectile.radius, player, getPlayerCollisionRadius(player))) continue;
         const dealt = damagePlayer(room, player, projectile.damage, projectile.ownerId, projectile.x, projectile.y, {
@@ -11113,8 +11773,14 @@ function updateProjectiles(room, dt) {
       if (!projectile.hitEnemyIds) projectile.hitEnemyIds = [];
       projectile.hitEnemyIds.push(enemy.id);
       if (projectile.homingTargetId === enemy.id) projectile.homingTargetId = undefined;
-      const dealt = dealDamage(room, enemy, projectile.damage, projectile.ownerId, { skillTag: projectile.skillTag });
+      const dealt = dealDamage(room, enemy, projectile.damage, projectile.ownerId, {
+        skillTag: projectile.skillTag,
+        basicAttack: projectile.basicAttack,
+        forceCrit: Boolean(projectile.forceCrit)
+      });
       applyProjectileStatus(room, projectile, enemy, dealt);
+      const giantStarOrb = String(projectile.style || "").includes("giant_star_orb");
+      const projectileAngle = Math.atan2(projectile.vy || 0, projectile.vx || 1);
       addEffect(room, "impact", projectile.x, projectile.y, {
         color:
           projectile.burn
@@ -11127,10 +11793,20 @@ function updateProjectiles(room, dt) {
               ? classes[projectile.classId].color
               : "#f8f3e9",
         radius: projectile.radius + 18,
-        style: projectile.style || ""
+        style: giantStarOrb ? "star_orb_pierce_impact" : projectile.style || "",
+        angle: projectileAngle,
+        duration: projectile.classId === "mage" ? 0.24 : undefined
       });
+      if (giantStarOrb && dealt > 0 && enemy.type !== "boss") {
+        startEnemyKnockback(room, enemy, projectile.vx || 1, projectile.vy || 0, 34, {
+          duration: 0.12,
+          maxDistance: 42,
+          style: "giant_star_orb_push",
+          interruptCharge: true
+        });
+      }
 
-      if (projectile.splash > 0) {
+      if (projectile.splash > 0 && !giantStarOrb) {
         const splashColor = classes[projectile.classId]?.color || classes.mage.color;
         const missileSplash = String(projectile.style || "").includes("missile");
         const explosiveArrow = Boolean(projectile.explosiveArrow);
@@ -11143,13 +11819,17 @@ function updateProjectiles(room, dt) {
             : explosiveArrow
               ? "ranger_explosive_arrow"
               : projectile.classId === "alchemist"
-                ? "alchemy_splash"
-                : "arcane_splash"
+                  ? "alchemy_splash"
+                  : "arcane_splash",
+          duration: projectile.classId === "mage" ? 0.3 : undefined
         });
         for (const nearby of room.enemies) {
           if (nearby.id === enemy.id || nearby.hp <= 0) continue;
           if (distance(enemy, nearby) <= projectile.splash + nearby.radius) {
-            const splashDealt = dealDamage(room, nearby, projectile.damage * 0.52, projectile.ownerId, { skillTag: projectile.skillTag });
+            const splashDealt = dealDamage(room, nearby, projectile.damage * 0.52, projectile.ownerId, {
+              skillTag: projectile.skillTag,
+              forceCrit: Boolean(projectile.forceCrit)
+            });
             applyProjectileStatus(room, projectile, nearby, splashDealt);
           }
         }
@@ -11346,6 +12026,14 @@ function updateHazards(room, dt) {
           const falloff = clamp(1 - centerDistance / Math.max(1, hazard.radius + enemy.radius), 0.42, 1);
           const dealt = dealDamage(room, enemy, hazard.damage * falloff, hazard.ownerId, { noVulnerable: true });
           if ((hazard.slowDuration || 0) > 0) enemy.slowTimer = Math.max(enemy.slowTimer, hazard.slowDuration);
+          if (hazard.pullEnemies && enemy.type !== "boss") {
+            startEnemyKnockback(room, enemy, hazard.x - enemy.x, hazard.y - enemy.y, enemy.elite ? 18 : 30, {
+              duration: 0.16,
+              maxDistance: 34,
+              style: "shield_charge_gather",
+              interruptCharge: true
+            });
+          }
           if (hazard.poisonGarden) {
             stackPoisonOnEnemy(room, enemy, hazard.ownerId, { duration: ENEMY_POISON_DURATION, stacks: 1 });
           }
@@ -11617,12 +12305,19 @@ function updateHazards(room, dt) {
         for (const enemy of room.enemies) {
           if (enemy.hp <= 0 || distance(hazard, enemy) > hazard.radius + enemy.radius) continue;
           const dealt = dealDamage(room, enemy, hazard.damage, hazard.ownerId, { knockback: 210, skillTag: hazard.growth ? "mage_meteor" : undefined });
-          applyBurnToEnemy(room, enemy, hazard.ownerId, dealt, { duration: 3, totalDamageRatio: 0.24 });
+          if (hazard.iceMeteor) {
+            const freezeDuration = enemy.type === "boss" ? 0.7 : enemy.elite ? 1.05 : 1.5;
+            enemy.freezeTimer = Math.max(enemy.freezeTimer || 0, freezeDuration);
+            enemy.slowTimer = Math.max(enemy.slowTimer || 0, 2.4);
+          } else {
+            applyBurnToEnemy(room, enemy, hazard.ownerId, dealt, { duration: 3, totalDamageRatio: 0.24 });
+          }
         }
         addEffect(room, "explosion", hazard.x, hazard.y, {
-          color: "#f97316",
+          color: hazard.iceMeteor ? "#93c5fd" : "#f97316",
           radius: hazard.radius * 1.05,
-          style: "meteor_impact"
+          style: "meteor_impact",
+          iceMeteor: Boolean(hazard.iceMeteor)
         });
         if (hazard.apocalypse) {
           const source = nearestEnemy(room, hazard.x, hazard.y, hazard.radius + 260);
@@ -11634,7 +12329,24 @@ function updateHazards(room, dt) {
             });
           }
         }
-        if (hazard.wildfire || hazard.apocalypse) {
+        if (hazard.iceMeteor) {
+          const icePoolOwner = room.players.get(hazard.ownerId);
+          room.hazards.push({
+            id: nextHazardId++,
+            type: "ice_pool",
+            ownerId: hazard.ownerId,
+            x: hazard.x,
+            y: hazard.y,
+            radius: hazard.radius * (hazard.apocalypse ? 1.02 : 0.92),
+            timer: hazard.apocalypse ? 6.2 : 5.2,
+            tick: 0.12,
+            damage: Math.max(1, getPlayerAttackDamage(icePoolOwner, "mage") * 0.09),
+            color: "#93c5fd",
+            style: "ice_field",
+            hostile: false,
+            dead: false
+          });
+        } else if (hazard.wildfire || hazard.apocalypse) {
           const firePoolOwner = room.players.get(hazard.ownerId);
           room.hazards.push({
             id: nextHazardId++,
@@ -11647,12 +12359,48 @@ function updateHazards(room, dt) {
             tick: 0.12,
             damage: Math.max(1, getPlayerAttackDamage(firePoolOwner, "mage") * 0.13),
             burnTime: hazard.apocalypse ? 4.1 : 3.4,
+            burnAttackRatio: hazard.apocalypse ? 0.78 : 0.65,
             hostile: false,
             dead: false
           });
         }
         hazard.dead = true;
       }
+      continue;
+    }
+
+    if (hazard.type === "fire_line") {
+      hazard.tick -= dt;
+      if (hazard.tick <= 0) {
+        const halfLength = Math.max(1, hazard.length || 1) * 0.5;
+        const halfWidth = Math.max(8, hazard.width || 16) * 0.5;
+        const ux = Math.cos(hazard.angle || 0);
+        const uy = Math.sin(hazard.angle || 0);
+        const fromX = hazard.x - ux * halfLength;
+        const fromY = hazard.y - uy * halfLength;
+        const toX = hazard.x + ux * halfLength;
+        const toY = hazard.y + uy * halfLength;
+        for (const enemy of room.enemies) {
+          if (enemy.hp <= 0 || distanceToSegment(enemy, fromX, fromY, toX, toY) > halfWidth + enemy.radius) continue;
+          const dealt = dealDamage(room, enemy, hazard.damage, hazard.ownerId, { silent: true, element: "burn", skillTag: "ranger_laser_fire_line" });
+          if (dealt > 0) {
+            addEffect(room, "damage", enemy.x, enemy.y - enemy.radius, {
+              value: Math.max(1, Math.round(dealt)),
+              color: "#fb923c",
+              radius: enemy.radius + 8,
+              style: "fire_line_tick",
+              targetId: enemy.id
+            });
+          }
+          applyBurnToEnemy(room, enemy, hazard.ownerId, dealt, {
+            duration: hazard.burnTime || ENEMY_BURN_DURATION,
+            totalDamageRatio: 0.25,
+            attackDamageRatio: hazard.burnAttackRatio || 0
+          });
+        }
+        hazard.tick = 0.5;
+      }
+      if (hazard.timer <= 0) hazard.dead = true;
       continue;
     }
 
@@ -11673,8 +12421,32 @@ function updateHazards(room, dt) {
           }
           applyBurnToEnemy(room, enemy, hazard.ownerId, dealt, {
             duration: hazard.burnTime || ENEMY_BURN_DURATION,
-            totalDamageRatio: 0.25
+            totalDamageRatio: 0.25,
+            attackDamageRatio: hazard.burnAttackRatio || 0
           });
+        }
+        hazard.tick = 0.5;
+      }
+      if (hazard.timer <= 0) hazard.dead = true;
+      continue;
+    }
+
+    if (hazard.type === "ice_pool") {
+      hazard.tick -= dt;
+      if (hazard.tick <= 0) {
+        for (const enemy of room.enemies) {
+          if (enemy.hp <= 0 || distance(hazard, enemy) > hazard.radius + enemy.radius) continue;
+          enemy.slowTimer = Math.max(enemy.slowTimer || 0, 0.9);
+          const dealt = dealDamage(room, enemy, hazard.damage, hazard.ownerId, { silent: true, element: "cold", skillTag: "mage_ice_field" });
+          if (dealt > 0) {
+            addEffect(room, "damage", enemy.x, enemy.y - enemy.radius, {
+              value: Math.max(1, Math.round(dealt)),
+              color: "#93c5fd",
+              radius: enemy.radius + 8,
+              style: "ice_pool_tick",
+              targetId: enemy.id
+            });
+          }
         }
         hazard.tick = 0.5;
       }
@@ -11735,6 +12507,27 @@ function updateWarriorForwardWhirlwind(room, hazard, dt) {
   hazard.tick = Math.max(0, (hazard.tick || 0) - dt);
   hazard.angle = Math.atan2(hazard.vy || 0, hazard.vx || 1);
 
+  if (hazard.pullEnemies) {
+    const pullRadius = hazard.radius * 1.55;
+    for (const enemy of room.enemies) {
+      if (enemy.hp <= 0 || enemy.type === "boss") continue;
+      const dx = hazard.x - enemy.x;
+      const dy = hazard.y - enemy.y;
+      const centerDistance = Math.hypot(dx, dy);
+      if (centerDistance > pullRadius + enemy.radius) continue;
+      const stopDistance = Math.max(22, enemy.radius * 0.38);
+      const pullStep = Math.min(
+        Math.max(0, centerDistance - stopDistance),
+        (enemy.elite ? 820 : 1180) * dt
+      );
+      if (pullStep <= 0 || centerDistance <= 0.001) continue;
+      enemy.windup = null;
+      enemy.chargeMove = null;
+      enemy.knockbackMove = null;
+      moveEnemyBy(room, enemy, (dx / centerDistance) * pullStep, (dy / centerDistance) * pullStep);
+    }
+  }
+
   const hitIds = hazard.hitIds || [];
   hazard.hitIds = hitIds;
   if (hazard.tick <= 0) {
@@ -11744,11 +12537,11 @@ function updateWarriorForwardWhirlwind(room, hazard, dt) {
       if (distanceToSegment(enemy, prevX, prevY, hazard.x, hazard.y) > hazard.radius + enemy.radius) continue;
       const dealt = dealDamage(room, enemy, hazard.damage || classes.warrior.damage, hazard.ownerId, {
         noVulnerable: true,
-        knockback: 120
+        knockback: hazard.pullEnemies ? 0 : 120
       });
       if (dealt > 0) {
         hitIds.push(enemy.id);
-        if (enemy.type !== "boss") {
+        if (!hazard.pullEnemies && enemy.type !== "boss") {
           startEnemyKnockback(room, enemy, hazard.vx || 1, hazard.vy || 0, enemy.elite ? 105 : 155, {
             duration: 0.16,
             maxDistance: enemy.elite ? 120 : 175,
@@ -11798,13 +12591,16 @@ function updateXpOrbs(room, dt) {
   for (const orb of room.xpOrbs || []) {
     if (orb.dead) continue;
     const magnetTarget = orb.magnetTargetId ? room.players.get(orb.magnetTargetId) : null;
-    const target = isActiveLivingPlayer(magnetTarget) ? magnetTarget : nearestLivingPlayer(room, orb);
+    const equipmentMagnetTarget = getActiveLivingPlayers(room)
+      .filter((player) => player.xpMagnet)
+      .reduce((best, player) => !best || distance(orb, player) < distance(orb, best) ? player : best, null);
+    const target = isActiveLivingPlayer(magnetTarget) ? magnetTarget : equipmentMagnetTarget || nearestLivingPlayer(room, orb);
     if (!target) continue;
 
     const dx = target.x - orb.x;
     const dy = target.y - orb.y;
     const dist = Math.hypot(dx, dy) || 1;
-    const forcedMagnet = Boolean(orb.magnetTargetId && target.id === orb.magnetTargetId);
+    const forcedMagnet = Boolean((orb.magnetTargetId && target.id === orb.magnetTargetId) || target.xpMagnet);
     const magnetRange = forcedMagnet ? Infinity : 185 + Math.min(95, target.level * 6);
 
     if (dist <= 28) {
@@ -11934,6 +12730,7 @@ function updateEnemies(room, dt, now) {
       enemy.knockbackMove = null;
       continue;
     }
+
     enemy.bossArrivalStasisUntil = 0;
 
     // Phase gates must advance before crowd control can short-circuit boss AI.
@@ -12515,6 +13312,7 @@ function updateFieldPickups(room, dt) {
         abyssDepth: pickup.abyssDepth,
         ascensionLevel: pickup.ascensionLevel,
         rarity: pickup.rarity,
+        rarityCap: pickup.rarityCap,
       });
       if (!granted.item) {
         pickup.dead = true;
@@ -12522,10 +13320,18 @@ function updateFieldPickups(room, dt) {
       }
       const session = accountStore.updateProgress(account.id, granted.progress, "field-equipment-drop");
       target.accountRevision = Number(session?.account?.revision || target.accountRevision || 0);
-      sendAccountProgress(target, session, "equipment-drop", `${granted.item.name} 획득`);
+      sendAccountProgress(target, session, "equipment-drop", `${granted.item.name} 획득`, {
+        equipmentPickup: {
+          id: granted.item.id,
+          name: granted.item.name,
+          slot: granted.item.slot,
+          rarity: granted.item.rarity,
+          level: Math.max(1, Math.floor(Number(granted.item.itemLevel || 1))),
+        },
+      });
       addEffect(room, "impact", target.x, target.y, {
-        color: "#fbbf24",
-        radius: 58,
+        color: ({ common: "#cbd5e1", rare: "#60a5fa", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185", unique: "#5eead4" })[granted.item.rarity] || "#cbd5e1",
+        radius: granted.item.rarity === "unique" ? 96 : granted.item.rarity === "mythic" ? 86 : granted.item.rarity === "legendary" ? 74 : 62,
         style: "field_equipment_pickup"
       });
       pushEvent(room, `${target.name} 님이 ${granted.item.name} 장비를 획득했습니다.`);
@@ -13984,7 +14790,7 @@ function castBossFieldJudgment(room, enemy, profile, target, options = {}) {
   enemy.chargeMove = null;
   enemy.lethalCastTimer = armTime;
   enemy.lethalCastTimerMax = armTime;
-  enemy.lethalCastLabel = "즉사 패턴";
+  enemy.lethalCastLabel = "파란 원으로 도망치세요";
 
   room.hazards.push({
     id: nextHazardId++,
@@ -15719,7 +16525,8 @@ function stopProjectileOnMapWall(room, projectile, fromX, fromY) {
 
   projectile.x = hit.x;
   projectile.y = hit.y;
-  if (!projectile.hostile) {
+  const giantStarOrb = String(projectile.style || "").includes("giant_star_orb");
+  if (!projectile.hostile && !giantStarOrb) {
     const owner = room.players.get(projectile.ownerId);
     if (!Number.isFinite(projectile.wallBouncesRemaining)) {
       projectile.wallBouncesRemaining = Math.max(0, Math.floor(owner?.wallBounceBonus || 0));
@@ -15738,14 +16545,30 @@ function stopProjectileOnMapWall(room, projectile, fromX, fromY) {
     }
   }
   projectile.dead = true;
+  if (giantStarOrb) explodeGiantStarOrbOnWall(room, projectile, hit.x, hit.y);
   addEffect(room, "impact", hit.x, hit.y, {
     color: getProjectileWallImpactColor(projectile),
-    radius: Math.max(18, (Number(projectile.radius) || 8) + 14),
-    style: projectile.hostile ? "projectile_wall_hit_hostile" : "projectile_wall_hit",
+    radius: giantStarOrb ? Math.max(72, Number(projectile.splash) || (Number(projectile.radius) || 8) * 1.85) : Math.max(18, (Number(projectile.radius) || 8) + 14),
+    rangeRadius: giantStarOrb ? Math.max(72, Number(projectile.splash) || 0) : undefined,
+    style: giantStarOrb ? "giant_star_orb_wall_impact" : projectile.hostile ? "projectile_wall_hit_hostile" : "projectile_wall_hit",
     angle: Math.atan2(projectile.vy || 0, projectile.vx || 0),
-    duration: 0.22
+    duration: giantStarOrb ? 0.46 : 0.22
   });
   return true;
+}
+
+function explodeGiantStarOrbOnWall(room, projectile, x, y) {
+  const radius = Math.max(72, Number(projectile.splash) || 0);
+  const damage = Math.max(1, Number(projectile.damage) || 0) * 0.52;
+  for (const enemy of room.enemies) {
+    if (enemy.hp <= 0 || distance({ x, y }, enemy) > radius + enemy.radius) continue;
+    const dealt = dealDamage(room, enemy, damage, projectile.ownerId, {
+      skillTag: projectile.skillTag,
+      forceCrit: Boolean(projectile.forceCrit),
+      noVulnerable: true
+    });
+    applyProjectileStatus(room, projectile, enemy, dealt);
+  }
 }
 
 function reflectProjectileFromWall(projectile, wall) {
@@ -16279,7 +17102,7 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
             : 0.5;
         owner.rangerPierceKills = previousKills + 1;
         owner.rangerPierceDamageBonus = Math.min(
-          RANGER_PIERCE_GROWTH_CAP,
+          RANGER_PIERCE_GROWTH_CAP + Math.max(0, owner.rangerPierceCapBonus || 0),
           Math.max(0, owner.rangerPierceDamageBonus || 0) + growth
         );
         addEffect(room, "impact", owner.x, owner.y, {
@@ -16297,6 +17120,7 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
         });
       }
       applyRelicOnKill(room, owner, enemy);
+      spreadEquipmentPoisonOnDeath(room, owner, enemy);
     }
     dropXpOrb(room, enemy, ownerId);
     maybeDropFieldPickup(room, enemy);
@@ -16305,6 +17129,34 @@ function dealDamage(room, enemy, amount, ownerId, options = {}) {
     maybeDropRelicChest(room, enemy, ownerId);
   }
   return finalDamage;
+}
+
+function spreadEquipmentPoisonOnDeath(room, owner, enemy) {
+  if (!owner?.poisonSpread) return;
+  const poisoned = (enemy.poisonTimer || 0) > 0 && (enemy.poisonDotStacks || 0) > 0;
+  const venomous = (enemy.venomTimer || 0) > 0;
+  if (!poisoned && !venomous) return;
+  const radius = 220 * (owner.areaMul || 1);
+  let infected = 0;
+  for (const nearby of room.enemies) {
+    if (nearby.id === enemy.id || nearby.hp <= 0 || distance(enemy, nearby) > radius + nearby.radius) continue;
+    const stackChange = applyPoisonToEnemy(nearby, owner.id, {
+      duration: 3.2 * (owner.poisonDurationMul || 1),
+      stacks: 1,
+      maxStacks: ENEMY_POISON_MAX_STACKS + Math.max(0, owner.poisonStackCapBonus || 0)
+    });
+    showPoisonStackEffect(room, nearby, stackChange);
+    if (venomous) applyVenomToEnemy(room, nearby, owner.id, { duration: 2.5 });
+    infected += 1;
+    if (infected >= 6) break;
+  }
+  if (infected > 0) {
+    addEffect(room, "poison", enemy.x, enemy.y, {
+      color: venomous ? "#c084fc" : "#9aa15f",
+      radius,
+      style: "equipment_poison_spread"
+    });
+  }
 }
 
 function recordTrainingDummyDamage(dummy, damage, now = Date.now()) {
@@ -16549,7 +17401,8 @@ function damagePlayer(room, player, amount, sourceId, x, y, options = {}) {
   if (!isActivePlayer(player) || player.hp <= 0 || player.immunityTimer > 0) return 0;
   if (shouldUsePlayerHitIFrames(options) && (player.hitIFrameTimer || 0) > 0) return 0;
   const sourceEnemy = room.enemies.find((enemy) => enemy.id === sourceId);
-  let finalDamage = Math.max(1, amount - ((player.armor || 0) + getEngineerMechaArmorBonus(player)));
+  const effectiveArmor = player.armorLockZero ? 0 : (player.armor || 0) + getEngineerMechaArmorBonus(player);
+  let finalDamage = Math.max(1, amount - effectiveArmor);
   if (sourceEnemy?.weakenTimer > 0) finalDamage *= 0.76;
   if (player.tauntGuardTimer > 0) {
     finalDamage *= hasUpgrade(player, "warrior_taunt_bastion") ? 0.48 : WARRIOR_TAUNT_DAMAGE_MUL;
@@ -16954,6 +17807,18 @@ function startNextChapter(room) {
   startSurvivalMode(room);
 }
 
+function getFieldEquipmentRewardState(room) {
+  const elapsed = Math.max(0, Number(room.survival?.elapsed) || 0);
+  const progress = clamp(elapsed / SURVIVAL_DURATION_SEC, 0, 1);
+  const selectedAscension = Math.max(0, Math.floor(Number(room.ascensionLevel) || 0));
+  const ascensionLevel = Math.floor(selectedAscension * progress);
+  const timeRarityCap = elapsed < 180 ? "rare" : elapsed < 360 ? "epic" : elapsed < 450 ? "legendary" : elapsed < 510 ? "mythic" : "unique";
+  const ascensionRarityCap = selectedAscension >= 4 ? "unique" : selectedAscension >= 3 ? "mythic" : "legendary";
+  const rarityOrder = ["common", "rare", "epic", "legendary", "mythic", "unique"];
+  const rarityCap = rarityOrder[Math.min(rarityOrder.indexOf(timeRarityCap), rarityOrder.indexOf(ascensionRarityCap))];
+  return { elapsed, progress, ascensionLevel, selectedAscension, rarityCap };
+}
+
 function maybeDropFieldPickup(room, enemy) {
   if (!enemy || (room.status !== "combat" && room.status !== "advancement")) return;
   if (enemy.type === "splinter" || enemy.type === "boss" || enemy.bossId) return;
@@ -16964,7 +17829,9 @@ function maybeDropFieldPickup(room, enemy) {
 
   const chanceMul = enemy.elite ? 2 : 1;
   const ascensionRewardMul = getAbyssDifficulty(room).rewardMul;
-  const equipmentChance = EQUIPMENT_DROP_CHANCE * Math.sqrt(ascensionRewardMul);
+  const equipmentReward = getFieldEquipmentRewardState(room);
+  const ascensionDropMul = 1 + (Math.sqrt(ascensionRewardMul) - 1) * equipmentReward.progress;
+  const equipmentChance = EQUIPMENT_DROP_CHANCE * ascensionDropMul;
   const roll = Math.random();
   let type = "";
   if (roll < HEALTH_POTION_DROP_CHANCE * chanceMul) {
@@ -16993,18 +17860,20 @@ function maybeDropFieldPickup(room, enemy) {
     pickup.dropId = `${room.runStartedAt || Date.now()}:${pickupId}`;
     pickup.highestLevel = getActivePlayers(room).reduce((highest, player) => Math.max(highest, player.level || 1), 1);
     pickup.abyssDepth = Math.max(0, room.abyssDepth || 0);
-    pickup.ascensionLevel = Math.max(0, room.ascensionLevel || 0);
+    pickup.ascensionLevel = equipmentReward.ascensionLevel;
+    pickup.rarityCap = equipmentReward.rarityCap;
     pickup.rarity = progressionService.getEquipmentDropPreview({
       dropId: pickup.dropId,
       classId: getActivePlayers(room)[0]?.classId || "warrior",
       highestLevel: pickup.highestLevel,
       abyssDepth: pickup.abyssDepth,
       ascensionLevel: pickup.ascensionLevel,
+      rarityCap: pickup.rarityCap,
     }).rarity;
   }
   room.fieldPickups.push(pickup);
   addEffect(room, "impact", pickup.x, pickup.y, {
-    color: type === "health_potion" ? "#f59e0b" : type === "equipment" ? ({ common: "#cbd5e1", rare: "#60a5fa", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185" }[pickup.rarity] || "#cbd5e1") : "#67e8f9",
+    color: type === "health_potion" ? "#f59e0b" : type === "equipment" ? ({ common: "#cbd5e1", rare: "#60a5fa", epic: "#c084fc", legendary: "#fbbf24", mythic: "#fb7185", unique: "#5eead4" }[pickup.rarity] || "#cbd5e1") : "#67e8f9",
     radius: 28,
     style: type === "health_potion" ? "field_health_potion_drop" : type === "equipment" ? "field_equipment_drop" : "field_xp_magnet_drop"
   });
@@ -17591,11 +18460,12 @@ function chooseSkillUpgrade(room, player, upgradeId, options = {}) {
 
   player.pendingSkillChoices = [];
   addEffect(room, "level", player.x, player.y, { color: classes[player.classId].color, radius: 70 });
+  const chosenView = getEquipmentAdjustedSkillView(player, chosen);
   pushEvent(
     room,
     options.automatic
-      ? `${player.name} 님이 시간 종료로 ${chosen.name}을(를) 받았습니다.`
-      : `${player.name} 님이 ${chosen.name}을(를) 선택했습니다.`
+      ? `${player.name} 님이 시간 종료로 ${chosenView.name}을(를) 받았습니다.`
+      : `${player.name} 님이 ${chosenView.name}을(를) 선택했습니다.`
   );
   assignAdvancementChoices(player);
   if (player.pendingSkillChoices.length > 0) {
@@ -17737,6 +18607,21 @@ function getSkillSlots(player) {
     getPrimarySkillName,
     getSkillIcon
   });
+  for (const slot of slots) {
+    const source = slot.key === "q"
+      ? getPrimarySkillDefinition(player)
+      : getUnlockedSlotUpgrade(player, slot.key);
+    if (!source) continue;
+    const adjusted = getEquipmentAdjustedSkillView(player, source);
+    slot.name = adjusted.name;
+    slot.text = adjusted.text;
+    slot.equipmentModified = Boolean(adjusted.equipmentModified);
+    slot.equipmentLabel = adjusted.equipmentLabel || "";
+    if (player.deferredSkillCooldowns?.[slot.key]) {
+      slot.active = true;
+      slot.ready = false;
+    }
+  }
   if (player.classId === "engineer" && hasUpgrade(player, "engineer_mine_field")) {
     const mineSlot = slots.find((slot) => slot.key === "r");
     if (mineSlot) {
@@ -17761,17 +18646,145 @@ function getPrimarySkillName(player) {
   return "응급 전투술";
 }
 
-function skillUpgradeName(upgradeId) {
+function getPrimarySkillDefinition(player) {
+  const descriptions = {
+    warrior: "Q: 검을 한 바퀴 휘둘러 주변 적을 베는 강철 회오리를 일으킵니다.",
+    ranger: "Q: 조준 방향으로 여러 발의 화살을 연속 발사합니다.",
+    mage: "Q: 별빛 투사체를 발사하며 적중 시 범위 폭발을 일으킵니다.",
+    engineer: "Q: 조준 위치에 자동 터렛을 던져 설치합니다. 마지막 터렛이 사라진 뒤 쿨타임이 시작됩니다.",
+    puppeteer: "Q: 인형과 실을 조종해 적을 공격합니다.",
+    martialist: "Q: 전방에 연속 권격을 가합니다.",
+    alchemist: "Q: 조준 방향으로 촉매 폭탄을 던집니다.",
+    assassin: "Q: 전방에 여러 칼날을 빠르게 던집니다.",
+    novice: "Q: 조준 방향으로 기본 전투 기술을 사용합니다."
+  };
+  const classId = player?.classId || "novice";
+  return getEquipmentAdjustedSkillView(player, {
+    id: `${classId}_primary`,
+    slot: "q",
+    name: getPrimarySkillName(player),
+    text: descriptions[classId] || descriptions.novice
+  });
+}
+
+function getEquipmentAdjustedSkillView(player, skill) {
+  const view = { ...skill };
+  const id = String(view.id || "");
+  const modify = (name, text, equipmentLabel) => ({
+    ...view,
+    name,
+    text,
+    equipmentModified: true,
+    equipmentLabel
+  });
+
+  if (player?.warriorWhirlwindPull && id === "warrior_guardian") {
+    return modify("끌어모으는 회오리", "Q 강철 회오리가 조준 방향으로 전진하며 원형 중심으로 일반·정예 적을 강하게 끌어모읍니다.", "회오리의 심장");
+  }
+  if ((player?.warriorShoutDamageMul || 0) > 0 && id === "warrior_taunt") {
+    return modify("파괴의 함성", `E: 주변 적을 도발하고 공격력 계수 ${round2(player.warriorShoutDamageMul)}의 피해를 줍니다.`, "파괴의 함성석");
+  }
+  if (player?.warriorCollisionCharge && ["warrior_charge", "warrior_charge_gather"].includes(id)) {
+    return modify("충돌 돌진", "R: 돌진 거리가 대폭 감소하는 대신 적을 훨씬 멀리 밀쳐냅니다. 밀려난 적이 벽이나 다른 적과 충돌하면 추가 피해를 받습니다.", "충돌 돌진 갑주");
+  }
+  if ((player?.warriorExecutionThreshold || 0.25) > 0.25 && id === "warrior_cleave_execution") {
+    return modify("상급 처형의 호", `광역 베기 피해 후 체력이 ${Math.round(player.warriorExecutionThreshold * 100)}% 이하인 일반 적을 즉시 처형합니다. 보스 피해는 35% 증가합니다.`, "집행자의 대검");
+  }
+  if (player?.warriorCleaveRepeat && id === "warrior_cleave") {
+    return modify("연격 광역 베기", "F: 전방을 크게 벤 뒤 가로 베기를 한 번 더 발동합니다. 연속 베기 강화까지 배우면 가로 → 세로 → 가로 순서로 공격합니다.", "연격의 대검");
+  }
+  if (player?.warriorCleaveRepeat && id === "warrior_cleave_wave") {
+    return modify("삼연속 베기", "광역 베기가 가로 → 세로 → 가로 순서로 세 번 연속 발동합니다.", "연격의 대검");
+  }
+
+  if (player?.rangerRadialQ && id === "ranger_primary") {
+    return modify("전방위 사격", "Q: 360도 전 방향으로 12발의 화살을 발사합니다. 각 화살은 기존 연발 사격 피해의 72%를 줍니다.", "전방위 화살통");
+  }
+  if (player?.rangerRadialQ && id === "ranger_multishot") {
+    return modify("추적 탄막", "Q 전방위 사격의 화살이 주변 적을 추적하며 휘어 들어갑니다.", "전방위 화살통");
+  }
+  if (player?.rangerRadialQ && id === "ranger_storm_quiver") {
+    return modify("폭발 탄막", "Q 전방위 사격의 각 화살이 적중 시 범위 폭발과 화상을 일으킵니다.", "전방위 화살통");
+  }
+  if (player?.rangerLaserFire && id === "ranger_pierce_blast") {
+    return modify("작열 레이저 화살", "관통 사격이 맵 끝까지 꿰뚫는 레이저로 바뀌고, 지나간 직선 경로에 4.2초 동안 불바다를 남깁니다.", "작열 광선궁");
+  }
+  if (player?.rangerRainPull && id === "ranger_trap") {
+    return modify("중력 레인 에로우", "R: 조준 지점에 화살비를 내리며 범위 안의 일반·정예 적을 중심으로 끌어모읍니다.", "폭우의 중력추");
+  }
+  if ((player?.rangerPierceCapBonus || 0) > 0 && id === "ranger_pierce_momentum") {
+    return modify("한계 돌파 관통 성장", `관통 사격의 처치 성장 상한이 +${Math.round(player.rangerPierceCapBonus)}만큼 증가합니다.`, "한계 돌파 촉");
+  }
+
+  if (player?.mageGiantOrb && id === "mage_primary") {
+    return modify("응축 별빛", "Q: 빠르고 거대한 별빛 한 발을 직선으로 발사합니다. 별빛은 적을 밀치며 벽에 충돌할 때까지 관통하고 넓은 충격파를 일으킵니다.", "혜성핵 지팡이");
+  }
+  if (player?.mageGiantOrb && id === "mage_star_surge") {
+    return modify("확장 별빛", "응축 별빛의 투사체 크기와 폭발 범위가 50% 증가합니다.", "혜성핵 지팡이");
+  }
+  if (player?.mageGiantOrb && id === "mage_storm_core") {
+    return modify("강화 핵", "응축 별빛이 분열하지 않는 대신 치명타 확률이 100%가 됩니다.", "혜성핵 지팡이");
+  }
+  if (player?.mageFlameWave && id === "mage_frost") {
+    return modify("화염 파동", "E: 주변에 화염 파동을 퍼뜨려 피해를 주고 적에게 화상을 부여합니다.", "화염 파동의 법의");
+  }
+  if (player?.mageFlameWave && id === "mage_frost_shatter") {
+    return modify("연소 반응", "화상 상태인 적이 화염 파동에 맞으면 범위 폭발을 일으킵니다.", "화염 파동의 법의");
+  }
+  if (player?.mageFlameWave && id === "mage_frost_echo") {
+    return modify("화염의 숨결", "패시브: 마법사 주위에 잔잔한 화염 오라가 생겨 가까운 적에게 지속적으로 화상을 부여합니다.", "화염 파동의 법의");
+  }
+  if (player?.mageIceMeteor && id === "mage_meteor") {
+    return modify("빙하 운석", "R: 하늘에서 빙하 운석을 떨어뜨려 적을 빙결시키고 냉기 폭발을 일으킵니다.", "빙하 운석핵");
+  }
+  if (player?.mageIceMeteor && id === "mage_wildfire") {
+    return modify("빙결 지대", "빙하 운석이 떨어진 자리에 냉기 피해와 지속 감속을 주는 빙결 지대를 남깁니다.", "빙하 운석핵");
+  }
+  if ((player?.mageMeteorGrowthCapBonus || 0) > 0 && id === "mage_meteor_growth") {
+    return modify("끝없는 포식", `운석 처치 성장 상한이 장비 효과로 ${500 + Math.round(player.mageMeteorGrowthCapBonus)}회까지 증가합니다.`, "포식 한계 지팡이");
+  }
+  if (!player?.mageChainBoost && id === "mage_chain") {
+    return {
+      ...view,
+      text: "F: 첫 대상 이후 최대 5회, 적 사이 거리 260까지 연쇄되는 번개를 방출합니다."
+    };
+  }
+  if (player?.mageChainBoost && id === "mage_chain") {
+    return modify("초전도 연쇄 번개", "F: 첫 대상 이후 최대 9회 연쇄하며, 적 사이 탐색 거리가 380으로 증가합니다.", "무한 연쇄 프리즘");
+  }
+  if (player?.mageChainBoost && ["mage_chain_no_falloff", "mage_chain_paralyze"].includes(id)) {
+    return modify(view.name, `${view.text} 장비 효과로 적 사이 탐색 거리가 380, 최대 연쇄 횟수가 9회로 증가합니다.`, "무한 연쇄 프리즘");
+  }
+  if (player?.engineerMechaModule && id === "engineer_mecha") {
+    return modify("적응형 메카", "E: 7.8초 동안 메카에 탑승해 방어력·방어막·대시 +1을 얻고, 범위 크기의 영향을 받는 파란 지속 레이저를 발사합니다. 레이저에는 매우 약한 넉백이 있으며 탑승 종료 후 쿨타임이 시작됩니다.", "적응형 메카 코어");
+  }
+  if (player?.engineerMineFire && id === "engineer_mine") {
+    return modify("소이 감전 지뢰", "R: 적이 밟으면 넓게 폭발하고, 폭발 지점에 화상을 주는 불바다를 남깁니다.", "소이 지뢰 제어기");
+  }
+  if ((player?.engineerDroneBonus || 0) > 0 && id === "engineer_drone") {
+    return modify("군집 호위 드론", `F: 주력 호위 드론 1기와 피해량 40%의 보조 드론 ${Math.round(player.engineerDroneBonus)}기를 호출합니다. 마지막 드론이 사라진 뒤 쿨타임이 시작됩니다.`, "군집 드론 제어기");
+  }
+  if (player?.engineerPermanentDrone && id === "engineer_drone") {
+    return modify("영구 호위 드론", "패시브: F 사용은 봉인되고 호위 드론 1기가 원정 동안 계속 따라다닙니다.", "영구 동력 드론핵");
+  }
+  if (player?.engineerPermanentDrone && ["engineer_drone_missile", "engineer_drone_kamikaze"].includes(id)) {
+    return modify(view.name, view.text.replace("드론", "영구 드론"), "영구 동력 드론핵");
+  }
+
+  return view;
+}
+
+function skillUpgradeName(upgradeId, player = null) {
   for (const upgrades of Object.values(skillUpgrades)) {
     const found = upgrades.find((upgrade) => upgrade.id === upgradeId);
-    if (found) return found.name;
+    if (found) return getEquipmentAdjustedSkillView(player, found).name;
   }
   return upgradeId;
 }
 
-function skillChoiceView(choice) {
+function skillChoiceView(player, choice) {
   return {
-    ...choice,
+    ...getEquipmentAdjustedSkillView(player, choice),
     icon: getSkillIcon(choice.id)
   };
 }
@@ -18030,12 +19043,16 @@ function buildState(room, selfId) {
       maxChapters: roomIdentity.maxChapters,
       abyssDepth: Math.max(0, Math.floor(Number(room.abyssDepth || 0))),
       ascensionLevel: Math.max(0, Math.floor(Number(room.ascensionLevel || 0))),
+      ascensionProfile: {
+        ...(ASCENSION_DIFFICULTY_PROFILES[Math.max(0, Math.floor(Number(room.ascensionLevel || 0)))] || ASCENSION_DIFFICULTY_PROFILES[0]),
+      },
       abyssDecision: Boolean(room.abyssDecision),
       challengeMode: room.challengeMode || "standard",
       challengeKey: room.challengeKey || "",
       challengeModifierId: room.challengeModifierId || "",
       challengeRuleId: room.challengeRuleId || "",
       weeklyBossId: room.weeklyBossId || "",
+      paused: Boolean(room.paused),
       challengeLeaderboard: getRoomChallengeLeaderboard(room),
       chapterProfile: chapterStageProfileView(roomIdentity.floor),
       survival: room.survival?.active
@@ -18058,6 +19075,7 @@ function buildState(room, selfId) {
       hostName: roomIdentity.hostName,
       canStart: roomCapabilities.canStart,
       canReturnLobby: roomCapabilities.canReturnLobby,
+      canPause: roomCapabilities.canPause,
       readyCount: roomPopulation.readyCount,
       allReady: roomPopulation.allReady,
       canChooseRisk: roomStageSummary.canChooseRisk,
@@ -18111,8 +19129,8 @@ function buildState(room, selfId) {
       });
       const loadoutView = stateSerializer.playerLoadoutView(player, {
         isSelf: player.id === selfId,
-        skillUpgradeName,
-        skillChoiceView
+        skillUpgradeName: (upgradeId) => skillUpgradeName(upgradeId, player),
+        skillChoiceView: (choice) => skillChoiceView(player, choice)
       });
       const actionStateView = stateSerializer.playerActionStateView(player, {
         dashReady: canUseDash(player),
@@ -18144,6 +19162,9 @@ function buildState(room, selfId) {
         hp: vitalsView.hp,
         maxHp: vitalsView.maxHp,
         shield: vitalsView.shield,
+        projectileShieldCharges: vitalsView.projectileShieldCharges,
+        projectileShieldMaxCharges: vitalsView.projectileShieldMaxCharges,
+        projectileShieldRespawnTime: vitalsView.projectileShieldRespawnTime,
         hitIFrameTime: vitalsView.hitIFrameTime,
         sizeScale: vitalsView.sizeScale,
         tauntGuardTime: vitalsView.tauntGuardTime,
@@ -18205,7 +19226,7 @@ function buildState(room, selfId) {
     xpOrbs: stateSerializer.xpOrbViews(room.xpOrbs || []),
     fieldPickups: stateSerializer.fieldPickupViews(room.fieldPickups || []),
     choices: self && self.choicePending ? self.choices : [],
-    skillChoices: self ? self.pendingSkillChoices.map(skillChoiceView) : [],
+    skillChoices: self ? self.pendingSkillChoices.map((choice) => skillChoiceView(self, choice)) : [],
     effects: room.effects,
     events: room.events
   };

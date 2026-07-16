@@ -198,6 +198,7 @@
     const end = endpoints(effect, radius * 1.2, angle);
     const z = effect.y + 96;
     const mechaMuzzle = styleInfo ? styleInfo.mechaMuzzle : style.includes("mecha_laser_muzzle") || style.includes("mecha_hand_laser");
+    const continuousLaser = style.includes("adaptive_continuous_laser");
     if (style.includes("single_laser")) {
       const beamWidth = Math.max(3, Number(effect.width || 4.5));
       const beamColor = effect.color || tint || "#67e8f9";
@@ -209,11 +210,17 @@
       return;
     }
     if (mechaMuzzle) {
-      const beamWidth = Math.max(7, radius * 0.14);
-      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, beamWidth + 8, "#06131f", alpha * 0.24, z - 4, "add");
-      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, beamWidth, "#67e8f9", alpha * 0.68, z, "add");
+      const transmittedHitRadius = Number(effect.hitRadius);
+      const adaptiveHitWidth = Number.isFinite(transmittedHitRadius) && transmittedHitRadius > 0
+        ? transmittedHitRadius * 2
+        : Math.max(2, Number(effect.width) || 16);
+      const beamWidth = continuousLaser ? adaptiveHitWidth : Math.max(7, radius * 0.14);
+      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, continuousLaser ? beamWidth : beamWidth + 8, "#06131f", alpha * 0.24, z - 4, "add");
+      renderer.drawGfxLine(end.fromX, end.fromY, end.toX, end.toY, continuousLaser ? Math.max(2, beamWidth - 2) : beamWidth, "#67e8f9", alpha * 0.68, z, "add");
       renderer.drawGfxLine(end.fromX + Math.cos(angle) * 12, end.fromY + Math.sin(angle) * 12, end.toX, end.toY, Math.max(2.4, beamWidth * 0.28), "#f8fafc", alpha * 0.82, z + 3, "add");
-      renderer.drawGfxCircle(end.toX, end.toY, 10 + radius * 0.08, "#67e8f9", alpha * 0.18, "#f8fafc", alpha * 0.36, 1.8, z + 6, "add", 12);
+      if (!continuousLaser) {
+        renderer.drawGfxCircle(end.toX, end.toY, 10 + radius * 0.08, "#67e8f9", alpha * 0.18, "#f8fafc", alpha * 0.36, 1.8, z + 6, "add", 12);
+      }
       return;
     }
     if (styleInfo ? styleInfo.basicEngineerBolt : style.includes("engineer_bolt") && !style.includes("mecha")) {
@@ -687,11 +694,14 @@
     }
     const poison = style.includes("poison") || style.includes("splitter");
     const fire = style.includes("fire") || style.includes("bomber") || style.includes("blast") || style.includes("meteor");
-    const tint = poison ? "#a3ff4f" : fire ? "#f97316" : color || "#f8fafc";
+    const iceMeteor = Boolean(effect.iceMeteor) && style.includes("meteor");
+    const tint = poison ? "#a3ff4f" : iceMeteor ? "#38bdf8" : fire ? "#f97316" : color || "#f8fafc";
+    const impactDark = iceMeteor ? "#082f49" : "#7c2d12";
+    const impactHot = iceMeteor ? "#e0f2fe" : "#fed7aa";
     const z = effect.y + 92;
     renderer.drawGfxCircle(effect.x, effect.y, radius * (0.35 + progress * 0.66), tint, alpha * 0.08, tint, alpha * 0.38, 5, z, "add", 26);
     renderer.drawGfxSparkSpray(effect.x, effect.y, radius * (0.85 + progress * 0.28), tint, alpha * 0.44, z + 4, fire ? 18 : 12, progress * 5);
-    if (fire) renderer.drawGfxCircle(effect.x, effect.y, radius * 0.62, "#7c2d12", alpha * 0.12, "#fed7aa", alpha * 0.2, 3, z + 12, "add", 20);
+    if (fire) renderer.drawGfxCircle(effect.x, effect.y, radius * 0.62, impactDark, alpha * 0.12, impactHot, alpha * 0.2, 3, z + 12, "add", 20);
     return true;
   }
 

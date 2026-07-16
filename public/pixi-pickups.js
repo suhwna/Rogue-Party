@@ -5,6 +5,7 @@
     epic: { color: "#c084fc", core: "#581c87", rank: 2 },
     legendary: { color: "#fbbf24", core: "#78350f", rank: 3 },
     mythic: { color: "#fb7185", core: "#881337", rank: 4 },
+    unique: { color: "#5eead4", core: "#134e4a", rank: 5 },
   });
 
   function xpOrbBob(orb, now) {

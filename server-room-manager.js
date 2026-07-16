@@ -46,6 +46,8 @@ function createRoomState(code, defaults = {}) {
     clearSummary: null,
     choiceDeadline: 0,
     pausedStatus: null,
+    paused: false,
+    pauseStartedAt: 0,
     advancementStartedAt: 0,
     advancementDeadline: 0,
     lastBroadcast: 0,
@@ -100,6 +102,8 @@ function prepareRoomForGameover(room) {
   room.mapDeadline = 0;
   room.choiceDeadline = 0;
   room.pausedStatus = null;
+  room.paused = false;
+  room.pauseStartedAt = 0;
   room.advancementStartedAt = 0;
   room.advancementDeadline = 0;
   room.restartAt = 0;

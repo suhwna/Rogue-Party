@@ -15,7 +15,7 @@
     arcanist: { two: "스킬 가속 +5", four: "화상 피해 +30% · 별빛 파편 +2개 및 1회 관통", twoStats: { skillHaste: 5 }, fourStats: { burnDamageMul: 0.3, arcanistPiercingFragments: 1 } },
     mechanist: { two: "설치물 피해 +12%", four: "터렛 처치 연장 +1초 · 터렛 위치에 감전 지뢰 자동 설치", twoStats: { constructDamageMul: 0.12 }, fourStats: { turretKillDurationBonus: 1, mechanistTurretMine: 1 } },
     occult: { two: "상태이상 피해 +10%", four: "독 최대 중첩 +1", twoStats: { statusDamageMul: 0.1 }, fourStats: { poisonStackCapBonus: 1 } },
-    abyss: { two: "정예/보스 피해 +18%", four: "피해 +10%", twoStats: { eliteBossDamageMul: 0.18 }, fourStats: { damageMul: 0.1 } },
+    abyss: { two: "정예/보스 피해 +18%", four: "피해 증폭 +10%", twoStats: { eliteBossDamageMul: 0.18 }, fourStats: { damageMul: 0.1 } },
   };
   const RARITIES = [
     { id: "common", label: "일반", color: "#cbd5e1", rank: 0 },
@@ -23,6 +23,7 @@
     { id: "epic", label: "영웅", color: "#c084fc", rank: 2 },
     { id: "legendary", label: "전설", color: "#fbbf24", rank: 3 },
     { id: "mythic", label: "신화", color: "#fb7185", rank: 4 },
+    { id: "unique", label: "고유", color: "#5eead4", rank: 5 },
   ];
   const CORE_ITEM_BASES = [
     { id: "vanguard_blade", name: "선봉대 대검", slot: "weapon", classId: "warrior", setId: "vanguard", special: "boss_hunter" },
@@ -44,10 +45,46 @@
     { id: "ember_staff", name: "잿불 점화봉", slot: "weapon", classId: "mage", setId: "arcanist", special: "burn_amp" },
     { id: "afterimage_bow", name: "잔상 추적궁", slot: "weapon", classId: "ranger", setId: "hunter", special: "crit_amp" },
     { id: "kill_switch", name: "연장 회로", slot: "core", classId: "engineer", setId: "mechanist", special: "turret_sustain" },
-    { id: "warden_bulwark", name: "철의 감시자 방벽", slot: "armor", classId: "all", setId: "vanguard", special: "warden_oath", bossCraft: true },
-    { id: "prophet_censer", name: "군체 예언자의 향로", slot: "amulet", classId: "all", setId: "occult", special: "prophet_bloom", bossCraft: true },
-    { id: "regent_engine", name: "공허 섭정의 동력핵", slot: "core", classId: "all", setId: "abyss", special: "regent_singularity", bossCraft: true },
-    { id: "abyss_crown", name: "심연 군주의 관", slot: "amulet", classId: "all", setId: "abyss", special: "abyss_crown", bossCraft: true },
+    { id: "warden_bulwark", name: "철의 감시자 방벽", slot: "armor", classId: "all", setId: "vanguard", special: "warden_oath" },
+    { id: "prophet_censer", name: "군체 예언자의 향로", slot: "amulet", classId: "all", setId: "occult", special: "prophet_bloom" },
+    { id: "regent_engine", name: "공허 섭정의 동력핵", slot: "core", classId: "all", setId: "abyss", special: "regent_singularity" },
+    { id: "abyss_crown", name: "심연 군주의 관", slot: "amulet", classId: "all", setId: "abyss", special: "abyss_crown" },
+  ];
+  const UNIQUE_ITEM_BASES = [
+    { id: "triple_aegis", name: "삼중 수호판", slot: "armor", classId: "all", setId: "vanguard", special: "projectile_aegis", icon: "shield" },
+    { id: "plague_heirloom", name: "역병 전염체", slot: "amulet", classId: "all", setId: "occult", special: "poison_spread", icon: "coronavirus" },
+    { id: "auxiliary_drone_core", name: "보조 드론 코어", slot: "core", classId: "all", setId: "mechanist", special: "common_drone", icon: "smart_toy" },
+    { id: "guardian_necklace", name: "보호의 목걸이", slot: "amulet", classId: "all", setId: "vanguard", special: "periodic_shield", icon: "shield_lock" },
+    { id: "time_eater_core", name: "시간 포식 코어", slot: "core", classId: "all", setId: "arcanist", special: "kill_cooldown", icon: "history" },
+    { id: "vampire_necklace", name: "흡혈의 목걸이", slot: "amulet", classId: "all", setId: "occult", special: "vampire_oath", icon: "bloodtype" },
+    { id: "double_edged_blade", name: "양날의 검", slot: "weapon", classId: "all", setId: "abyss", special: "double_edge", icon: "swords" },
+    { id: "silent_warblade", name: "침묵의 전쟁검", slot: "weapon", classId: "all", setId: "vanguard", special: "skill_seal", icon: "swords" },
+    { id: "ritual_only_core", name: "술식 전용 코어", slot: "weapon", classId: "all", setId: "arcanist", special: "basic_seal", icon: "block" },
+    { id: "swift_god_boots", name: "신속신의 장화", slot: "armor", classId: "all", setId: "hunter", special: "swift_god", icon: "directions_run" },
+    { id: "magnet_necklace", name: "자석 목걸이", slot: "amulet", classId: "all", setId: "mechanist", special: "xp_magnet", icon: "attractions" },
+
+    { id: "execution_arc_blade", name: "집행자의 대검", slot: "weapon", classId: "warrior", setId: "vanguard", special: "warrior_execute_cap", icon: "swords" },
+    { id: "endless_cleave_blade", name: "연격의 대검", slot: "weapon", classId: "warrior", setId: "vanguard", special: "warrior_cleave_repeat", icon: "swords" },
+    { id: "destructive_shout_core", name: "파괴의 함성석", slot: "core", classId: "warrior", setId: "vanguard", special: "warrior_shout_damage", icon: "campaign" },
+    { id: "vortex_grip_core", name: "회오리의 심장", slot: "core", classId: "warrior", setId: "vanguard", special: "warrior_whirlwind_pull", icon: "cyclone" },
+    { id: "collision_charge_plate", name: "충돌 돌진 갑주", slot: "armor", classId: "warrior", setId: "vanguard", special: "warrior_collision_charge", icon: "shield" },
+
+    { id: "seeker_bow", name: "추적자의 활", slot: "weapon", classId: "ranger", setId: "hunter", special: "ranger_primary_homing", icon: "swords" },
+    { id: "omnidirectional_quiver", name: "전방위 화살통", slot: "core", classId: "ranger", setId: "hunter", special: "ranger_radial_q", icon: "flare" },
+    { id: "scorching_laser_bow", name: "작열 광선궁", slot: "weapon", classId: "ranger", setId: "hunter", special: "ranger_laser_fire", icon: "flash_on" },
+    { id: "gravity_rain_charm", name: "폭우의 중력추", slot: "amulet", classId: "ranger", setId: "hunter", special: "ranger_rain_pull", icon: "rainy" },
+    { id: "limitbreaker_arrowhead", name: "한계 돌파 촉", slot: "core", classId: "ranger", setId: "hunter", special: "ranger_pierce_cap", icon: "trending_up" },
+
+    { id: "comet_core_staff", name: "혜성핵 지팡이", slot: "weapon", classId: "mage", setId: "arcanist", special: "mage_giant_orb", icon: "swords" },
+    { id: "flame_wave_robe", name: "화염 파동의 법의", slot: "armor", classId: "mage", setId: "arcanist", special: "mage_flame_wave", icon: "local_fire_department" },
+    { id: "devouring_limit_staff", name: "포식 한계 지팡이", slot: "weapon", classId: "mage", setId: "arcanist", special: "mage_meteor_cap", icon: "swords" },
+    { id: "glacial_meteor_core", name: "빙하 운석핵", slot: "core", classId: "mage", setId: "arcanist", special: "mage_ice_meteor", icon: "ac_unit" },
+    { id: "infinite_chain_prism", name: "무한 연쇄 프리즘", slot: "core", classId: "mage", setId: "arcanist", special: "mage_chain_boost", icon: "electric_bolt" },
+
+    { id: "adaptive_mecha_core", name: "적응형 메카 코어", slot: "core", classId: "engineer", setId: "mechanist", special: "engineer_mecha_module", icon: "robot_2" },
+    { id: "incendiary_mine_core", name: "소이 지뢰 제어기", slot: "core", classId: "engineer", setId: "mechanist", special: "engineer_mine_fire", icon: "bomb" },
+    { id: "swarm_controller", name: "군집 드론 제어기", slot: "amulet", classId: "engineer", setId: "mechanist", special: "engineer_drone_count", icon: "hub" },
+    { id: "eternal_drone_core", name: "영구 동력 드론핵", slot: "core", classId: "engineer", setId: "mechanist", special: "engineer_permanent_drone", icon: "all_inclusive" },
   ];
   const SLOT_ICONS = { weapon: "swords", armor: "shield", amulet: "diamond", core: "deployed_code" };
   const CLASS_GEAR_THEMES = {
@@ -78,12 +115,12 @@
       icon: SLOT_ICONS[slot],
     })));
   });
-  const ITEM_BASES = [...CORE_ITEM_BASES, ...GENERATED_ITEM_BASES];
+  const ITEM_BASES = [...CORE_ITEM_BASES, ...UNIQUE_ITEM_BASES, ...GENERATED_ITEM_BASES];
   const AFFIXES = [
-    { id: "attack_flat", label: "공격력", stat: "attackBonus", min: 3, max: 3, enhanceStep: 0.75, primary: true },
+    { id: "attack_flat", label: "고정 공격력", stat: "attackBonus", min: 3, max: 3, enhanceStep: 0.75, primary: true },
     { id: "health_flat", label: "최대 체력", stat: "maxHpBonus", min: 28, max: 28, enhanceStep: 6, primary: true },
     { id: "armor_flat", label: "방어력", stat: "armorBonus", min: 0.8, max: 0.8, enhanceStep: 0.16, primary: true },
-    { id: "power", label: "공격력", stat: "damageMul", min: 0.018, max: 0.052, percent: true },
+    { id: "power", label: "피해 증폭", stat: "damageMul", min: 0.018, max: 0.052, percent: true },
     { id: "vitality", label: "최대 체력", stat: "maxHpMul", min: 0.02, max: 0.06, percent: true },
     { id: "haste", label: "스킬 가속", stat: "skillHaste", min: 1.2, max: 3.6, enhanceStep: 0.3 },
     { id: "attack_speed", label: "공격 속도", stat: "attackSpeed", min: 1.2, max: 3.6, enhanceStep: 0.3 },
@@ -98,18 +135,31 @@
   ];
   const RANDOM_AFFIX_IDS = ["power", "vitality", "haste", "attack_speed", "swiftness", "critical", "armor", "elite", "status", "regeneration", "critical_damage", "area"];
   const ENHANCE_MILESTONES = [5, 10, 15, 20];
-  const MILESTONE_AFFIX_POOLS = {
-    5: [{ id: "vitality", value: 0.04 }, { id: "armor", value: 0.8 }, { id: "regeneration", value: 0.2 }],
-    10: [{ id: "critical", value: 0.035 }, { id: "haste", value: 4 }, { id: "attack_speed", value: 4 }, { id: "swiftness", value: 0.045 }],
-    15: [{ id: "elite", value: 0.07 }, { id: "status", value: 0.08 }, { id: "area", value: 0.07 }],
-    20: [{ id: "power", value: 0.1 }, { id: "critical_damage", value: 0.14 }, { id: "vitality", value: 0.12 }],
-  };
-  const RARITY_PRIMARY_SCALE = [1, 1.2, 1.45, 1.75, 2.1];
-  const RARITY_SPECIAL_SCALE = [0, 1, 1.4, 1.85, 2.4];
+  const MILESTONE_AFFIX_POOL = [
+    { id: "vitality", value: 0.12, weight: 1.2 },
+    { id: "armor", value: 1.4, weight: 1.15 },
+    { id: "regeneration", value: 0.4, weight: 1.1 },
+    { id: "swiftness", value: 0.07, weight: 1 },
+    { id: "status", value: 0.11, weight: 0.9 },
+    { id: "elite", value: 0.1, weight: 0.85 },
+    { id: "attack_speed", value: 6, weight: 0.85 },
+    { id: "critical", value: 0.04, weight: 0.8 },
+    { id: "haste", value: 6, weight: 0.75 },
+    { id: "area", value: 0.1, weight: 0.75 },
+    { id: "critical_damage", value: 0.14, weight: 0.75 },
+    { id: "power", value: 0.1, weight: 0.65 },
+  ];
+  const MILESTONE_VALUE_SCALE = { 5: 0.55, 10: 0.7, 15: 0.85, 20: 1 };
+  const MILESTONE_AFFIX_POOLS = Object.fromEntries(ENHANCE_MILESTONES.map((milestone) => [milestone, MILESTONE_AFFIX_POOL]));
+  const RARITY_PRIMARY_SCALE = [1, 1.5, 2, 3, 5, 10];
+  const RARITY_CRIT_SCALE = [1, 1.2, 1.4, 1.7, 2, 2.5];
+  const CRIT_ENHANCE_STEP = 0.0008;
+  const RARITY_SPECIAL_SCALE = [0, 0, 1, 2, 3.5, 5];
+  const RARITY_FORGE_COST_SCALE = [1, 1.2, 1.5, 2, 3, 5];
   const SPECIALS = {
     boss_hunter: { label: "거인 사냥", text: "정예/보스 피해 증가" },
     ricochet: { label: "벽 반사", text: "투사체가 벽에서 1회 튕김" },
-    skill_amp: { label: "과충전", text: "스킬 피해와 범위 증가" },
+    skill_amp: { label: "과충전", text: "피해 증폭과 범위 증가" },
     construct_amp: { label: "자동화", text: "설치물 피해와 지속시간 증가" },
     status_amp: { label: "연쇄 오염", text: "상태이상 피해 증가" },
     venom_cap: { label: "맹독 저장고", text: "독 최대 중첩 +1" },
@@ -118,8 +168,8 @@
     swift_guard: { label: "바람막이", text: "이동 속도와 방어 증가" },
     warden_oath: { label: "불굴의 맹세", text: "최대 체력 +12% · 방어 +1.5 · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)" },
     prophet_bloom: { label: "역병 개화", text: "상태이상 피해 +22% · 독 최대 중첩 +2 · 체력 재생 +0.35/s" },
-    regent_singularity: { label: "특이점 기관", text: "공격력 +10% · 범위 +14% · 스킬 가속 +8" },
-    abyss_crown: { label: "심연의 판결", text: "공격력 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가" },
+    regent_singularity: { label: "특이점 기관", text: "피해 증폭 +10% · 범위 +14% · 스킬 가속 +8" },
+    abyss_crown: { label: "심연의 판결", text: "피해 증폭 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가" },
     burn_amp: { label: "불씨 증폭", text: "화상 피해 +28%" },
     turret_sustain: { label: "자가 연장", text: "터렛 처치 시 지속시간 +0.8초" },
     warrior_signature: { label: "회오리 증폭", text: "강철 회오리가 전방으로 이동하는 회오리 칼날을 추가 발사" },
@@ -130,11 +180,41 @@
     martialist_signature: { label: "연환 기세", text: "무도가 피해와 치명타 확률 강화" },
     alchemist_signature: { label: "촉매 과포화", text: "연금술사 상태이상과 화상 피해 강화" },
     assassin_signature: { label: "그림자 처형", text: "암살자 치명타 확률과 피해 강화" },
+    projectile_aegis: { label: "삼중 투사체 방어", text: "주위를 도는 수호판 3개가 적 투사체를 막고 12초 후 재생성" },
+    poison_spread: { label: "퍼지는 독", text: "독·맹독 상태의 적이 사망하면 주위 적에게 독 전염" },
+    common_drone: { label: "보조 드론", text: "직업과 관계없이 보조 드론 1기 생성" },
+    periodic_shield: { label: "주기적 보호", text: "12초마다 최대 체력 비례 보호막 생성" },
+    kill_cooldown: { label: "시간 포식", text: "적 처치 시 모든 스킬 쿨타임 감소" },
+    vampire_oath: { label: "흡혈의 맹세", text: "피해 일부를 체력으로 흡수하지만 방어력이 0으로 고정" },
+    double_edge: { label: "양날", text: "피해가 크게 증가하지만 최대 체력과 방어력 감소" },
+    skill_seal: { label: "스킬 봉인", text: "스킬을 봉인하고 기본 공격 피해와 공격 속도를 대폭 강화" },
+    basic_seal: { label: "기본 공격 봉인", text: "기본 공격을 봉인하고 스킬 가속을 대폭 강화" },
+    swift_god: { label: "신속신의 가호", text: "이동 속도가 크게 증가하고 대시 최대 충전 +1" },
+    xp_magnet: { label: "자력 수집", text: "필드의 경험치를 자동으로 끌어당김" },
+    warrior_execute_cap: { label: "확장된 처형의 호", text: "광역 베기 처형 기준 체력 증가" },
+    warrior_cleave_repeat: { label: "연속 베기 강화", text: "기존 가로·세로 베기 후 가로베기 1회 추가" },
+    warrior_shout_damage: { label: "파괴의 함성", text: "도발 함성이 주위 적에게 피해를 줌" },
+    warrior_whirlwind_pull: { label: "끌어모으는 회오리", text: "전진하는 회오리가 일반·정예 적을 이동 중심으로 강하게 끌어당김" },
+    warrior_collision_charge: { label: "충돌 돌진", text: "돌진 거리 대폭 감소 · 밀치기 거리 대폭 증가 · 벽·적 충돌 추가 피해" },
+    ranger_primary_homing: { label: "유도 화살", text: "기본 공격 화살이 적을 추적" },
+    ranger_radial_q: { label: "전방위 사격", text: "연발 사격을 360도 전방위 화살 난사로 변경" },
+    ranger_laser_fire: { label: "레이저 잔화", text: "레이저 화살이 지나간 직선 경로에 불바다 생성" },
+    ranger_rain_pull: { label: "끌어모으는 화살비", text: "화살비가 범위 안의 적을 중심으로 끌어당김" },
+    ranger_pierce_cap: { label: "관통 한계 돌파", text: "관통 사격의 영구 성장 상한 증가" },
+    mage_giant_orb: { label: "응축 별빛", text: "Q를 빠르게 날아가 적을 밀치고 벽까지 관통하는 거대 별빛 1개로 변경 · Q 강화 효과 변환" },
+    mage_flame_wave: { label: "화염 파동", text: "빙결 파동·파쇄 반응·빙결의 숨결을 화염 계열로 변경" },
+    mage_meteor_cap: { label: "끝없는 포식", text: "포식하는 운석의 영구 성장 상한 증가" },
+    mage_ice_meteor: { label: "빙하 운석", text: "운석을 빙결 충돌과 지속 냉기 지대로 변경" },
+    mage_chain_boost: { label: "초전도 연쇄", text: "연쇄 번개의 탐색 거리와 연쇄 횟수 증가" },
+    engineer_mecha_module: { label: "적응형 메카", text: "메카 지속시간 7.8초 · 대시 +1 · 범위 크기를 따르는 파란 지속 레이저 · 매우 약한 넉백" },
+    engineer_mine_fire: { label: "소이 지뢰", text: "지뢰 폭발 후 불바다 생성" },
+    engineer_drone_count: { label: "군집 제어", text: "드론 스킬의 보조 드론 +2 · 보조 드론 피해 40%" },
+    engineer_permanent_drone: { label: "영구 드론", text: "드론 스킬을 봉인하고 영구 드론 1기를 유지" },
   };
   const RUNE_GRADES = ["D", "C", "B", "A", "S", "SS", "SSS", "X"];
   const RUNE_GRADE_POWER = [1, 1.45, 2, 2.75, 3.7, 4.9, 6.4, 8.4];
   const RUNES = [
-    { id: "fury", name: "격노 룬", text: "피해 증가", icon: "local_fire_department" },
+    { id: "fury", name: "격노 룬", text: "피해 증폭", icon: "local_fire_department" },
     { id: "ward", name: "수호 룬", text: "체력과 방어 증가", icon: "shield" },
     { id: "haste", name: "순환 룬", text: "이동 속도와 쿨감", icon: "speed" },
     { id: "venom", name: "맹독 룬", text: "상태이상 피해와 독 중첩", icon: "science" },
@@ -154,10 +234,10 @@
     { id: "momentum", name: "질주 룬", text: "이동 속도 증가", icon: "double_arrow" },
     { id: "execution", name: "처형 룬", text: "피해와 치명타 확률 증가", icon: "gavel" },
     { id: "frost", name: "서리 룬", text: "상태이상 피해와 범위 증가", icon: "ac_unit" },
-    { id: "storm", name: "폭풍 룬", text: "피해와 쿨타임 감소", icon: "thunderstorm" },
+    { id: "storm", name: "폭풍 룬", text: "피해 증폭과 스킬 가속", icon: "thunderstorm" },
     { id: "alchemy", name: "연성 룬", text: "상태이상과 화상 피해 증가", icon: "experiment" },
     { id: "shadow", name: "그림자 룬", text: "치명타 피해와 이동 속도 증가", icon: "dark_mode" },
-    { id: "vitality", name: "생명 룬", text: "체력과 피해 증가", icon: "favorite" },
+    { id: "vitality", name: "생명 룬", text: "체력과 피해 증폭", icon: "favorite" },
   ];
   const MONSTER_CATALOG = [
     { id: "training_dummy", name: "훈련 표적", detail: "대기방 훈련용" },
@@ -189,7 +269,7 @@
     { id: "fate_executioner", name: "운명의 집행자", detail: "9분 생존 이후 히든 보스" },
   ];
   const RELIC_CATALOG = [
-    { id: "power_core", name: "힘의 핵", detail: "공격력 증가" },
+    { id: "power_core", name: "힘의 핵", detail: "피해 증폭 증가" },
     { id: "iron_plate", name: "강철 갑판", detail: "방어력 증가" },
     { id: "swift_boots", name: "신속의 장화", detail: "이동 속도 증가" },
     { id: "cooling_gear", name: "냉각 장치", detail: "스킬 가속 증가" },
@@ -213,9 +293,9 @@
     relic: { label: "유물", icon: "diamond" },
   };
   const ITEM_SPECIAL_DETAILS = {
-    boss_hunter: ["정예/보스 피해", "일반 +8% · 희귀 +9.5% · 영웅 +11% · 전설 +12.5%"],
+    boss_hunter: ["정예/보스 피해", "기준 +10%에 고유 옵션 성장 배율 적용"],
     ricochet: ["벽 반사", "투사체가 벽에서 1회 추가 반사"],
-    skill_amp: ["과충전", "모든 피해 +3.5% · 범위 +5%"],
+    skill_amp: ["과충전", "피해 증폭 +3.5% · 범위 +5%"],
     construct_amp: ["자동화", "설치물 피해 +11% · 설치물 지속시간 +9%"],
     status_amp: ["연쇄 오염", "상태이상 피해 +11%"],
     venom_cap: ["맹독 저장고", "독 최대 중첩 +1"],
@@ -224,18 +304,48 @@
     swift_guard: ["바람막이", "이동 속도 +3.5% · 방어 +0.8"],
     warden_oath: ["불굴의 맹세", "최대 체력 +12% · 방어 +1.5 · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)"],
     prophet_bloom: ["역병 개화", "상태이상 피해 +22% · 독 최대 중첩 +2 · 체력 재생 +0.35/s"],
-    regent_singularity: ["특이점 기관", "공격력 +10% · 범위 +14% · 스킬 가속 +8"],
-    abyss_crown: ["심연의 판결", "공격력 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가"],
+    regent_singularity: ["특이점 기관", "피해 증폭 +10% · 범위 +14% · 스킬 가속 +8"],
+    abyss_crown: ["심연의 판결", "피해 증폭 +12% · 정예/보스 피해 +25% · 보스 체력 20% 이하에서 피해 45% 추가 증가"],
     burn_amp: ["불씨 증폭", "화상 피해 +28%"],
     turret_sustain: ["자가 연장", "터렛이 적을 처치할 때 지속시간 +0.8초"],
-    warrior_signature: ["회오리 증폭", "피해 +6% · 범위 +8% · 강철 회오리가 전방 회오리 칼날 1개 추가 발사"],
-    ranger_signature: ["화살 폭주", "피해 +5% · 치명타 확률 +4%p · 연발 사격 유도 화살 +2개, 연쇄 +1"],
-    mage_signature: ["별빛 공명", "스킬 피해 +10% · 범위 +6% · 별빛 폭발 적중 시 파편 2개로 분열"],
+    warrior_signature: ["회오리 증폭", "피해 증폭 +6% · 범위 +8% · 강철 회오리가 전방 회오리 칼날 1개 추가 발사"],
+    ranger_signature: ["화살 폭주", "피해 증폭 +5% · 치명타 확률 +4%p · 연발 사격 유도 화살 +2개, 연쇄 +1"],
+    mage_signature: ["별빛 공명", "피해 증폭 +10% · 범위 +6% · 별빛 폭발 적중 시 파편 2개로 분열"],
     engineer_signature: ["전술 자동화", "설치물 피해 +14% · 지속시간 +10% · 자동 터렛 설치 시 미니 터렛 1기 추가"],
-    puppeteer_signature: ["실의 공명", "피해 +5% · 상태이상 피해 +12%"],
-    martialist_signature: ["연환 기세", "피해 +5% · 치명타 확률 +4%p"],
+    puppeteer_signature: ["실의 공명", "피해 증폭 +5% · 상태이상 피해 +12%"],
+    martialist_signature: ["연환 기세", "피해 증폭 +5% · 치명타 확률 +4%p"],
     alchemist_signature: ["촉매 과포화", "상태이상 피해 +12% · 화상 피해 +15%"],
     assassin_signature: ["그림자 처형", "치명타 확률 +4%p · 치명타 피해 +12%"],
+    projectile_aegis: ["삼중 투사체 방어", "수호판 3개가 적 투사체를 막음 · 모두 소모 시 8~12.2초 후 재생성"],
+    poison_spread: ["퍼지는 독", "독·맹독 상태 적 사망 시 반경 220 내 최대 6명에게 1중첩 전염"],
+    common_drone: ["보조 드론", "직업 제한 없는 영구 보조 드론 1기"],
+    periodic_shield: ["주기적 보호", "12초마다 최대 체력 12~17.6% 보호막"],
+    kill_cooldown: ["시간 포식", "적 처치 시 모든 스킬 쿨타임 0.35~0.8초 감소"],
+    vampire_oath: ["흡혈의 맹세", "피해의 1.5~3.6% 흡혈 · 방어력 0 고정"],
+    double_edge: ["양날", "피해 증폭 +18~42% · 최대 체력 -30% · 방어력 -55%"],
+    skill_seal: ["스킬 봉인", "기본 공격 피해 +42~100% · 공격 속도 +55~130 · 모든 스킬 사용 불가"],
+    basic_seal: ["기본 공격 봉인", "기본 공격 사용 불가 · 스킬 가속 +50~120"],
+    swift_god: ["신속신의 가호", "이동 속도 +9~22% · 대시 최대 충전 +1"],
+    xp_magnet: ["자력 수집", "거리 제한 없이 모든 경험치 구슬을 자동 흡수"],
+    warrior_execute_cap: ["확장된 처형의 호", "광역 베기 처형 기준 29~35%"],
+    warrior_cleave_repeat: ["연속 베기 강화", "기존 가로베기와 세로베기가 끝난 뒤 반대 방향 가로베기 1회 추가"],
+    warrior_shout_damage: ["파괴의 함성", "도발 범위에 공격력 계수 1.35~2.2 피해"],
+    warrior_whirlwind_pull: ["끌어모으는 회오리", "전진하는 회오리가 이동 중 일반·정예 적을 원형 중심으로 강하게 끌어당김"],
+    warrior_collision_charge: ["충돌 돌진", "돌진 거리 약 52% 감소 · 일반 적 최대 밀치기 거리 900 · 벽/적 충돌 추가 피해"],
+    ranger_primary_homing: ["유도 화살", "기본 공격이 반경 720 내 적을 추적"],
+    ranger_radial_q: ["전방위 사격", "Q를 360도 12발 사격으로 변경 · 개별 화살 피해 72%"],
+    ranger_laser_fire: ["레이저 잔화", "레이저가 지나간 직선 경로 전체에 4.2초 불바다 생성"],
+    ranger_rain_pull: ["끌어모으는 화살비", "화살비 틱마다 일반·정예 적을 중심으로 끌어당김"],
+    ranger_pierce_cap: ["관통 한계 돌파", "관통 성장 피해 상한 +25~60"],
+    mage_giant_orb: ["응축 별빛", "Q를 빠르게 날아가 적을 밀치고 벽까지 관통하는 거대 별빛 1발로 변경 · 유도 별빛은 크기/폭발 +50%, 분열 핵은 치명타 100%로 변환"],
+    mage_flame_wave: ["화염 파동", "E와 숨결을 화염으로 전환 · 연소 대상 파쇄 시 범위 폭발"],
+    mage_meteor_cap: ["끝없는 포식", "포식하는 운석 성장 상한 +150~360회"],
+    mage_ice_meteor: ["빙하 운석", "운석 화상·불바다 제거 · 빙결 충돌과 5.2초 냉기 지대 생성"],
+    mage_chain_boost: ["초전도 연쇄", "연쇄 횟수 17회 · 체인 거리 560 · 최초 탐색 거리 증가"],
+    engineer_mecha_module: ["적응형 메카", "메카 지속시간 7.8초 · 대시 +1 · 기본 공격과 충전 레이저를 범위 크기가 적용되는 파란 지속 레이저로 교체 · 매우 약한 넉백"],
+    engineer_mine_fire: ["소이 지뢰", "지뢰 폭발 후 4.4~5.2초 불바다 생성"],
+    engineer_drone_count: ["군집 제어", "드론 스킬 보조 드론 +2 · 보조 드론 피해 40%"],
+    engineer_permanent_drone: ["영구 드론", "드론 스킬 사용 불가 · 영구 드론 1기 유지"],
   };
   const MONSTER_DETAILS = {
     training_dummy: { stats: [360, 0, 0, 0], role: "훈련용 표적", behavior: "공격하거나 이동하지 않습니다. 대기방에서 피해량과 상태이상을 시험할 때 사용합니다.", elite: "정예 변종 없음" },
@@ -267,14 +377,14 @@
     fate_executioner: { tier: "9분 생존 히든 보스", multipliers: ["체력: 최종 보스 체력 ×설정 배율 또는 생성 체력 ×12 중 높은 값", "피해: 생성 피해 ×2.4 또는 파티 최대 체력 ×62% 중 높은 값", "속도 ×1.38", "크기 ×1.14", "초기 보호막: 최대 체력 8%"], phases: "체력 80% / 55% / 28%에서 총 4페이즈 · 공격 간격이 단계마다 크게 감소", patterns: ["붉은 감옥", "끈질긴 연쇄 추적", "레이저·탄환 교차 사격", "충격파와 광역 폭발의 최종 선고"] },
   };
   const RELIC_DETAILS = {
-    power_core: { cap: 5, type: "합연산", unit: "모든 피해 +10%", values: ["+10%", "+20%", "+30%", "+40%", "+50%"], note: "계정·영구 성장·장비의 모든 피해 증가량과 합산됩니다." },
+    power_core: { cap: 5, type: "합연산", unit: "피해 증폭 +10%", values: ["+10%", "+20%", "+30%", "+40%", "+50%"], note: "계정·영구 성장·장비의 피해 증폭 수치와 합산됩니다." },
     iron_plate: { cap: 5, type: "고정 수치", unit: "방어 +1", values: ["+1", "+2", "+3", "+4", "+5"], note: "플레이어 최종 방어 수치는 18을 넘지 않습니다." },
     swift_boots: { cap: 5, type: "곱연산", unit: "이동 속도 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "현재 이동 속도 배율에 중첩마다 ×1.10을 적용합니다." },
     cooling_gear: { cap: 5, type: "합연산", unit: "스킬 가속 +10", values: ["+10", "+20", "+30", "+40", "+50"], note: "Q/E/R/F 스킬에 적용되며 최대 스킬 가속은 500입니다." },
     rapid_loader: { cap: 5, type: "합연산", unit: "공격 속도 +10", values: ["+10", "+20", "+30", "+40", "+50"], note: "기본 공격과 기계공 터렛·드론의 공격 간격을 기본 간격 × 100 / (100 + 공격 속도)로 계산합니다." },
     splitter_core: { cap: 1, type: "고정 수치", unit: "투사체 수 +1", values: ["+1"], note: "투사체 계열에만 적용되며 실제 발사체가 1개 늘어납니다. 최대 1중첩입니다." },
     giant_lens: { cap: 5, type: "곱연산", unit: "범위 ×1.10", values: ["+10%", "+21%", "+33.1%", "+46.4%", "+61.1%"], note: "범위 공격과 폭발의 판정 반경 및 대응 그래픽 크기에 적용됩니다." },
-    sharp_eye: { cap: 5, type: "합연산", unit: "치명타 확률 +10%p", values: ["+10%p", "+20%p", "+30%p", "+40%p", "+50%p"], note: "최종 치명타 확률은 85%를 넘지 않습니다." },
+    sharp_eye: { cap: 5, type: "합연산", unit: "치명타 확률 +5%p", values: ["+5%p", "+10%p", "+15%p", "+20%p", "+25%p"], note: "최종 치명타 확률은 85%를 넘지 않습니다." },
     fatal_mark: { cap: 5, type: "합연산", unit: "치명타 피해 +10%p", values: ["+10%p", "+20%p", "+30%p", "+40%p", "+50%p"], note: "직업의 기본 치명타 피해 150% 또는 200%에 합산됩니다." },
     living_moss: { cap: 5, type: "고정 수치", unit: "초당 재생 +0.5", values: ["+0.5/s", "+1.0/s", "+1.5/s", "+2.0/s", "+2.5/s"], note: "기본 체력 재생에 합산됩니다." },
     heartstone: { cap: 5, type: "고정 수치", unit: "최대 체력 +25", values: ["+25", "+50", "+75", "+100", "+125"], note: "획득 즉시 최대 체력과 현재 체력이 각각 25 증가합니다." },
@@ -287,7 +397,7 @@
     { id: "collector_12", name: "수집가", text: "장비 도감 12종 발견", target: 12, current: (p) => p.collections.equipmentBases.length, reward: { shards: 70 } },
     { id: "legendary_item", name: "황금빛 전리품", text: "전설 장비 획득", target: 1, current: (p) => Number(p.inventory.items.some((item) => item.rarity === "legendary")), reward: { stones: 25 } },
     { id: "enhance_10", name: "담금질", text: "장비 +10 강화", target: 10, current: (p) => Math.max(0, ...p.inventory.items.map((item) => item.enhance)), reward: { dust: 30 } },
-    { id: "rune_tier_4", name: "룬 연금술", text: "4단계 룬 제작", target: 4, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { essence: 2 } },
+    { id: "rune_tier_4", name: "룬 연금술", text: "4단계 룬 제작", target: 4, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { dust: 20 } },
     { id: "grinder_25", name: "노련한 원정대", text: "런 25회 완료", target: 25, current: (p) => p.statistics.runs, reward: { shards: 160, title: "백전노장" } },
     { id: "score_100k", name: "전장의 전설", text: "누적 점수 100,000", target: 100000, current: (p) => p.statistics.totalScore, reward: { shards: 220, skin: "abyss_glow" } },
     { id: "ranger_poison_million", name: "맹독의 비", text: "궁수로 독 피해 1,000,000 누적", target: 1000000, current: (p) => p.combatByClass.ranger.poisonDamage, reward: { shards: 250, title: "맹독 추적자" } },
@@ -298,42 +408,43 @@
     { id: "runs_10", name: "준비된 생존자 II", text: "런 10회 완료", target: 10, current: (p) => p.statistics.runs, reward: { shards: 80, stones: 10 } },
     { id: "runs_50", name: "준비된 생존자 III", text: "런 50회 완료", target: 50, current: (p) => p.statistics.runs, reward: { shards: 260, dust: 30 } },
     { id: "victories_5", name: "돌파자 I", text: "런 5회 승리", target: 5, current: (p) => p.statistics.victories, reward: { shards: 100 } },
-    { id: "victories_15", name: "돌파자 II", text: "런 15회 승리", target: 15, current: (p) => p.statistics.victories, reward: { shards: 240, essence: 3 } },
+    { id: "victories_15", name: "돌파자 II", text: "런 15회 승리", target: 15, current: (p) => p.statistics.victories, reward: { shards: 240, dust: 30 } },
     { id: "abyss_6", name: "심연 답사자 II", text: "심연 6층 도달", target: 6, current: (p) => p.records.highestAbyssDepth, reward: { shards: 170 } },
     { id: "abyss_10", name: "심연 답사자 III", text: "심연 10층 도달", target: 10, current: (p) => p.records.highestAbyssDepth, reward: { shards: 350, skin: "abyss_glow" } },
     { id: "ascension_3", name: "승천자 II", text: "승천 3단계 클리어", target: 3, current: (p) => p.records.highestAscension, reward: { shards: 320, stones: 30 } },
-    { id: "ascension_5", name: "승천자 III", text: "승천 5단계 클리어", target: 5, current: (p) => p.records.highestAscension, reward: { shards: 700, stones: 60, essence: 8, title: "경계를 넘은 자" } },
+    { id: "ascension_5", name: "승천자 III", text: "승천 5단계 클리어", target: 5, current: (p) => p.records.highestAscension, reward: { shards: 700, stones: 60, dust: 80, title: "경계를 넘은 자" } },
     { id: "collector_40", name: "장비 수집가 II", text: "장비 도감 40종 발견", target: 40, current: (p) => p.collections.equipmentBases.length, reward: { shards: 160, stones: 20 } },
-    { id: "collector_100", name: "장비 수집가 III", text: "장비 도감 100종 발견", target: 100, current: (p) => p.collections.equipmentBases.length, reward: { shards: 420, essence: 5 } },
+    { id: "collector_100", name: "장비 수집가 III", text: "장비 도감 100종 발견", target: 100, current: (p) => p.collections.equipmentBases.length, reward: { shards: 420, dust: 50 } },
     { id: "mythic_item", name: "신화의 주인", text: "신화 장비 획득", target: 1, current: (p) => Number(p.inventory.items.some((item) => item.rarity === "mythic")), reward: { stones: 40, dust: 40 } },
+    { id: "unique_item", name: "유일무이", text: "고유 장비 획득", target: 1, current: (p) => Number(p.inventory.items.some((item) => item.rarity === "unique")), reward: { stones: 80, dust: 120 } },
     { id: "enhance_15", name: "담금질 II", text: "장비 +15 강화", target: 15, current: (p) => Math.max(0, ...p.inventory.items.map((item) => item.enhance)), reward: { shards: 150, stones: 30 } },
-    { id: "enhance_20", name: "담금질 III", text: "장비 +20 강화", target: 20, current: (p) => Math.max(0, ...p.inventory.items.map((item) => item.enhance)), reward: { shards: 320, essence: 4 } },
-    { id: "rune_grade_s", name: "룬 연성 I", text: "S등급 룬 제작", target: 5, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { essence: 2 } },
-    { id: "rune_grade_sss", name: "룬 연성 II", text: "SSS등급 룬 제작", target: 7, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { shards: 260, essence: 4 } },
+    { id: "enhance_20", name: "담금질 III", text: "장비 +20 강화", target: 20, current: (p) => Math.max(0, ...p.inventory.items.map((item) => item.enhance)), reward: { shards: 320, dust: 40 } },
+    { id: "rune_grade_s", name: "룬 연성 I", text: "S등급 룬 제작", target: 5, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { dust: 20 } },
+    { id: "rune_grade_sss", name: "룬 연성 II", text: "SSS등급 룬 제작", target: 7, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { shards: 260, dust: 40 } },
     { id: "rune_grade_x", name: "룬 연성 III", text: "X등급 룬 제작", target: 8, current: (p) => Math.max(0, ...p.inventory.runes.map((rune) => rune.tier)), reward: { shards: 500, title: "룬 초월자" } },
     { id: "score_500k", name: "전장의 전설 II", text: "누적 점수 500,000", target: 500000, current: (p) => p.statistics.totalScore, reward: { shards: 420, stones: 40 } },
     { id: "items_found_100", name: "노획 전문가 I", text: "장비 100개 획득", target: 100, current: (p) => p.statistics.itemsFound, reward: { shards: 140 } },
     { id: "items_found_500", name: "노획 전문가 II", text: "장비 500개 획득", target: 500, current: (p) => p.statistics.itemsFound, reward: { shards: 420, dust: 60 } },
-    { id: "runes_found_50", name: "룬 탐색자", text: "룬 50개 획득", target: 50, current: (p) => p.statistics.runesFound, reward: { shards: 180, essence: 3 } },
+    { id: "runes_found_50", name: "룬 탐색자", text: "룬 50개 획득", target: 50, current: (p) => p.statistics.runesFound, reward: { shards: 180, dust: 30 } },
     { id: "crafts_30", name: "연성 장인", text: "제작 또는 합성 30회", target: 30, current: (p) => p.statistics.crafts, reward: { shards: 220, dust: 40 } },
   ];
   const COSMETIC_EFFECTS = {
     titles: {
       "초행자": { text: "최대 체력 +3%", maxHpMul: 0.03 },
       "심연 탐사자": { text: "정예/보스 피해 +5%", eliteBossDamageMul: 0.05 },
-      "승천자": { text: "모든 피해 +4%", damageMul: 0.04 },
+      "승천자": { text: "피해 증폭 +4%", damageMul: 0.04 },
       "백전노장": { text: "방어 +1", armorBonus: 1 },
       "맹독 추적자": { text: "상태이상 피해 +8%", statusDamageMul: 0.08 },
       "불굴": { text: "최대 체력 +6%", maxHpMul: 0.06 },
       "자동화 지휘관": { text: "설치물 피해 +10%", constructDamageMul: 0.1 },
       "시즌 개척자": { text: "이동 속도 +3%", speedMul: 0.03 },
       "심연의 계절": { text: "정예/보스 피해 +8%", eliteBossDamageMul: 0.08 },
-      "경계를 넘은 자": { text: "모든 피해 +5% · 최대 체력 +5%", damageMul: 0.05, maxHpMul: 0.05 },
+      "경계를 넘은 자": { text: "피해 증폭 +5% · 최대 체력 +5%", damageMul: 0.05, maxHpMul: 0.05 },
       "룬 초월자": { text: "치명타 확률 +3% · 범위 +5%", critChanceBonus: 0.03, areaMul: 0.05 },
     },
     skins: {
       victory_trim: { label: "승전 장식", text: "치명타 +2.5% · 직업 장비에 왕실 금장과 태양 문장 추가", critChanceBonus: 0.025 },
-      abyss_glow: { label: "심연 광휘", text: "피해 +3% · 정예/보스 +5% · 직업 공격에 심연 균열 잔광 추가", damageMul: 0.03, eliteBossDamageMul: 0.05 },
+      abyss_glow: { label: "심연 광휘", text: "피해 증폭 +3% · 정예/보스 +5% · 직업 공격에 심연 균열 잔광 추가", damageMul: 0.03, eliteBossDamageMul: 0.05 },
       season_ember: { label: "계절의 불씨", text: "화상 +12% · 직업 무기와 스킬에 잿불 궤적 추가", burnDamageMul: 0.12 },
       season_verdant: { label: "계절의 새싹", text: "체력 +4% · 이동 +2% · 직업 장비에 생명 문양과 잎 장식 추가", maxHpMul: 0.04, speedMul: 0.02 },
     },
@@ -344,12 +455,6 @@
     season_ember: { main: "#ff5a1f", hot: "#fff1a8", icon: "local_fire_department" },
     season_verdant: { main: "#34d399", hot: "#ecfccb", icon: "eco" },
   };
-  const BOSS_RECIPES = [
-    { id: "warden_bulwark", bossId: "iron_warden", materialName: "철갑 파편", amount: 8, shards: 220, essence: 12, label: "철의 감시자 방벽" },
-    { id: "prophet_censer", bossId: "hive_prophet", materialName: "군체 포자", amount: 10, shards: 280, essence: 18, label: "군체 예언자의 향로" },
-    { id: "regent_engine", bossId: "void_regent", materialName: "공허 왕핵", amount: 12, shards: 360, essence: 26, label: "공허 섭정의 동력핵" },
-    { id: "abyss_crown", bossId: "void_regent", materialName: "공허 왕핵", amount: 20, shards: 600, essence: 45, label: "심연 군주의 관" },
-  ];
   const SEASON_REWARDS = [
     { level: 3, title: "시즌 개척자", label: "칭호: 시즌 개척자" },
     { level: 5, skin: "season_verdant", label: "스킨: 계절의 빛" },
@@ -357,7 +462,7 @@
     { level: 10, title: "심연의 계절", skin: "season_ember", label: "칭호·잿불 스킨" },
   ];
   const CUSTOM_STAT_KEYS = ["itemsFound", "runesFound", "itemsSalvaged", "enhancements", "reforges", "crafts", "challengeCompletions"];
-  const CUSTOM_CURRENCY_KEYS = ["enhancementStones", "reforgingDust", "bossEssence"];
+  const CUSTOM_CURRENCY_KEYS = ["enhancementStones", "reforgingDust"];
 
   function clone(value) {
     return typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value));
@@ -473,31 +578,64 @@
   function getEffectiveAffix(item, affix, enhance = item.enhance) {
     const def = AFFIXES.find((entry) => entry.id === affix.id) || AFFIXES[0];
     const rarityRank = rarityById(item.rarity).rank;
-    const enhanceScale = RARITY_PRIMARY_SCALE[rarityRank] || 1;
-    const step = def.enhanceStep != null
+    const enhanceScale = def.stat === "critChanceBonus"
+      ? RARITY_CRIT_SCALE[rarityRank] || 1
+      : RARITY_PRIMARY_SCALE[rarityRank] || 1;
+    const step = def.stat === "critChanceBonus"
+      ? CRIT_ENHANCE_STEP
+      : def.enhanceStep != null
       ? def.enhanceStep
       : def.percent ? 0.003 : def.stat === "regenBonus" ? 0.035 : 0.1;
     const baseScale = item.slot === "amulet" || item.slot === "core" ? enhanceScale : 1;
     return { ...affix, value: Math.round((affix.value * baseScale + Math.max(0, enhance) * step * enhanceScale) * 10000) / 10000 };
   }
 
-  function rollMilestoneAffix(itemId, milestone, random = null) {
-    const pool = MILESTONE_AFFIX_POOLS[milestone] || [];
-    const roll = random ? random() : createRandom(hashString(`${itemId}:legacy-milestone:${milestone}`))();
-    const affix = pool[Math.floor(roll * pool.length)] || pool[0];
-    return affix ? { ...affix, milestone } : null;
+  function normalizeMilestoneQuality(value, itemId, milestone, affixId) {
+    const saved = Math.floor(Number(value));
+    if (Number.isFinite(saved) && saved >= 1) return Math.min(100, saved);
+    return 1 + (hashString(`${itemId}:milestone-quality:${milestone}:${affixId}`) % 100);
+  }
+
+  function rollMilestoneAffix(itemId, milestone, random = null, excluded = []) {
+    const fullPool = MILESTONE_AFFIX_POOLS[milestone] || [];
+    const pool = fullPool.filter((affix) => !excluded.includes(affix.id));
+    const rollRandom = random || createRandom(hashString(`${itemId}:legacy-milestone:${milestone}`));
+    const roll = rollRandom();
+    const selectionPool = pool.length ? pool : fullPool;
+    const totalWeight = selectionPool.reduce((sum, affix) => sum + Math.max(0.01, affix.weight || 1), 0);
+    let cursor = roll * totalWeight;
+    let affix = selectionPool[selectionPool.length - 1];
+    for (const candidate of selectionPool) {
+      cursor -= Math.max(0.01, candidate.weight || 1);
+      if (cursor <= 0) {
+        affix = candidate;
+        break;
+      }
+    }
+    const valueScale = MILESTONE_VALUE_SCALE[milestone] || 1;
+    const quality = 1 + Math.floor(rollRandom() * 100);
+    return affix ? { id: affix.id, value: Math.round(affix.value * valueScale * 10000) / 10000, milestone, quality } : null;
   }
 
   function normalizeMilestoneAffixes(value, itemId, enhance) {
     const source = Array.isArray(value) ? value : [];
+    const usedIds = [];
     return ENHANCE_MILESTONES.filter((milestone) => enhance >= milestone).flatMap((milestone) => {
       const pool = MILESTONE_AFFIX_POOLS[milestone] || [];
-      const saved = source.find((affix) => Number(affix?.milestone) === milestone && pool.some((entry) => entry.id === affix.id));
+      const saved = source.find((affix) => Number(affix?.milestone) === milestone && pool.some((entry) => entry.id === affix.id) && !usedIds.includes(affix.id));
       if (saved) {
         const def = pool.find((entry) => entry.id === saved.id);
-        return [{ id: def.id, value: def.value, milestone }];
+        const valueScale = MILESTONE_VALUE_SCALE[milestone] || 1;
+        usedIds.push(def.id);
+        return [{
+          id: def.id,
+          value: Math.round(def.value * valueScale * 10000) / 10000,
+          milestone,
+          quality: normalizeMilestoneQuality(saved.quality, itemId, milestone, def.id),
+        }];
       }
-      const fallback = rollMilestoneAffix(itemId, milestone);
+      const fallback = rollMilestoneAffix(itemId, milestone, null, usedIds);
+      if (fallback) usedIds.push(fallback.id);
       return fallback ? [fallback] : [];
     });
   }
@@ -506,23 +644,37 @@
     return Array.isArray(item.milestoneAffixes) ? item.milestoneAffixes.filter((affix) => item.enhance >= affix.milestone) : [];
   }
 
+  function getEffectiveMilestoneAffix(item, affix) {
+    const rarityRank = rarityById(item.rarity).rank;
+    const def = AFFIXES.find((entry) => entry.id === affix.id) || AFFIXES[0];
+    const rarityScale = def.stat === "critChanceBonus"
+      ? RARITY_CRIT_SCALE[rarityRank] || 1
+      : RARITY_PRIMARY_SCALE[rarityRank] || 1;
+    const quality = normalizeMilestoneQuality(affix.quality, item.id, affix.milestone, affix.id);
+    return { ...affix, quality, value: Math.round(affix.value * rarityScale * (quality / 100) * 10000) / 10000 };
+  }
+
   function normalizeItem(item) {
     const baseDef = baseById(item?.baseId);
     const rarity = rarityById(item?.rarity).id;
     const itemLevel = integer(item?.itemLevel, 1, 9999) || 1;
     const affixes = normalizeItemAffixes(item, baseDef, rarity, itemLevel);
-    const legacyLock = Number.isInteger(item?.lockedAffixIndex) && item.lockedAffixIndex >= 0 ? [item.lockedAffixIndex] : [];
-    const lockedAffixIndices = [...new Set((Array.isArray(item?.lockedAffixIndices) ? item.lockedAffixIndices : legacyLock)
-      .map((index) => Math.floor(Number(index)))
-      .filter((index) => index >= 0 && index < affixes.length))]
-      .slice(0, Math.max(0, affixes.length - 1))
-      .sort((a, b) => a - b);
-    const previewAffixes = normalizeAffixes(item?.reforgePreview?.affixes, affixes.length);
-    const reforgePreview = previewAffixes.length === affixes.length && affixes.length
-      ? { affixes: previewAffixes, cost: integer(item?.reforgePreview?.cost) }
-      : null;
     const id = String(item?.id || `item-${hashString(JSON.stringify(item))}`).slice(0, 96);
     const enhance = integer(item?.enhance, 0, 20);
+    const milestoneAffixes = normalizeMilestoneAffixes(item?.milestoneAffixes, id, enhance);
+    const savedLocks = item?.reforgeLockTarget === "milestone" && Array.isArray(item?.lockedAffixIndices) ? item.lockedAffixIndices : [];
+    const lockedAffixIndices = [...new Set(savedLocks
+      .map((index) => Math.floor(Number(index)))
+      .filter((index) => index >= 0 && index < milestoneAffixes.length))]
+      .slice(0, Math.max(0, milestoneAffixes.length - 1))
+      .sort((a, b) => a - b);
+    const previewSource = Array.isArray(item?.reforgePreview?.milestoneAffixes) ? item.reforgePreview.milestoneAffixes : [];
+    const previewMilestoneAffixes = previewSource.length === milestoneAffixes.length
+      ? normalizeMilestoneAffixes(previewSource, id, enhance)
+      : [];
+    const reforgePreview = previewMilestoneAffixes.length === milestoneAffixes.length && milestoneAffixes.length
+      ? { milestoneAffixes: previewMilestoneAffixes, cost: integer(item?.reforgePreview?.cost) }
+      : null;
     return {
       id,
       baseId: baseDef.id,
@@ -535,10 +687,11 @@
       itemLevel,
       enhance,
       rerolls: integer(item?.rerolls, 0, 9999),
+      reforgeLockTarget: "milestone",
       lockedAffixIndices,
       reforgePreview,
       affixes,
-      milestoneAffixes: normalizeMilestoneAffixes(item?.milestoneAffixes, id, enhance),
+      milestoneAffixes,
     };
   }
 
@@ -730,16 +883,25 @@
   }
 
   function rollRarity(random, power) {
+    const unique = Math.min(0.012, 0.0005 + power * 0.0003);
     const mythic = Math.min(0.055, 0.002 + power * 0.0018);
     const legendary = Math.min(0.18, 0.012 + power * 0.006);
     const epic = Math.min(0.34, 0.08 + power * 0.012);
     const rare = Math.min(0.56, 0.26 + power * 0.014);
     const roll = random();
-    if (roll < mythic) return "mythic";
-    if (roll < mythic + legendary) return "legendary";
-    if (roll < mythic + legendary + epic) return "epic";
-    if (roll < mythic + legendary + epic + rare) return "rare";
+    if (roll < unique) return "unique";
+    if (roll < unique + mythic) return "mythic";
+    if (roll < unique + mythic + legendary) return "legendary";
+    if (roll < unique + mythic + legendary + epic) return "epic";
+    if (roll < unique + mythic + legendary + epic + rare) return "rare";
     return "common";
+  }
+
+  function clampRarityToCap(rarityId, rarityCap) {
+    const rarity = rarityById(rarityId);
+    const cap = RARITIES.find((entry) => entry.id === rarityCap);
+    if (!cap || rarity.rank <= cap.rank) return rarity.id;
+    return cap.id;
   }
 
   function rollAffix(random, itemLevel, rarityRank, excluded = []) {
@@ -753,11 +915,11 @@
     const random = createRandom(hashString(`${seed}:item:${index}:${options.craft || "drop"}`));
     const classId = CLASS_IDS.includes(result?.classId) ? result.classId : "warrior";
     const slot = options.slot || ITEM_SLOTS[Math.floor(random() * ITEM_SLOTS.length)];
-    let pool = ITEM_BASES.filter((baseItem) => !baseItem.bossCraft && baseItem.slot === slot && (baseItem.classId === "all" || baseItem.classId === classId));
+    let pool = ITEM_BASES.filter((baseItem) => baseItem.slot === slot && (baseItem.classId === "all" || baseItem.classId === classId));
     if (options.baseId) pool = ITEM_BASES.filter((baseItem) => baseItem.id === options.baseId);
-    const baseItem = pool[Math.floor(random() * pool.length)] || ITEM_BASES.find((entry) => entry.slot === slot && !entry.bossCraft) || ITEM_BASES[0];
+    const baseItem = pool[Math.floor(random() * pool.length)] || ITEM_BASES.find((entry) => entry.slot === slot) || ITEM_BASES[0];
     const power = integer(result?.highestLevel, 1) + integer(result?.abyssDepth) * 3 + integer(result?.ascensionLevel) * 3;
-    const rarity = options.rarity || rollRarity(random, power);
+    const rarity = clampRarityToCap(options.rarity || rollRarity(random, power), options.rarityCap);
     const rarityRank = rarityById(rarity).rank;
     const affixes = baseItem.slot === "amulet" || baseItem.slot === "core"
       ? [rollAffix(random, Math.max(1, power), rarityRank)]
@@ -786,7 +948,7 @@
     const victory = result?.outcome === "victory";
     const depth = integer(result?.abyssDepth);
     const ascension = Math.min(5, integer(result?.ascensionLevel));
-    const ascensionResourceMul = [1, 1.4, 1.9, 2.6, 3.5, 4.5][ascension] || 1;
+    const ascensionResourceMul = [1, 1.8, 2.8, 4.2, 6, 8][ascension] || 1;
     const runeCount = Math.min(3, (victory ? 1 : 0) + (depth > 0 ? 1 : 0));
     const runes = Array.from({ length: runeCount }, (_, index) => generateRune(seed, result, index));
     const liveEvent = getLiveEvent();
@@ -796,7 +958,6 @@
       runes,
       enhancementStones: Math.floor((3 + integer(result?.stagesCleared) + (victory ? 5 : 0) + depth * 2) * ascensionResourceMul * liveEvent.rewardMultiplier),
       reforgingDust: Math.floor((Math.floor(integer(result?.highestLevel, 1) / 2) + depth * 2) * ascensionResourceMul * liveEvent.rewardMultiplier),
-      bossEssence: (victory ? 2 + ascension * 2 : ascension) + Math.floor(depth / 2),
       eventMultiplier: liveEvent.rewardMultiplier,
     };
   }
@@ -809,7 +970,7 @@
       highestLevel: Math.max(1, integer(drop.highestLevel, 1)),
       abyssDepth: Math.max(0, integer(drop.abyssDepth)),
       ascensionLevel: Math.max(0, integer(drop.ascensionLevel)),
-    }, 0, drop.rarity ? { rarity: drop.rarity } : {});
+    }, 0, { rarity: drop.rarity, rarityCap: drop.rarityCap });
     if (next.inventory.items.some((entry) => entry.id === item.id)) return { progress: next, item: null };
     next.inventory.items.push(item);
     next.statistics.itemsFound += 1;
@@ -829,7 +990,7 @@
       highestLevel: Math.max(1, integer(drop.highestLevel, 1)),
       abyssDepth: Math.max(0, integer(drop.abyssDepth)),
       ascensionLevel: Math.max(0, integer(drop.ascensionLevel)),
-    });
+    }, 0, { rarityCap: drop.rarityCap });
     return { rarity: item.rarity };
   }
 
@@ -849,7 +1010,6 @@
     progress.currencies.abyssShards += integer(reward.shards);
     progress.currencies.enhancementStones += integer(reward.stones);
     progress.currencies.reforgingDust += integer(reward.dust);
-    progress.currencies.bossEssence += integer(reward.essence);
     if (reward.title && !progress.titles.includes(reward.title)) progress.titles.push(reward.title);
     if (reward.skin && !progress.skins.includes(reward.skin)) progress.skins.push(reward.skin);
   }
@@ -906,9 +1066,9 @@
     if (weekly.completed && !weekly.rewardClaimed) {
       weekly.rewardClaimed = true;
       progress.currencies.abyssShards += 180;
-      progress.currencies.bossEssence += 5;
       progress.statistics.challengeCompletions += 1;
-      rewards.push({ label: "주간 임무", shards: 180, essence: 5 });
+      progress.currencies.reforgingDust += 50;
+      rewards.push({ label: "주간 임무", shards: 180, dust: 50 });
     }
     const seasonGain = 20 + integer(result?.stagesCleared) * 3 + (result?.outcome === "victory" ? 35 : 0) + integer(result?.abyssDepth) * 8;
     progress.challenges.season.xp += seasonGain;
@@ -947,15 +1107,11 @@
     next.inventory.runes.push(...loot.runes);
     next.currencies.enhancementStones += loot.enhancementStones;
     next.currencies.reforgingDust += loot.reforgingDust;
-    next.currencies.bossEssence += loot.bossEssence;
     next.statistics.itemsFound += loot.items.length;
     next.statistics.runesFound += loot.runes.length;
     next.collections.equipmentBases = unique([...next.collections.equipmentBases, ...loot.items.map((item) => item.baseId)]);
     next.collections.runeTypes = unique([...next.collections.runeTypes, ...loot.runes.map((rune) => rune.runeId)]);
     const bossDefeats = unique(result?.bossDefeats || (result?.weeklyBossId ? [result.weeklyBossId] : []));
-    for (const bossId of bossDefeats) {
-      next.inventory.bossMaterials[bossId] = integer(next.inventory.bossMaterials[bossId]) + 1;
-    }
     next.collections.bosses = unique([...next.collections.bosses, ...bossDefeats]);
     const resultClassId = CLASS_IDS.includes(result?.classId) ? result.classId : "warrior";
     const classCombat = next.combatByClass[resultClassId];
@@ -983,8 +1139,6 @@
       runes: loot.runes.map((rune) => ({ id: rune.id, runeId: rune.runeId, name: runeDefById(rune.runeId).name, tier: rune.tier })),
       enhancementStones: loot.enhancementStones,
       reforgingDust: loot.reforgingDust,
-      bossEssence: loot.bossEssence,
-      bossMaterials: bossDefeats,
       eventMultiplier: loot.eventMultiplier,
       challengeRewards,
       achievements,
@@ -1046,6 +1200,36 @@
     if (special === "martialist_signature") { bonuses.damageMul += 0.05 * scale; bonuses.critChanceBonus += 0.04 * scale; }
     if (special === "alchemist_signature") { bonuses.statusDamageMul += 0.12 * scale; bonuses.burnDamageMul += 0.15 * scale; }
     if (special === "assassin_signature") { bonuses.critChanceBonus += 0.04 * scale; bonuses.critDamageMul += 0.12 * scale; }
+    if (special === "projectile_aegis") { bonuses.projectileShieldCharges = 3; bonuses.projectileShieldCooldown = Math.max(8, 13 - scale * 0.8); }
+    if (special === "poison_spread") bonuses.poisonSpread = 1;
+    if (special === "common_drone") bonuses.commonDrone = 1;
+    if (special === "periodic_shield") bonuses.periodicShieldRatio = Math.max(bonuses.periodicShieldRatio, Math.min(0.18, 0.08 + 0.04 * scale));
+    if (special === "kill_cooldown") bonuses.killCooldownRefund = Math.max(bonuses.killCooldownRefund, Math.min(0.8, 0.35 * scale));
+    if (special === "vampire_oath") { bonuses.lifeSteal = Math.max(bonuses.lifeSteal, Math.min(0.036, 0.015 * scale)); bonuses.armorLockZero = 1; }
+    if (special === "double_edge") { bonuses.damageMul += Math.min(0.42, 0.18 * scale); bonuses.maxHpPenalty = Math.max(bonuses.maxHpPenalty, 0.3); bonuses.armorPenalty = Math.max(bonuses.armorPenalty, 0.55); }
+    if (special === "skill_seal") { bonuses.basicAttackDamageMul = Math.max(bonuses.basicAttackDamageMul, Math.min(2, 1 + 0.42 * scale)); bonuses.attackSpeed += Math.min(130, 55 * scale); bonuses.skillsDisabled = 1; }
+    if (special === "basic_seal") { bonuses.skillHaste += Math.min(120, 50 * scale); bonuses.primaryDisabled = 1; }
+    if (special === "swift_god") { bonuses.speedMul += Math.min(0.22, 0.09 * scale); bonuses.dashChargeBonus = 1; }
+    if (special === "xp_magnet") bonuses.xpMagnet = 1;
+    if (special === "warrior_execute_cap") bonuses.warriorExecutionThreshold = Math.max(bonuses.warriorExecutionThreshold, Math.min(0.35, 0.25 + 0.04 * scale));
+    if (special === "warrior_cleave_repeat") bonuses.warriorCleaveRepeat = 1;
+    if (special === "warrior_shout_damage") bonuses.warriorShoutDamageMul = Math.max(bonuses.warriorShoutDamageMul, Math.min(2.2, 0.9 + 0.45 * scale));
+    if (special === "warrior_whirlwind_pull") bonuses.warriorWhirlwindPull = 1;
+    if (special === "warrior_collision_charge") bonuses.warriorCollisionCharge = 1;
+    if (special === "ranger_primary_homing") bonuses.rangerPrimaryHoming = 1;
+    if (special === "ranger_radial_q") bonuses.rangerRadialQ = 1;
+    if (special === "ranger_laser_fire") bonuses.rangerLaserFire = 1;
+    if (special === "ranger_rain_pull") bonuses.rangerRainPull = 1;
+    if (special === "ranger_pierce_cap") bonuses.rangerPierceCapBonus = Math.max(bonuses.rangerPierceCapBonus, Math.round(25 * scale));
+    if (special === "mage_giant_orb") bonuses.mageGiantOrb = 1;
+    if (special === "mage_flame_wave") bonuses.mageFlameWave = 1;
+    if (special === "mage_meteor_cap") bonuses.mageMeteorGrowthCapBonus = Math.max(bonuses.mageMeteorGrowthCapBonus, Math.round(150 * scale));
+    if (special === "mage_ice_meteor") bonuses.mageIceMeteor = 1;
+    if (special === "mage_chain_boost") bonuses.mageChainBoost = 1;
+    if (special === "engineer_mecha_module") bonuses.engineerMechaModule = 1;
+    if (special === "engineer_mine_fire") bonuses.engineerMineFire = 1;
+    if (special === "engineer_drone_count") bonuses.engineerDroneBonus = Math.max(bonuses.engineerDroneBonus, 2);
+    if (special === "engineer_permanent_drone") bonuses.engineerPermanentDrone = 1;
   }
 
   function calculateEquipmentBonuses(progress, classId) {
@@ -1062,13 +1246,22 @@
       bossFinisherMul: 1, bossFinisherThreshold: 0,
       warriorWhirlwindEcho: 0, rangerVolleyBonus: 0, mageStarSplit: 0, engineerAuxTurret: 0,
       vanguardWhirlwindGuard: 0, hunterRainBarrage: 0, arcanistPiercingFragments: 0, mechanistTurretMine: 0,
+      projectileShieldCharges: 0, projectileShieldCooldown: 0, poisonSpread: 0, commonDrone: 0,
+      periodicShieldRatio: 0, killCooldownRefund: 0, lifeSteal: 0, armorLockZero: 0,
+      maxHpPenalty: 0, armorPenalty: 0, basicAttackDamageMul: 1, skillsDisabled: 0, primaryDisabled: 0,
+      dashChargeBonus: 0, xpMagnet: 0,
+      warriorExecutionThreshold: 0.25, warriorCleaveRepeat: 0, warriorShoutDamageMul: 0,
+      warriorWhirlwindPull: 0, warriorCollisionCharge: 0,
+      rangerPrimaryHoming: 0, rangerRadialQ: 0, rangerLaserFire: 0, rangerRainPull: 0, rangerPierceCapBonus: 0,
+      mageGiantOrb: 0, mageFlameWave: 0, mageMeteorGrowthCapBonus: 0, mageIceMeteor: 0, mageChainBoost: 0,
+      engineerMechaModule: 0, engineerMineFire: 0, engineerDroneBonus: 0, engineerPermanentDrone: 0,
     };
     const equippedItems = ITEM_SLOTS.map((slot) => itemMap.get(loadout[slot])).filter(Boolean);
     const sets = {};
     for (const item of equippedItems) {
       const rarityRank = rarityById(item.rarity).rank;
       for (const affix of item.affixes) applyEquipmentAffix(bonuses, getEffectiveAffix(item, affix));
-      for (const affix of getMilestoneAffixes(item)) applyEquipmentAffix(bonuses, affix);
+      for (const affix of getMilestoneAffixes(item)) applyEquipmentAffix(bonuses, getEffectiveMilestoneAffix(item, affix));
       sets[item.setId] = (sets[item.setId] || 0) + 1;
       const specialScale = RARITY_SPECIAL_SCALE[rarityRank] || 0;
       if (specialScale > 0) applyRaritySpecial(bonuses, item.special, specialScale);
@@ -1124,28 +1317,41 @@
         addBonus(bonuses, key, Number(value) || 0);
       }
     }
-    bonuses.damageMul = Math.min(1.6, bonuses.damageMul);
-    bonuses.maxHpMul = Math.min(1.5, bonuses.maxHpMul);
-    bonuses.regenBonus = Math.min(2.5, bonuses.regenBonus);
-    bonuses.speedMul = Math.min(1.25, bonuses.speedMul);
+    bonuses.attackBonus = Math.min(1000, bonuses.attackBonus);
+    bonuses.maxHpBonus = Math.min(10000, bonuses.maxHpBonus);
+    bonuses.damageMul = Math.min(10, bonuses.damageMul);
+    bonuses.maxHpMul = Math.min(10, bonuses.maxHpMul);
+    bonuses.regenBonus = Math.min(100, bonuses.regenBonus);
+    bonuses.speedMul = Math.min(5, bonuses.speedMul);
     bonuses.attackSpeed = Math.min(500, bonuses.attackSpeed);
     bonuses.skillHaste = Math.min(500, bonuses.skillHaste);
     bonuses.armorBonus = Math.min(10, bonuses.armorBonus);
-    bonuses.critChanceBonus = Math.min(0.22, bonuses.critChanceBonus);
-    bonuses.critDamageMul = Math.min(1.6, bonuses.critDamageMul);
-    bonuses.eliteBossDamageMul = Math.min(1.75, bonuses.eliteBossDamageMul);
-    bonuses.areaMul = Math.min(1.5, bonuses.areaMul);
+    bonuses.critChanceBonus = Math.min(0.85, bonuses.critChanceBonus);
+    bonuses.critDamageMul = Math.min(10, bonuses.critDamageMul);
+    bonuses.eliteBossDamageMul = Math.min(10, bonuses.eliteBossDamageMul);
+    bonuses.statusDamageMul = Math.min(10, bonuses.statusDamageMul);
+    bonuses.areaMul = Math.min(5, bonuses.areaMul);
+    bonuses.constructDamageMul = Math.min(10, bonuses.constructDamageMul);
+    bonuses.constructDurationMul = Math.min(10, bonuses.constructDurationMul);
     bonuses.wallBounceBonus = Math.min(2, bonuses.wallBounceBonus);
     bonuses.poisonStackCapBonus = Math.min(2, bonuses.poisonStackCapBonus);
     bonuses.lowHpShieldRatio = Math.min(0.35, bonuses.lowHpShieldRatio);
     bonuses.bossFinisherMul = Math.min(1.45, bonuses.bossFinisherMul);
     bonuses.bossFinisherThreshold = Math.min(0.2, bonuses.bossFinisherThreshold);
-    bonuses.burnDamageMul = Math.min(1.75, bonuses.burnDamageMul);
+    bonuses.burnDamageMul = Math.min(10, bonuses.burnDamageMul);
     bonuses.turretKillDurationBonus = Math.min(2, bonuses.turretKillDurationBonus);
     for (const key of ["warriorWhirlwindEcho", "mageStarSplit", "engineerAuxTurret", "vanguardWhirlwindGuard", "hunterRainBarrage", "arcanistPiercingFragments", "mechanistTurretMine"]) {
       bonuses[key] = bonuses[key] ? 1 : 0;
     }
     bonuses.rangerVolleyBonus = bonuses.rangerVolleyBonus ? 2 : 0;
+    bonuses.projectileShieldCharges = Math.min(3, bonuses.projectileShieldCharges || 0);
+    bonuses.projectileShieldCooldown = Math.max(0, bonuses.projectileShieldCooldown || 0);
+    bonuses.lifeSteal = Math.min(0.036, bonuses.lifeSteal || 0);
+    bonuses.killCooldownRefund = Math.min(0.8, bonuses.killCooldownRefund || 0);
+    bonuses.periodicShieldRatio = Math.min(0.18, bonuses.periodicShieldRatio || 0);
+    bonuses.rangerPierceCapBonus = Math.min(60, bonuses.rangerPierceCapBonus || 0);
+    bonuses.mageMeteorGrowthCapBonus = Math.min(360, bonuses.mageMeteorGrowthCapBonus || 0);
+    bonuses.engineerDroneBonus = Math.min(2, bonuses.engineerDroneBonus || 0);
     for (const key of Object.keys(bonuses)) bonuses[key] = Math.round(bonuses[key] * 10000) / 10000;
     return bonuses;
   }
@@ -1218,8 +1424,8 @@
         changed = true;
         message = `장비 ${targets.length}개 일괄 분해`;
       }
-    } else if (action === "enhance-item" && item && item.enhance < 20) {
-      const cost = 5 + item.enhance * 4;
+    } else if (action === "enhance-item" && item && item.enhance < 20 && !item.reforgePreview) {
+      const cost = getEnhanceCost(item);
       if (next.currencies.enhancementStones >= cost) {
         const chance = getEnhanceSuccessChance(item.enhance);
         const random = createRandom(hashString(`${item.id}:enhance:${item.enhance}:${item.rerolls}:${Date.now()}`));
@@ -1229,7 +1435,7 @@
         if (random() <= chance) {
           item.enhance += 1;
           if (ENHANCE_MILESTONES.includes(item.enhance)) {
-            const milestoneAffix = rollMilestoneAffix(item.id, item.enhance, random);
+            const milestoneAffix = rollMilestoneAffix(item.id, item.enhance, random, item.milestoneAffixes.map((affix) => affix.id));
             if (milestoneAffix) item.milestoneAffixes.push(milestoneAffix);
           }
           affectsLoadout = isItemEquipped(next, item.id);
@@ -1238,27 +1444,38 @@
           message = `${item.name} 강화 실패 (성공 확률 ${Math.round(chance * 100)}%)`;
         }
       }
-    } else if (action === "reforge-item" && item && (item.slot === "amulet" || item.slot === "core") && item.affixes.length && !item.reforgePreview) {
+    } else if (
+      (action === "reforge-item" || action === "continue-reforge") &&
+      item &&
+      item.milestoneAffixes.length &&
+      (action === "continue-reforge" ? Boolean(item.reforgePreview) : !item.reforgePreview)
+    ) {
       const cost = getReforgeCost(item);
       const locked = new Set(item.lockedAffixIndices);
-      if (locked.size < item.affixes.length && next.currencies.reforgingDust >= cost) {
+      if (locked.size < item.milestoneAffixes.length && next.currencies.reforgingDust >= cost) {
         next.currencies.reforgingDust -= cost;
         const random = createRandom(hashString(`${item.id}:reroll:${item.rerolls}:${Date.now()}`));
-        const candidate = item.affixes.map((affix) => ({ ...affix }));
-        const usedIds = item.affixes.filter((_, index) => locked.has(index)).map((affix) => affix.id);
+        const candidate = item.milestoneAffixes.map((affix) => ({ ...affix }));
+        const previousPreviewIds = action === "continue-reforge"
+          ? item.reforgePreview.milestoneAffixes.filter((_affix, index) => !locked.has(index)).map((affix) => affix.id)
+          : [];
+        const usedIds = [...item.milestoneAffixes.map((affix) => affix.id), ...previousPreviewIds];
         for (let index = 0; index < candidate.length; index += 1) {
           if (locked.has(index)) continue;
-          candidate[index] = rollAffix(random, item.itemLevel, rarityById(item.rarity).rank, usedIds);
+          const current = item.milestoneAffixes[index];
+          candidate[index] = rollMilestoneAffix(item.id, current.milestone, random, [...usedIds, current.id]);
           usedIds.push(candidate[index].id);
         }
-        item.reforgePreview = { affixes: candidate, cost };
+        item.reforgePreview = { milestoneAffixes: candidate, cost };
         item.rerolls += 1;
         next.statistics.reforges += 1;
         changed = true;
-        message = `${item.name} 재련 결과가 생성되었습니다.`;
+        message = action === "continue-reforge"
+          ? `${item.name} 보조 옵션을 다시 재련했습니다.`
+          : `${item.name} 재련 결과가 생성되었습니다.`;
       }
     } else if (action === "apply-reforge" && item?.reforgePreview) {
-      item.affixes = item.reforgePreview.affixes.map((affix) => ({ ...affix }));
+      item.milestoneAffixes = item.reforgePreview.milestoneAffixes.map((affix) => ({ ...affix }));
       item.reforgePreview = null;
       changed = true;
       affectsLoadout = isItemEquipped(next, item.id);
@@ -1267,15 +1484,16 @@
       item.reforgePreview = null;
       changed = true;
       message = `${item.name} 기존 옵션을 유지했습니다.`;
-    } else if (action === "lock-affix" && item && item.affixes.length && !item.reforgePreview) {
-      const index = Math.max(0, Math.min(item.affixes.length - 1, integer(payload.affixIndex)));
+    } else if (action === "lock-affix" && item && item.milestoneAffixes.length && !item.reforgePreview) {
+      const index = Math.max(0, Math.min(item.milestoneAffixes.length - 1, integer(payload.affixIndex)));
       const locked = new Set(item.lockedAffixIndices);
       if (locked.has(index)) locked.delete(index);
-      else if (locked.size < item.affixes.length - 1) locked.add(index);
+      else if (locked.size < item.milestoneAffixes.length - 1) locked.add(index);
       else message = "최소 1개 옵션은 재련 대상으로 남겨야 합니다.";
       const nextLocks = [...locked].sort((a, b) => a - b);
       if (nextLocks.join(",") !== item.lockedAffixIndices.join(",")) {
         item.lockedAffixIndices = nextLocks;
+        item.reforgeLockTarget = "milestone";
         changed = true;
         message = `${item.name} 옵션 잠금 ${nextLocks.length}개`;
       }
@@ -1307,17 +1525,6 @@
         next.statistics.crafts += 1;
         changed = true;
         message = `${RUNE_GRADES[tier]}등급 ${resultDef.name} 합성`;
-      }
-    } else if (action === "craft-boss") {
-      const recipe = BOSS_RECIPES.find((entry) => entry.id === payload.recipeId) || BOSS_RECIPES[BOSS_RECIPES.length - 1];
-      const materials = integer(next.inventory.bossMaterials[recipe.bossId]);
-      if (materials >= recipe.amount && next.currencies.abyssShards >= recipe.shards && next.currencies.bossEssence >= recipe.essence && next.inventory.items.length < 240) {
-        next.inventory.bossMaterials[recipe.bossId] = materials - recipe.amount;
-        next.currencies.abyssShards -= recipe.shards;
-        next.currencies.bossEssence -= recipe.essence;
-        const crafted = generateItem(Date.now(), { classId, highestLevel: next.account.level, abyssDepth: next.records.highestAbyssDepth }, next.statistics.crafts, { baseId: recipe.id, rarity: "mythic", enhance: 5, craft: recipe.id });
-        next.inventory.items.push(crafted); next.collections.equipmentBases = unique([...next.collections.equipmentBases, crafted.baseId]);
-        next.statistics.crafts += 1; changed = true; message = `${recipe.label} 제작`;
       }
     } else if (action === "select-title") {
       const title = String(payload.title || "");
@@ -1362,23 +1569,74 @@
     return 0.45;
   }
 
-  function getReforgeCost(item) {
-    const lockCount = item.lockedAffixIndices.length;
-    return 8 + rarityById(item.rarity).rank * 6 + item.rerolls * 3 + lockCount * lockCount * 12;
+  function getForgeLevelScale(item) {
+    return 1 + Math.sqrt(Math.max(1, Number(item?.itemLevel) || 1)) / 10;
   }
 
-  function renderAffixStat(affix, className = "", item = null, enhance = null) {
+  function getForgeRarityScale(item) {
+    return RARITY_FORGE_COST_SCALE[rarityById(item?.rarity).rank] || 1;
+  }
+
+  function getEnhanceCost(item) {
+    return Math.max(1, Math.ceil((6 + Math.max(0, item.enhance) * 4) * getForgeLevelScale(item) * getForgeRarityScale(item)));
+  }
+
+  function getReforgeCost(item) {
+    const lockCount = item.lockedAffixIndices.length;
+    const optionCount = Math.max(1, item.milestoneAffixes.length);
+    const baseCost = 8 + optionCount * 5;
+    const lockScale = 1 + lockCount * 0.75;
+    return Math.max(1, Math.ceil(baseCost * getForgeLevelScale(item) * getForgeRarityScale(item) * lockScale));
+  }
+
+  function renderAffixStat(affix, className = "", item = null, enhance = null, attributes = "") {
     const def = AFFIXES.find((entry) => entry.id === affix.id) || AFFIXES[0];
     const shown = item ? getEffectiveAffix(item, affix, enhance == null ? item.enhance : enhance) : affix;
-    const value = def.percent ? percent(shown.value) : Math.round(shown.value * 10) / 10;
-    return `<span class="meta-affix-stat ${className}"><small>${escapeHtml(def.label)}</small><b>+${escapeHtml(value)}</b></span>`;
+    const value = def.percent
+      ? percent(shown.value)
+      : Math.abs(shown.value) < 1 ? Math.round(shown.value * 100) / 100 : Math.round(shown.value * 10) / 10;
+    return `<span class="meta-affix-stat ${className}"${attributes ? ` ${attributes}` : ""}><small>${escapeHtml(def.label)}</small><b>+${escapeHtml(value)}</b></span>`;
+  }
+
+  function getMilestoneQualityMeta(affix) {
+    const quality = Math.max(1, Math.min(100, integer(affix.quality, 1, 100)));
+    const tier = quality >= 90 ? "peak" : quality >= 70 ? "high" : quality >= 40 ? "mid" : "low";
+    return {
+      className: `quality-fill quality-${tier}`,
+      attributes: `style="--affix-roll:${quality}%" data-affix-roll="${quality}" title="옵션 수치 ${quality}%"`
+    };
   }
 
   function renderMilestoneStats(item) {
-    return getMilestoneAffixes(item).map((affix) => renderAffixStat(
-      affix,
-      "milestone-active"
-    ).replace("<small>", `<small>+${affix.milestone} · `)).join("");
+    return getMilestoneAffixes(item).map((affix, index) => {
+      const quality = getMilestoneQualityMeta(affix);
+      return renderAffixStat(
+        getEffectiveMilestoneAffix(item, affix),
+        `milestone-active ${quality.className}${item.lockedAffixIndices.includes(index) ? " locked" : ""}`,
+        null,
+        null,
+        quality.attributes
+      );
+    }).join("");
+  }
+
+  function renderMilestoneAffixStat(item, affix, className = "") {
+    const quality = getMilestoneQualityMeta(affix);
+    return renderAffixStat(
+      getEffectiveMilestoneAffix(item, affix),
+      `${className} ${quality.className}`.trim(),
+      null,
+      null,
+      quality.attributes
+    );
+  }
+
+  function renderForgeMilestoneStats(item) {
+    if (!item.milestoneAffixes.length) return `<p class="meta-forge-no-affixes">강화하면 재련 가능한 보조 옵션이 추가됩니다.</p>`;
+    return item.milestoneAffixes.map((affix, index) => {
+      const locked = item.lockedAffixIndices.includes(index);
+      return `<div class="meta-forge-affix ${locked ? "locked" : ""}">${renderMilestoneAffixStat(item, affix, locked ? "locked" : "")}<button type="button" class="icon-only${locked ? " active" : ""}" data-progression-action="lock-affix" data-item-id="${escapeHtml(item.id)}" data-affix-index="${index}" aria-label="보조 옵션 ${locked ? "잠금 해제" : "잠금"}" title="${locked ? "잠금 해제" : "재련에서 유지"}"></button></div>`;
+    }).join("");
   }
 
   function getRaritySpecialText(item, special) {
@@ -1390,7 +1648,7 @@
     switch (item.special) {
       case "boss_hunter": return `정예/보스 피해 ${pct(0.1)}`;
       case "ricochet": return "투사체가 벽에서 1회 튕김";
-      case "skill_amp": return `스킬 피해 ${pct(0.035)} · 범위 ${pct(0.05)}`;
+      case "skill_amp": return `피해 증폭 ${pct(0.035)} · 범위 ${pct(0.05)}`;
       case "construct_amp": return `설치물 피해 ${pct(0.11)} · 지속시간 ${pct(0.09)}`;
       case "status_amp": return `상태이상 피해 ${pct(0.11)}`;
       case "venom_cap": return "독 최대 중첩 +1";
@@ -1399,18 +1657,48 @@
       case "swift_guard": return `이동 속도 ${pct(0.035)} · 방어 ${number(0.8)}`;
       case "warden_oath": return `최대 체력 ${pct(0.12)} · 방어 ${number(1.5)} · 체력 35% 이하에서 최대 체력 35% 보호막(전투당 1회)`;
       case "prophet_bloom": return `상태이상 피해 ${pct(0.22)} · 독 최대 중첩 +2 · 체력 재생 ${number(0.35, "/s")}`;
-      case "regent_singularity": return `공격력 ${pct(0.1)} · 범위 ${pct(0.14)} · 스킬 가속 +${Math.round(8 * scale * 10) / 10}`;
-      case "abyss_crown": return `공격력 ${pct(0.12)} · 정예/보스 피해 ${pct(0.25)} · 보스 체력 20% 이하에서 피해 +45%`;
+      case "regent_singularity": return `피해 증폭 ${pct(0.1)} · 범위 ${pct(0.14)} · 스킬 가속 +${Math.round(8 * scale * 10) / 10}`;
+      case "abyss_crown": return `피해 증폭 ${pct(0.12)} · 정예/보스 피해 ${pct(0.25)} · 보스 체력 20% 이하에서 피해 +45%`;
       case "burn_amp": return `화상 피해 ${pct(0.28)}`;
       case "turret_sustain": return `터렛 처치 시 지속시간 ${number(0.8, "초")}`;
-      case "warrior_signature": return `피해 ${pct(0.06)} · 범위 ${pct(0.08)} · 강철 회오리 추가 칼날 발사`;
-      case "ranger_signature": return `피해 ${pct(0.05)} · 치명타 확률 ${pct(0.04)} · 연발 사격 유도 화살 +2 및 1회 연쇄`;
-      case "mage_signature": return `피해 ${pct(0.1)} · 범위 ${pct(0.06)} · 별빛 폭발 적중 시 작은 파편으로 분열`;
+      case "warrior_signature": return `피해 증폭 ${pct(0.06)} · 범위 ${pct(0.08)} · 강철 회오리 추가 칼날 발사`;
+      case "ranger_signature": return `피해 증폭 ${pct(0.05)} · 치명타 확률 ${pct(0.04)} · 연발 사격 유도 화살 +2 및 1회 연쇄`;
+      case "mage_signature": return `피해 증폭 ${pct(0.1)} · 범위 ${pct(0.06)} · 별빛 폭발 적중 시 작은 파편으로 분열`;
       case "engineer_signature": return `설치물 피해 ${pct(0.14)} · 지속시간 ${pct(0.1)} · 자동 터렛 설치 시 보조 미니 터렛 +1`;
-      case "puppeteer_signature": return `피해 ${pct(0.05)} · 상태이상 피해 ${pct(0.12)}`;
-      case "martialist_signature": return `피해 ${pct(0.05)} · 치명타 확률 ${pct(0.04)}`;
+      case "puppeteer_signature": return `피해 증폭 ${pct(0.05)} · 상태이상 피해 ${pct(0.12)}`;
+      case "martialist_signature": return `피해 증폭 ${pct(0.05)} · 치명타 확률 ${pct(0.04)}`;
       case "alchemist_signature": return `상태이상 피해 ${pct(0.12)} · 화상 피해 ${pct(0.15)}`;
       case "assassin_signature": return `치명타 확률 ${pct(0.04)} · 치명타 피해 ${pct(0.12)}`;
+      case "projectile_aegis": return `회전 수호판 3개 · 모두 소모 시 ${Math.round(Math.max(8, 13 - scale * 0.8) * 10) / 10}초 후 재생성`;
+      case "poison_spread": return "독·맹독 적 사망 시 반경 220 내 최대 6명에게 전염";
+      case "common_drone": return "영구 보조 드론 1기 생성";
+      case "periodic_shield": return `12초마다 최대 체력 ${pct(Math.min(0.18, 0.08 + 0.04 * scale))} 보호막`;
+      case "kill_cooldown": return `적 처치 시 모든 스킬 쿨타임 ${Math.round(Math.min(0.8, 0.35 * scale) * 100) / 100}초 감소`;
+      case "vampire_oath": return `피해의 ${pct(Math.min(0.036, 0.015 * scale))} 흡혈 · 방어력 0 고정`;
+      case "double_edge": return `피해 증폭 ${pct(Math.min(0.42, 0.18 * scale))} · 최대 체력 -30% · 방어력 -55%`;
+      case "skill_seal": return `기본 공격 피해 ${pct(Math.min(1, 0.42 * scale))} · 공격 속도 +${Math.round(Math.min(130, 55 * scale))} · 모든 스킬 봉인`;
+      case "basic_seal": return `기본 공격 봉인 · 스킬 가속 +${Math.round(Math.min(120, 50 * scale))}`;
+      case "swift_god": return `이동 속도 ${pct(Math.min(0.22, 0.09 * scale))} · 대시 최대 충전 +1`;
+      case "xp_magnet": return "거리 제한 없이 경험치 구슬 자동 흡수";
+      case "warrior_execute_cap": return `광역 베기 처형 기준 ${percent(Math.min(0.35, 0.25 + 0.04 * scale))}`;
+      case "warrior_cleave_repeat": return "기존 가로·세로 베기 후 반대 방향 가로베기 +1회";
+      case "warrior_shout_damage": return `도발 범위에 공격력 계수 ${Math.round(Math.min(2.2, 0.9 + 0.45 * scale) * 100) / 100} 피해`;
+      case "warrior_whirlwind_pull": return "전진하는 회오리가 일반·정예 적을 이동 중심으로 강하게 끌어당김";
+      case "warrior_collision_charge": return "응집 제거 · 강한 밀치기 · 벽/적 충돌 추가 피해";
+      case "ranger_primary_homing": return "기본 공격이 반경 720 내 적을 추적";
+      case "ranger_radial_q": return "Q를 360도 12발 사격으로 변경 · 개별 피해 72%";
+      case "ranger_laser_fire": return "레이저가 지나간 직선 경로 전체에 4.2초 불바다 생성";
+      case "ranger_rain_pull": return "화살비가 일반·정예 적을 중심으로 끌어당김";
+      case "ranger_pierce_cap": return `관통 성장 피해 상한 +${Math.min(60, Math.round(25 * scale))}`;
+      case "mage_giant_orb": return "빠르게 날아가 적을 밀치고 벽까지 관통하는 거대 별빛 · 유도 별빛은 범위 +50% · 분열 핵은 치명타 100%";
+      case "mage_flame_wave": return "빙결 파동·파쇄 반응·빙결의 숨결을 화염 계열로 전환";
+      case "mage_meteor_cap": return `포식하는 운석 성장 상한 +${Math.min(360, Math.round(150 * scale))}회`;
+      case "mage_ice_meteor": return "운석을 빙결 충돌과 5.2초 냉기 지대로 변경";
+      case "mage_chain_boost": return "연쇄 17회 · 체인 거리 560 · 탐색 거리 증가";
+      case "engineer_mecha_module": return "메카 지속시간 7.8초 · 대시 +1 · 범위 크기가 적용되는 파란 지속 레이저 · 매우 약한 넉백";
+      case "engineer_mine_fire": return "지뢰 폭발 후 4.4~5.2초 불바다 생성";
+      case "engineer_drone_count": return "보조 드론 +2 · 보조 드론 피해 40%";
+      case "engineer_permanent_drone": return "드론 스킬 봉인 · 영구 드론 1기 유지";
       default: return special.text;
     }
   }
@@ -1420,14 +1708,7 @@
     const rank = rarityById(item.rarity).rank;
     const scale = RARITY_SPECIAL_SCALE[rank] || 0;
     if (!scale) return "";
-    return `<span class="special"><small>희귀도 고유 · ${escapeHtml(special.label)}</small><b>${escapeHtml(getRaritySpecialText(item, special))}</b></span>`;
-  }
-
-  function getRarityPowerLabel(rarityId) {
-    const rarity = rarityById(rarityId);
-    const primary = Math.round((RARITY_PRIMARY_SCALE[rarity.rank] || 1) * 100);
-    const special = Math.round((RARITY_SPECIAL_SCALE[rarity.rank] || 0) * 100);
-    return `${rarity.label} · 주 능력 ${primary}%${special ? ` · 고유 ${special}%` : ""}`;
+    return `<span class="special"><small>고유 옵션 · ${escapeHtml(special.label)}</small><b>${escapeHtml(getRaritySpecialText(item, special))}</b></span>`;
   }
 
   function codexKey(kind, id) {
@@ -1448,12 +1729,12 @@
 
   function getRuneTierEffects(runeId, tier) {
     const power = RUNE_GRADE_POWER[Math.max(0, Math.min(RUNE_GRADE_POWER.length - 1, tier - 1))];
-    if (runeId === "fury") return `모든 피해 +${percent(0.018 * power)}`;
+    if (runeId === "fury") return `피해 증폭 +${percent(0.018 * power)}`;
     if (runeId === "ward") return `최대 체력 +${percent(0.025 * power)} · 방어 +${Math.round(0.22 * power * 100) / 100}`;
     if (runeId === "haste") return `이동 속도 +${percent(0.008 * power)} · 스킬 가속 +${Math.round(0.9 * power * 10) / 10}`;
     if (runeId === "venom") return `상태이상 피해 +${percent(0.025 * power)}${tier >= 5 ? " · 독 최대 중첩 +1" : ""}`;
     if (runeId === "rebound") return tier >= 4 ? "투사체 벽 반사 +1회" : "A등급부터 벽 반사 효과 활성화";
-    if (runeId === "eclipse") return `화상 +${percent(0.04 * power)} · 상태이상 +${percent(0.035 * power)} · 보스 +${percent(0.02 * power)}`;
+    if (runeId === "eclipse") return `화상 +${percent(0.04 * power)} · 상태이상 +${percent(0.035 * power)} · 정예/보스 +${percent(0.02 * power)}`;
     if (runeId === "precision") return `치명타 확률 +${percent(0.012 * power)}`;
     if (runeId === "ruin") return `치명타 피해 +${percent(0.025 * power)}`;
     if (runeId === "colossus") return `최대 체력 +${percent(0.04 * power)}`;
@@ -1466,9 +1747,9 @@
     if (runeId === "longevity") return `설치물 지속시간 +${percent(0.025 * power)}`;
     if (runeId === "focus") return `스킬 가속 +${Math.round(1.2 * power * 10) / 10}`;
     if (runeId === "momentum") return `이동 속도 +${percent(0.012 * power)}`;
-    if (runeId === "execution") return `피해 +${percent(0.012 * power)} · 치명타 확률 +${percent(0.008 * power)}`;
+    if (runeId === "execution") return `피해 증폭 +${percent(0.012 * power)} · 치명타 확률 +${percent(0.008 * power)}`;
     if (runeId === "frost") return `상태이상 피해 +${percent(0.022 * power)} · 범위 +${percent(0.01 * power)}`;
-    if (runeId === "storm") return `피해 +${percent(0.012 * power)} · 스킬 가속 +${Math.round(0.8 * power * 10) / 10}`;
+    if (runeId === "storm") return `피해 증폭 +${percent(0.012 * power)} · 스킬 가속 +${Math.round(0.8 * power * 10) / 10}`;
     if (runeId === "alchemy") return `상태이상 +${percent(0.022 * power)} · 화상 +${percent(0.03 * power)}`;
     if (runeId === "shadow") return `치명타 피해 +${percent(0.02 * power)} · 이동 속도 +${percent(0.007 * power)}`;
     if (runeId === "vitality") return `최대 체력 +${percent(0.022 * power)} · 피해 +${percent(0.009 * power)}`;
@@ -1486,13 +1767,13 @@
       ["슬롯", SLOT_LABELS[entry.slot] || entry.slot],
       ["사용 직업", CODEX_CLASS_LABELS[entry.classId] || entry.classId],
       ["세트", SET_LABELS[entry.setId] || entry.setId],
-      ["획득", entry.bossCraft ? "보스 재료 제작" : "몬스터 필드 드랍"],
+      ["획득", "몬스터 필드 드랍"],
     ])}
-      ${renderCodexList("희귀도 차이", [["주 능력·강화 성장", "일반 100% · 희귀 120% · 영웅 145% · 전설 175% · 신화 210%"], [special[0], `일반 비활성 · 희귀 100% · 영웅 140% · 전설 185% · 신화 240% / ${special[1]}`]])}
+      ${renderCodexList("희귀도 차이", [["주 능력·강화 성장", "일반 100% · 희귀 150% · 영웅 200% · 전설 300% · 신화 500% · 고유 1000%"], [special[0], `일반·희귀 비활성 · 영웅 100% · 전설 200% · 신화 350% · 고유 500% / ${special[1]}`]])}
       ${renderCodexList("세트 효과", setBonus ? [["2세트", setBonus.two], ["4세트", setBonus.four]] : [["세트 없음", "추가 효과 없음"]])}
       ${renderCodexList("슬롯별 주 능력치", [["무기", "고정 공격력"], ["갑옷", "고정 방어력 또는 고정 최대 체력"], ["부적·코어", "무작위 옵션 1개"]])}
       ${renderCodexList("부적·코어 등장 옵션", affixRows)}
-      <p class="meta-codex-formula">강화할 때마다 현재 주 능력치가 고정 수치로 직접 증가합니다. <b>+5 / +10 / +15 / +20</b> 도달 순간 무작위 보조 옵션을 1개 추첨하며, 도달 전에는 결과를 공개하지 않습니다. 세트 효과는 강화 및 희귀도와 별개로 계산됩니다.</p>`;
+      <p class="meta-codex-formula">강화할 때마다 현재 주 능력치가 고정 수치로 직접 증가합니다. <b>+5 / +10 / +15 / +20</b> 도달 순간 전체 보조 옵션 풀에서 중복 없이 1개를 추첨합니다. 공격·치명·공격 속도·스킬 가속·범위 옵션은 다른 옵션보다 등장 확률이 조금 낮습니다. 보조 옵션 수치는 강화 단계와 장비 희귀도 배율을 함께 적용하며 세트 효과는 별개로 계산됩니다.</p>`;
   }
 
   function renderRuneCodexDetail(entry) {
@@ -1684,7 +1965,7 @@
     const special = SPECIALS[item.special];
     const compatible = item.classId === "all" || item.classId === options.classId;
     return `<article class="meta-item ${options.selected ? "selected" : ""}" style="--item-color:${rarity.color}" data-rarity="${rarity.id}" data-inventory-item-id="${escapeHtml(item.id)}">
-      <div class="meta-item-summary"><label class="meta-item-select" title="일괄 분해 선택"><input type="checkbox" data-inventory-select data-item-id="${escapeHtml(item.id)}" ${options.selected ? "checked" : ""}><span class="material-symbols-rounded" aria-hidden="true">check</span></label><i class="material-symbols-rounded meta-item-icon meta-equipment-icon" aria-hidden="true">${baseById(item.baseId).icon || SLOT_ICONS[item.slot]}</i><div class="meta-item-main"><span class="meta-rarity">${escapeHtml(getRarityPowerLabel(item.rarity))}</span><strong>${escapeHtml(item.name)}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>iLv.${item.itemLevel} · ${SLOT_LABELS[item.slot]} · ${escapeHtml(CODEX_CLASS_LABELS[item.classId] || "공용")}</small><em>${escapeHtml(SET_LABELS[item.setId] || item.setId)} 세트</em></div></div>
+      <div class="meta-item-summary"><label class="meta-item-select" title="일괄 분해 선택"><input type="checkbox" data-inventory-select data-item-id="${escapeHtml(item.id)}" ${options.selected ? "checked" : ""}><span class="material-symbols-rounded" aria-hidden="true">check</span></label><i class="material-symbols-rounded meta-item-icon meta-equipment-icon" aria-hidden="true">${baseById(item.baseId).icon || SLOT_ICONS[item.slot]}</i><div class="meta-item-main"><span class="meta-rarity">${escapeHtml(rarity.label)}</span><strong>${escapeHtml(item.name)}${item.enhance ? ` +${item.enhance}` : ""}</strong><small>iLv.${item.itemLevel} · ${SLOT_LABELS[item.slot]} · ${escapeHtml(CODEX_CLASS_LABELS[item.classId] || "공용")}</small><em>${escapeHtml(SET_LABELS[item.setId] || item.setId)} 세트</em></div></div>
       <div class="meta-affixes">${item.affixes.map((affix, index) => renderAffixStat(affix, item.lockedAffixIndices.includes(index) ? "locked" : "", item)).join("")}${renderMilestoneStats(item)}${renderRaritySpecial(item, special)}</div>
       <div class="meta-item-actions">${compatible && !options.equipped ? `<button type="button" data-progression-action="equip-item" data-item-id="${escapeHtml(item.id)}">장착</button>` : ""}${!options.equipped ? `<button type="button" class="danger" data-progression-action="salvage-item" data-item-id="${escapeHtml(item.id)}">분해</button>` : ""}</div>
     </article>`;
@@ -1696,8 +1977,8 @@
     const runeMap = new Map(progress.inventory.runes.map((rune) => [rune.id, rune]));
     const bonuses = calculateEquipmentBonuses(progress, classId);
     const bonusRows = [
-      ["공격력", `+${Math.round(bonuses.attackBonus * 10) / 10}`], ["고정 체력", `+${Math.round(bonuses.maxHpBonus)}`], ["방어력", `+${Math.round(bonuses.armorBonus * 10) / 10}`],
-      ["피해", percent(bonuses.damageMul - 1)], ["체력", percent(bonuses.maxHpMul - 1)], ["체젠", `+${Math.round(bonuses.regenBonus * 100) / 100}/s`], ["공격 속도", `+${Math.round(bonuses.attackSpeed * 10) / 10}`], ["스킬 가속", `+${Math.round(bonuses.skillHaste * 10) / 10}`],
+      ["고정 공격력", `+${Math.round(bonuses.attackBonus * 10) / 10}`], ["고정 체력", `+${Math.round(bonuses.maxHpBonus)}`], ["방어력", `+${Math.round(bonuses.armorBonus * 10) / 10}`],
+      ["피해 증폭", percent(bonuses.damageMul - 1)], ["체력", percent(bonuses.maxHpMul - 1)], ["체젠", `+${Math.round(bonuses.regenBonus * 100) / 100}/s`], ["공격 속도", `+${Math.round(bonuses.attackSpeed * 10) / 10}`], ["스킬 가속", `+${Math.round(bonuses.skillHaste * 10) / 10}`],
       ["이동 속도", percent(bonuses.speedMul - 1)], ["치명타 확률", percent(bonuses.critChanceBonus)], ["치명 피해", percent(bonuses.critDamageMul - 1)], ["범위", percent(bonuses.areaMul - 1)],
     ];
     const specialRows = [
@@ -1726,7 +2007,7 @@
       const setCount = activeSets[item.setId] || 0;
       return `<details class="meta-equipped-card" style="--item-color:${rarity.color}" data-rarity="${rarity.id}" data-equipped-item-id="${escapeHtml(item.id)}">
         <summary><i class="material-symbols-rounded meta-item-icon meta-equipment-icon" aria-hidden="true">${baseById(item.baseId).icon || SLOT_ICONS[item.slot]}</i><span><small>${SLOT_LABELS[slot]} · ${escapeHtml(rarity.label)}</small><strong>${escapeHtml(item.name)}${item.enhance ? ` +${item.enhance}` : ""}</strong><em>iLv.${item.itemLevel} · ${escapeHtml(SET_LABELS[item.setId] || item.setId)} ${setCount}/4</em></span><i class="material-symbols-rounded meta-equipped-expand" aria-hidden="true">expand_more</i></summary>
-        <div class="meta-equipped-detail"><div class="meta-affixes">${item.affixes.map((affix, index) => renderAffixStat(affix, item.lockedAffixIndices.includes(index) ? "locked" : "", item)).join("")}${renderMilestoneStats(item)}${renderRaritySpecial(item, special)}</div>${setBonus ? `<div class="meta-equipped-set"><strong>${escapeHtml(SET_LABELS[item.setId] || item.setId)} 세트</strong><span class="${setCount >= 2 ? "active" : ""}">2세트 · ${escapeHtml(setBonus.two)}</span><span class="${setCount >= 4 ? "active" : ""}">4세트 · ${escapeHtml(setBonus.four)}</span></div>` : ""}<button type="button" data-progression-action="unequip-slot" data-slot="${slot}">장비 해제</button></div>
+        <div class="meta-equipped-detail"><div class="meta-affixes">${item.affixes.map((affix) => renderAffixStat(affix, "", item)).join("")}${renderMilestoneStats(item)}${renderRaritySpecial(item, special)}</div>${setBonus ? `<div class="meta-equipped-set"><strong>${escapeHtml(SET_LABELS[item.setId] || item.setId)} 세트</strong><span class="${setCount >= 2 ? "active" : ""}">2세트 · ${escapeHtml(setBonus.two)}</span><span class="${setCount >= 4 ? "active" : ""}">4세트 · ${escapeHtml(setBonus.four)}</span></div>` : ""}<button type="button" data-progression-action="unequip-slot" data-slot="${slot}">장비 해제</button></div>
       </details>`;
     });
     const equipped = `<div class="meta-loadout-column">${equippedSlots.join("")}</div>`;
@@ -1811,24 +2092,24 @@
     for (const rune of progress.inventory.runes.filter((entry) => !isRuneEquipped(progress, entry.id) && entry.tier < RUNE_GRADES.length)) {
       groups[rune.tier] = (groups[rune.tier] || 0) + 1;
     }
-    return `<div class="meta-forge-resources"><span><small>심연 파편</small><b>${progress.currencies.abyssShards.toLocaleString()}</b></span><span><small>강화석</small><b>${progress.currencies.enhancementStones.toLocaleString()}</b></span><span><small>재련 가루</small><b>${progress.currencies.reforgingDust.toLocaleString()}</b></span><span><small>보스 정수</small><b>${progress.currencies.bossEssence.toLocaleString()}</b></span></div>
-      <section class="meta-forge-section"><div class="meta-section-head"><strong>장착 장비 강화</strong><span>장비마다 강화 후 오르는 수치와 성공 확률을 바로 확인할 수 있습니다.</span></div>
+    return `<div class="meta-forge-resources"><span><small>심연 파편</small><b>${progress.currencies.abyssShards.toLocaleString()}</b></span><span><small>강화석</small><b>${progress.currencies.enhancementStones.toLocaleString()}</b></span><span><small>재련 가루</small><b>${progress.currencies.reforgingDust.toLocaleString()}</b></span></div>
+      <section class="meta-forge-section"><div class="meta-section-head"><strong>장착 장비 강화</strong><span>보조 옵션은 모든 단계에서 중복 없이 무작위로 등장하며, 공격·가속·범위 계열은 조금 희귀합니다.</span></div>
       <div class="meta-forge-list">${equipped.length ? equipped.map((item) => {
-        const enhanceCost = 5 + item.enhance * 4;
+        const enhanceCost = getEnhanceCost(item);
         const chance = getEnhanceSuccessChance(item.enhance);
         const rerollCost = getReforgeCost(item);
         const preview = item.reforgePreview;
-        const canReforge = item.slot === "amulet" || item.slot === "core";
-        const affixRows = item.affixes.map((affix) => `<div class="meta-forge-affix">${renderAffixStat(affix, "", item)}</div>`).join("") + renderMilestoneStats(item);
+        const canReforge = item.milestoneAffixes.length > 0;
+        const affixRows = renderForgeMilestoneStats(item);
+        const basePrimary = getEffectiveAffix(item, item.affixes[0], 0);
         const currentPrimary = getEffectiveAffix(item, item.affixes[0], item.enhance);
-        const nextPrimary = getEffectiveAffix(item, item.affixes[0], Math.min(20, item.enhance + 1));
         const primaryDef = AFFIXES.find((entry) => entry.id === currentPrimary.id) || AFFIXES[0];
-        const formatPrimary = (affix) => primaryDef.percent ? percent(affix.value) : Math.round(affix.value * 10) / 10;
-        const comparison = preview ? `<section class="meta-reforge-compare"><header><strong>재련 결과 비교</strong><span>비교 후 원하는 쪽을 선택하세요.</span></header><div class="meta-reforge-columns"><div><b>현재 옵션</b>${item.affixes.map((affix) => renderAffixStat(affix, "", item)).join("")}</div><span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span><div><b>변경 후</b>${preview.affixes.map((affix) => renderAffixStat(affix, "changed", item)).join("")}</div></div><footer><button type="button" class="secondary" data-progression-action="cancel-reforge" data-item-id="${escapeHtml(item.id)}">기존 옵션 유지</button><button type="button" data-progression-action="apply-reforge" data-item-id="${escapeHtml(item.id)}">새 옵션 적용</button></footer></section>` : "";
-        return `<article class="meta-forge-card" data-rarity="${item.rarity}" data-forge-item-id="${escapeHtml(item.id)}"><header><i class="material-symbols-rounded meta-item-icon" aria-hidden="true">${baseById(item.baseId).icon || SLOT_ICONS[item.slot]}</i><div><small>${SLOT_LABELS[item.slot]} · ${escapeHtml(rarityById(item.rarity).label)} · iLv.${item.itemLevel}</small><strong>${escapeHtml(item.name)}</strong></div><span>+${item.enhance}</span></header><div class="meta-forge-primary"><small>${primaryDef.label}</small><b>${formatPrimary(currentPrimary)}</b><i class="material-symbols-rounded" aria-hidden="true">arrow_forward</i><strong>${item.enhance >= 20 ? "MAX" : formatPrimary(nextPrimary)}</strong></div><div class="meta-forge-affixes">${affixRows}</div><div class="meta-forge-actions"><button type="button" data-progression-action="enhance-item" data-item-id="${escapeHtml(item.id)}" ${progress.currencies.enhancementStones < enhanceCost || item.enhance >= 20 || preview ? "disabled" : ""}><b>${item.enhance >= 20 ? "최대 강화" : "강화"}</b><small>${item.enhance >= 20 ? "강화 완료" : `성공 ${Math.round(chance * 100)}% · 강화석 ${enhanceCost}`}</small></button>${canReforge ? `<button type="button" data-progression-action="reforge-item" data-item-id="${escapeHtml(item.id)}" ${progress.currencies.reforgingDust < rerollCost || preview ? "disabled" : ""}><b>주 옵션 재련</b><small>가루 ${rerollCost} · 결과 확인 후 적용</small></button>` : `<span class="meta-forge-fixed"><b>고정 주 능력치</b><small>강화할 때마다 수치가 증가합니다.</small></span>`}</div>${comparison}</article>`;
+        const enhancePrimaryValue = Math.max(0, Math.round((currentPrimary.value - basePrimary.value) * 10000) / 10000);
+        const formatPrimary = (value) => primaryDef.percent ? percent(value) : Math.round(value * 10) / 10;
+        const comparison = preview ? `<section class="meta-reforge-compare"><header><strong>보조 옵션 재련 결과</strong><span>가루 ${preview.cost} 소모 완료 · 잠근 옵션은 유지되고 나머지는 모두 변경됩니다.</span></header><div class="meta-reforge-columns"><div><b>현재 보조 옵션</b>${item.milestoneAffixes.map((affix, index) => renderMilestoneAffixStat(item, affix, item.lockedAffixIndices.includes(index) ? "locked same" : "")).join("")}</div><span class="material-symbols-rounded" aria-hidden="true">arrow_forward</span><div><b>변경 후 보조 옵션</b>${preview.milestoneAffixes.map((affix, index) => renderMilestoneAffixStat(item, affix, item.lockedAffixIndices.includes(index) ? "locked same" : "changed")).join("")}</div></div><footer><button type="button" class="secondary" data-progression-action="cancel-reforge" data-item-id="${escapeHtml(item.id)}">현재 옵션 유지</button><button type="button" class="secondary" data-progression-action="continue-reforge" data-item-id="${escapeHtml(item.id)}" ${progress.currencies.reforgingDust < rerollCost ? "disabled" : ""}>계속 재련 · 가루 ${rerollCost}</button><button type="button" data-progression-action="apply-reforge" data-item-id="${escapeHtml(item.id)}">새 옵션 적용</button></footer></section>` : "";
+        return `<article class="meta-forge-card" data-rarity="${item.rarity}" data-forge-item-id="${escapeHtml(item.id)}"><header><i class="material-symbols-rounded meta-item-icon" aria-hidden="true">${baseById(item.baseId).icon || SLOT_ICONS[item.slot]}</i><div><small>${SLOT_LABELS[item.slot]} · ${escapeHtml(rarityById(item.rarity).label)} · iLv.${item.itemLevel}</small><strong>${escapeHtml(item.name)}</strong></div><span>+${item.enhance}</span></header><div class="meta-forge-primary"><small>주 능력 · 재련 불가<br>${primaryDef.label}</small><span class="meta-forge-primary-values"><b title="기본 수치">${formatPrimary(basePrimary.value)}</b><i aria-hidden="true">+</i><strong title="강화 증가">${formatPrimary(enhancePrimaryValue)}</strong></span></div><div class="meta-forge-affix-head"><strong>강화 보조 옵션</strong><span>${item.lockedAffixIndices.length}개 잠금 · 재련 가루 ${canReforge ? rerollCost : 0}</span></div><div class="meta-forge-affixes">${affixRows}</div><div class="meta-forge-actions"><button type="button" data-progression-action="enhance-item" data-item-id="${escapeHtml(item.id)}" ${progress.currencies.enhancementStones < enhanceCost || item.enhance >= 20 || preview ? "disabled" : ""}><b>${item.enhance >= 20 ? "최대 강화" : "강화"}</b><small>${item.enhance >= 20 ? "강화 완료" : `성공 ${Math.round(chance * 100)}% · 강화석 ${enhanceCost}`}</small></button>${canReforge ? `<button type="button" data-progression-action="reforge-item" data-item-id="${escapeHtml(item.id)}" ${progress.currencies.reforgingDust < rerollCost || preview ? "disabled" : ""}><b>보조 옵션 전체 재련</b><small>가루 ${rerollCost} · 잠금 제외 전부 변경</small></button>` : `<span class="meta-forge-fixed"><b>재련 대기</b><small>강화 시 보조 옵션이 추가됩니다.</small></span>`}</div>${comparison}</article>`;
       }).join("") : `<p class="meta-empty">장착한 장비가 없습니다.</p>`}</div></section>
-      <div class="meta-forge-lower"><section><div class="meta-section-head"><strong>룬 합성</strong><span>같은 등급 2개를 다음 등급 무작위 룬으로 합성</span></div><div class="meta-merge-list">${Object.entries(groups).map(([tier, count]) => `<button type="button" data-progression-action="merge-rune" data-tier="${tier}" ${count < 2 ? "disabled" : ""}>${RUNE_GRADES[Math.max(0, Number(tier) - 1)]} → ${RUNE_GRADES[Number(tier)]} <b>${count}/2</b></button>`).join("") || `<p class="meta-empty">합성 가능한 룬이 없습니다.</p>`}</div></section>
-      <section><div class="meta-section-head"><strong>보스 전용 제작</strong><span>보스 재료로 제작하는 신화 +5 장비</span></div><div class="meta-boss-recipes">${BOSS_RECIPES.map((recipe) => { const held = integer(progress.inventory.bossMaterials[recipe.bossId]); const special = SPECIALS[baseById(recipe.id).special]; return `<article><div><strong>${escapeHtml(recipe.label)} <em>신화 +5</em></strong><small>${escapeHtml(special?.label || "보스 고유 효과")} · ${escapeHtml(special?.text || "")}</small><span>${escapeHtml(recipe.materialName)} ${held}/${recipe.amount} · 파편 ${progress.currencies.abyssShards}/${recipe.shards} · 보스 정수 ${progress.currencies.bossEssence}/${recipe.essence}</span></div><button type="button" data-progression-action="craft-boss" data-recipe-id="${recipe.id}" ${held < recipe.amount || progress.currencies.abyssShards < recipe.shards || progress.currencies.bossEssence < recipe.essence ? "disabled" : ""}>제작</button></article>`; }).join("")}</div></section></div>`;
+      <div class="meta-forge-lower"><section><div class="meta-section-head"><strong>룬 합성</strong><span>같은 등급 2개를 다음 등급 무작위 룬으로 합성</span></div><div class="meta-merge-list">${Object.entries(groups).map(([tier, count]) => `<button type="button" data-progression-action="merge-rune" data-tier="${tier}" ${count < 2 ? "disabled" : ""}>${RUNE_GRADES[Math.max(0, Number(tier) - 1)]} → ${RUNE_GRADES[Number(tier)]} <b>${count}/2</b></button>`).join("") || `<p class="meta-empty">합성 가능한 룬이 없습니다.</p>`}</div></section></div>`;
   }
 
   function renderCollectionCatalog(kind, label, collectedIds, catalog, describe, selectedKey) {
@@ -1906,7 +2187,6 @@
     if (reward.shards) parts.push(`파편 ${reward.shards}`);
     if (reward.stones) parts.push(`강화석 ${reward.stones}`);
     if (reward.dust) parts.push(`가루 ${reward.dust}`);
-    if (reward.essence) parts.push(`정수 ${reward.essence}`);
     if (reward.title) parts.push(`칭호: ${reward.title}`);
     if (reward.skin) parts.push("스킨");
     return parts.join(" · ");
@@ -1920,7 +2200,7 @@
     return `<div class="meta-mission-intro"><strong>개인 임무</strong><span>모드를 선택할 필요 없이 모든 일반·승천 원정에서 자동 누적됩니다.</span></div>
       <div class="meta-challenge-grid personal-missions">
         <article class="${daily.completed ? "done" : ""}"><span>DAILY MISSION · ${daily.key}</span><strong>${escapeHtml(daily.goalLabel)}</strong><p>${daily.completed ? "오늘의 개인 임무를 완료했습니다." : "내 전투 기록만 반영되며 파티원의 처치는 합산되지 않습니다."}</p><div><b>${daily.completed ? "완료" : "진행 중"}</b><em>${Math.min(daily.target, daily.progress).toLocaleString()}/${daily.target.toLocaleString()}</em></div><i><b style="width:${Math.min(100, daily.progress / daily.target * 100)}%"></b></i><small>보상: 파편 70 · 강화석 12</small></article>
-        <article class="${weekly.completed ? "done" : ""}"><span>WEEKLY MISSION · ${weekly.key}</span><strong>${escapeHtml(weekly.goalLabel)}</strong><p>${weekly.completed ? "이번 주 개인 임무를 완료했습니다." : "일주일 동안 여러 원정에 걸쳐 진행도를 누적할 수 있습니다."}</p><div><b>${weekly.completed ? "완료" : "진행 중"}</b><em>${Math.min(weekly.target, weekly.progress).toLocaleString()}/${weekly.target.toLocaleString()}</em></div><i><b style="width:${Math.min(100, weekly.progress / weekly.target * 100)}%"></b></i><small>보상: 파편 180 · 보스 정수 5</small></article>
+        <article class="${weekly.completed ? "done" : ""}"><span>WEEKLY MISSION · ${weekly.key}</span><strong>${escapeHtml(weekly.goalLabel)}</strong><p>${weekly.completed ? "이번 주 개인 임무를 완료했습니다." : "일주일 동안 여러 원정에 걸쳐 진행도를 누적할 수 있습니다."}</p><div><b>${weekly.completed ? "완료" : "진행 중"}</b><em>${Math.min(weekly.target, weekly.progress).toLocaleString()}/${weekly.target.toLocaleString()}</em></div><i><b style="width:${Math.min(100, weekly.progress / weekly.target * 100)}%"></b></i><small>보상: 파편 180 · 재련 가루 50</small></article>
       </div>
       <div class="meta-season"><div><span>SEASON ${season.id}</span><strong>시즌 레벨 ${season.level}</strong></div><i><b style="width:${Math.min(100, season.xp / (season.level * 100) * 100)}%"></b></i><em>${season.xp}/${season.level * 100} XP · 레벨마다 파편/재련 가루 지급</em></div>
       <div class="meta-season-rewards">${SEASON_REWARDS.map((reward) => `<span class="${season.claimedLevels.includes(String(reward.level)) ? "claimed" : season.level >= reward.level ? "ready" : ""}"><b>Lv.${reward.level}</b>${escapeHtml(reward.label)}</span>`).join("")}</div>
@@ -1936,14 +2216,14 @@
     const body = tab === "forge" ? renderForgeTab(next, classId) : tab === "archive" ? renderArchiveTab(next) : tab === "cosmetics" ? renderCosmeticsTab(next) : tab === "challenges" ? renderChallengesTab(next, options.leaderboards || []) : renderGearTab(next, classId, options.inventoryUi || {});
     const chrome = options.embedded
       ? ""
-      : `<div class="meta-panel-head"><div><strong>원정대 보관소</strong><span>파밍 · 제작 · 수집 · 반복 임무</span></div><div><small>강화석 ${next.currencies.enhancementStones}</small><small>가루 ${next.currencies.reforgingDust}</small><small>정수 ${next.currencies.bossEssence}</small></div></div><div class="meta-tabs">${Object.entries(labels).map(([id, label]) => `<button type="button" class="${tab === id ? "active" : ""}" data-progression-action="tab" data-tab="${id}">${label}</button>`).join("")}</div>`;
+      : `<div class="meta-panel-head"><div><strong>원정대 보관소</strong><span>파밍 · 제작 · 수집 · 반복 임무</span></div><div><small>강화석 ${next.currencies.enhancementStones}</small><small>가루 ${next.currencies.reforgingDust}</small></div></div><div class="meta-tabs">${Object.entries(labels).map(([id, label]) => `<button type="button" class="${tab === id ? "active" : ""}" data-progression-action="tab" data-tab="${id}">${label}</button>`).join("")}</div>`;
     return `<section class="meta-progression-panel${options.embedded ? " embedded" : ""}" aria-label="장기 성장 콘텐츠">${chrome}<div class="meta-tab-body">${body}</div></section>`;
   }
 
   function getProgressionRenderKey(progress, classId, tab) {
     const next = normalizeProgress(progress);
     const loadout = next.equipment[classId] || emptyLoadout();
-    return [tab, classId, next.inventory.items.map((item) => `${item.id}:${item.enhance}:${item.rerolls}:${item.lockedAffixIndices.join(".")}:${JSON.stringify(item.reforgePreview)}`).join(","), next.inventory.runes.map((rune) => `${rune.id}:${rune.tier}`).join(","), JSON.stringify(next.inventory.bossMaterials), JSON.stringify(loadout), JSON.stringify(next.currencies), JSON.stringify(next.cosmetics), JSON.stringify(next.collections), JSON.stringify(next.combatByClass), Object.keys(next.achievements).length, next.challenges.daily.progress, next.challenges.weekly.progress, next.challenges.season.level].join("|");
+    return [tab, classId, next.inventory.items.map((item) => `${item.id}:${item.enhance}:${item.rerolls}:${item.lockedAffixIndices.join(".")}:${JSON.stringify(item.reforgePreview)}`).join(","), next.inventory.runes.map((rune) => `${rune.id}:${rune.tier}`).join(","), JSON.stringify(loadout), JSON.stringify(next.currencies), JSON.stringify(next.cosmetics), JSON.stringify(next.collections), JSON.stringify(next.combatByClass), Object.keys(next.achievements).length, next.challenges.daily.progress, next.challenges.weekly.progress, next.challenges.season.level].join("|");
   }
 
   function renderRunLootSummary(progress, resultKey) {
@@ -1951,8 +2231,7 @@
     if (!rewards || (resultKey && rewards.resultKey !== resultKey)) return "";
     const runeRows = (rewards.runes || []).map((rune) => `<span><b>룬 ${RUNE_GRADES[Math.max(0, rune.tier - 1)]}</b>${escapeHtml(rune.name)}</span>`).join("");
     const challengeRows = (rewards.challengeRewards || []).map((reward) => `<span><b>임무 완료</b>${escapeHtml(reward.label)}</span>`).join("");
-    const materialRows = (rewards.bossMaterials || []).map((bossId) => `<span><b>보스 재료</b>${escapeHtml(BOSS_RECIPES.find((recipe) => recipe.bossId === bossId)?.materialName || bossId)} +1</span>`).join("");
-    return `<section class="result-loot-panel"><div><strong>정산 보상</strong><small>강화석 +${rewards.enhancementStones || 0} · 가루 +${rewards.reforgingDust || 0} · 정수 +${rewards.bossEssence || 0}${rewards.eventMultiplier > 1 ? " · 이벤트 x2" : ""}</small></div><div class="result-loot-list">${runeRows}${materialRows}${challengeRows}</div></section>`;
+    return `<section class="result-loot-panel"><div><strong>정산 보상</strong><small>강화석 +${rewards.enhancementStones || 0} · 가루 +${rewards.reforgingDust || 0}${rewards.eventMultiplier > 1 ? " · 이벤트 x2" : ""}</small></div><div class="result-loot-list">${runeRows}${challengeRows}</div></section>`;
   }
 
   const manager = {

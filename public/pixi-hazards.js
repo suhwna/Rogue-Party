@@ -152,6 +152,78 @@
     return true;
   }
 
+  function renderFireLine(renderer, hazard, state, now) {
+    if (hazard.type !== "fire_line") return false;
+    const angle = hazard.angle || 0;
+    const ux = Math.cos(angle);
+    const uy = Math.sin(angle);
+    const halfLength = Math.max(1, Number(hazard.length) || 1) * 0.5;
+    const width = Math.max(18, Number(hazard.width) || 18);
+    const x1 = hazard.x - ux * halfLength;
+    const y1 = hazard.y - uy * halfLength;
+    const x2 = hazard.x + ux * halfLength;
+    const y2 = hazard.y + uy * halfLength;
+    const pulse = 0.9 + Math.sin(now / 180 + Number(hazard.id || 0)) * 0.06;
+    const z = hazard.y - 12;
+    renderer.drawGfxLine(x1, y1, x2, y2, width, "#7c2d12", 0.09, z - 3, "add");
+    renderer.drawGfxLine(x1, y1, x2, y2, width * 0.78, "#f97316", 0.08 * pulse, z - 2, "add");
+    renderer.drawGfxLine(x1, y1, x2, y2, width * 0.38, "#ffedd5", 0.045 * pulse, z - 1, "add");
+    const patchCount = Math.max(4, Math.min(22, Math.ceil((halfLength * 2) / Math.max(70, width * 1.35))));
+    for (let i = 0; i < patchCount; i += 1) {
+      const ratio = (i + 0.5) / patchCount;
+      const seed = Number(hazard.id || 0) * 0.31 + i * 2.29;
+      const sideOffset = Math.sin(seed) * width * 0.22;
+      const patchX = x1 + (x2 - x1) * ratio - uy * sideOffset;
+      const patchY = y1 + (y2 - y1) * ratio + ux * sideOffset;
+      const patchRadius = width * (0.18 + (i % 3) * 0.025);
+      const arcStart = angle + seed * 0.08 - 0.55;
+      renderer.drawGfxArc?.(
+        patchX,
+        patchY,
+        Math.max(5, patchRadius),
+        arcStart,
+        arcStart + 1.05,
+        Math.max(1.5, width * 0.035),
+        i % 2 ? "#f97316" : "#fbbf24",
+        0.14 * pulse,
+        z + i,
+        "add",
+        7
+      );
+    }
+    return true;
+  }
+
+  function renderElementPool(renderer, hazard, state, now) {
+    if (hazard.type !== "fire_pool" && hazard.type !== "ice_pool") return false;
+    const ice = hazard.type === "ice_pool";
+    const main = ice ? "#38bdf8" : "#f97316";
+    const hot = ice ? "#e0f2fe" : "#ffedd5";
+    const dark = ice ? "#082f49" : "#7c2d12";
+    const pulse = 0.9 + Math.sin(now / 180 + Number(hazard.id || 0)) * 0.06;
+    const z = hazard.y - 12;
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius, dark, 0.09, main, 0.22, 3, z, "add", 36);
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.78, main, 0.08 * pulse, hot, 0.1, 2, z + 1, "add", 32);
+    for (let i = 0; i < 8; i += 1) {
+      const angle = i * Math.PI * 0.73 + Number(hazard.id || 0) * 0.31;
+      const orbit = state.radius * (0.26 + (i % 4) * 0.14);
+      renderer.drawGfxCircle?.(
+        hazard.x + Math.cos(angle) * orbit,
+        hazard.y + Math.sin(angle) * orbit * 0.72,
+        Math.max(4, state.radius * (0.035 + (i % 2) * 0.012)),
+        main,
+        0.14 * pulse,
+        hot,
+        0.1,
+        1,
+        z + 2 + i,
+        "add",
+        9
+      );
+    }
+    return true;
+  }
+
   function renderEngineerTurret(renderer, hazard, state, now) {
     const z = hazard.y + 8;
     const bob = Math.sin(now / 170 + hazard.id) * 1.2;
@@ -296,9 +368,10 @@
   function renderMeteorHazard(renderer, hazard, state, now) {
     const z = hazard.y - 14;
     const skin = skinEffects.palette?.(hazard.skin);
-    const main = skin?.main || "#f97316";
-    const dark = skin?.dark || "#7c2d12";
-    const hot = skin?.hot || "#fed7aa";
+    const ice = Boolean(hazard.iceMeteor);
+    const main = ice ? "#38bdf8" : skin?.main || "#f97316";
+    const dark = ice ? "#082f49" : skin?.dark || "#7c2d12";
+    const hot = ice ? "#e0f2fe" : skin?.hot || "#fed7aa";
     drawNeonRing(renderer, hazard.x, hazard.y, state.radius, main, state.armed ? 0.24 : 0.42, z, now / 720, true);
     renderer.drawGfxCircle(hazard.x, hazard.y, state.radius * 0.38, dark, 0.05, hot, 0.14, 2, z + 2, "add", 24);
   }
@@ -351,12 +424,12 @@
     const edge = skin?.hot || "#fff7ed";
     const dark = skin?.dark || "#2a0f05";
     const z = hazard.y + 42;
-    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.82, dark, 0.045, tint, 0.16, 4, z - 8, "add", 42);
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius, dark, 0.045, tint, 0.16, 4, z - 8, "add", 42);
     renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.5, edge, 0.14, z - 5, -spin * 0.35, 9);
 
     for (let i = 0; i < 5; i += 1) {
       const lane = i / 5;
-      const r = radius * (0.34 + lane * 0.13);
+      const r = radius * (0.5 + lane * 0.12);
       const start = spin + i * 1.24;
       const end = start + 1.35 + lane * 0.42;
       const width = 4 + i;
@@ -381,18 +454,27 @@
     const armMax = Math.max(0.1, Number(hazard.armTimeMax || 1));
     const progress = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
     const pulse = 0.72 + Math.sin(now / 95) * 0.16;
-    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius, "#450a0a", 0.055 + progress * 0.045, state.color, 0.16 + progress * 0.18, 9, -10000, "normal", 96);
-    renderer.drawGfxRuneRing(hazard.x, hazard.y, Math.min(state.radius * 0.72, 680), state.color, (0.12 + progress * 0.2) * pulse, 9990, -now / 520, 18);
+    const warningColor = "#ef4444";
+    renderer.drawGfxCircle(hazard.x, hazard.y, state.radius, "#450a0a", 0.105 + progress * 0.075 + pulse * 0.018, warningColor, 0.26 + progress * 0.24, 12, -10000, "normal", 96);
+    renderer.drawGfxRuneRing(hazard.x, hazard.y, Math.min(state.radius * 0.72, 680), warningColor, (0.2 + progress * 0.28) * pulse, 9990, -now / 420, 18);
   }
 
   function renderBossSafeZone(renderer, hazard, state, now) {
     const armMax = Math.max(0.1, Number(hazard.armTimeMax || 1));
     const progress = Math.max(0, Math.min(1, 1 - Number(hazard.armTime || 0) / armMax));
-    const pulse = 0.9 + Math.sin(now / 120 + Number(hazard.id || 0)) * 0.06;
+    const pulse = 0.94 + Math.sin(now / 120 + Number(hazard.id || 0)) * 0.06;
     const radius = state.radius * pulse;
-    renderer.drawGfxCircle(hazard.x, hazard.y, radius, "#083344", 0.2, "#67e8f9", 0.72, 6, hazard.y + 9000, "add", 48);
-    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.78, "#cffafe", 0.055 + progress * 0.025, "#ecfeff", 0.34, 2, hazard.y + 9001, "add", 40);
-    renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.62, "#a5f3fc", 0.38, hazard.y + 9002, now / 760, 12);
+    const z = hazard.y + 9000;
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 1.12, "#000000", 0, "#bae6fd", 0.52, 9, z, "add", 56);
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius, "#083344", 0.28, "#22d3ee", 0.96, 10, z + 1, "add", 52);
+    renderer.drawGfxCircle(hazard.x, hazard.y, radius * 0.78, "#cffafe", 0.09 + progress * 0.04, "#ecfeff", 0.48, 3, z + 2, "add", 44);
+    renderer.drawGfxRuneRing(hazard.x, hazard.y, radius * 0.64, "#a5f3fc", 0.58, z + 3, now / 560, 12);
+    renderer.drawGfxLine(hazard.x - radius * 0.62, hazard.y, hazard.x + radius * 0.62, hazard.y, 3, "#e0f2fe", 0.42, z + 4, "add");
+    renderer.drawGfxLine(hazard.x, hazard.y - radius * 0.62, hazard.x, hazard.y + radius * 0.62, 3, "#e0f2fe", 0.42, z + 4, "add");
+    for (let i = 0; i < 4; i += 1) {
+      const start = now / 520 + i * Math.PI * 0.5;
+      renderer.drawGfxArc(hazard.x, hazard.y, radius * 1.02, start, start + 0.62, 12, "#e0f2fe", 0.82, z + 5 + i, "add", 10);
+    }
   }
 
   function renderBossSpiralEmitter(renderer, hazard, state, now) {
@@ -408,11 +490,12 @@
   function renderDefaultHazard(renderer, hazard, state, now) {
     const poison = state.flavor.includes("poison") || state.flavor.includes("acid") || state.flavor.includes("venom");
     const fire = state.flavor.includes("fire") || state.flavor.includes("flame") || state.flavor.includes("burn") || state.flavor.includes("meteor") || state.flavor.includes("bomber") || state.flavor.includes("blast");
+    const ice = state.flavor.includes("ice") || state.flavor.includes("frost") || state.flavor.includes("glacial") || state.flavor.includes("cold");
     const heal = state.flavor.includes("heal") || state.flavor.includes("elixir") || state.flavor.includes("holy");
     const shield = state.flavor.includes("shield") || state.flavor.includes("barrier");
-    const tint = poison ? "#a3ff4f" : fire ? "#f97316" : heal ? "#86efac" : shield ? "#67e8f9" : state.color;
-    const fill = poison ? "#365314" : fire ? "#7c2d12" : heal ? "#052e16" : "#06121f";
-    const danger = hazard.hostile || fire || poison;
+    const tint = poison ? "#a3ff4f" : ice ? "#7dd3fc" : fire ? "#f97316" : heal ? "#86efac" : shield ? "#67e8f9" : state.color;
+    const fill = poison ? "#365314" : ice ? "#082f49" : fire ? "#7c2d12" : heal ? "#052e16" : "#06121f";
+    const danger = hazard.hostile || fire || poison || ice;
     renderer.drawGfxCircle(hazard.x, hazard.y, state.radius, fill, danger ? 0.07 : 0.035, tint, state.alpha, danger ? 4 : 3, hazard.y - 10, "add", 32);
     renderer.drawGfxRuneRing(hazard.x, hazard.y, state.radius * 0.72, tint, state.alpha * 0.38, hazard.y - 8, now / 780, danger ? 10 : 7);
     if (state.armed && danger) {
@@ -425,6 +508,7 @@
     if (hazard.type === "boss_field_judgment") return renderBossFieldJudgment(renderer, hazard, state, now);
     if (hazard.type === "boss_safe_zone") return renderBossSafeZone(renderer, hazard, state, now);
     if (hazard.type === "boss_spiral_emitter") return renderBossSpiralEmitter(renderer, hazard, state, now);
+    if (renderFireLine(renderer, hazard, state, now)) return;
     if (renderBeamHazard(renderer, hazard, state, now)) return;
     drawHostileHazardBoundary(renderer, hazard, state, now);
     if (hazard.type === "engineer_turret") return renderEngineerTurret(renderer, hazard, state, now);
@@ -435,6 +519,7 @@
     if (hazard.type === "alchemy_bomb") return renderAlchemyBomb(renderer, hazard, state, now);
     if (hazard.type === "alchemy_pool" || hazard.type === "acid_pool" || hazard.type === "poison_pool") return renderAlchemyPool(renderer, hazard, state, now);
     if (hazard.type === "alchemy_elixir_mist") return renderElixirMist(renderer, hazard, state, now);
+    if (renderElementPool(renderer, hazard, state, now)) return;
     if (hazard.type === "meteor") return renderMeteorHazard(renderer, hazard, state, now);
     if (hazard.type === "mortar_blast") return renderMortarBlast(renderer, hazard, state, now);
     if (hazard.type === "warrior_whirlwind_projectile") return renderWarriorForwardWhirlwind(renderer, hazard, state, now);

@@ -59,7 +59,6 @@ for (const classId of classIds) {
   loadout.runes = equippedRunes;
 }
 
-progress.inventory.bossMaterials = Object.fromEntries(catalog.bosses.map((boss) => [boss.id, 9999]));
 progress.collections.equipmentBases = catalog.itemBases.map((item) => item.id);
 progress.collections.runeTypes = catalog.runes.map((rune) => rune.id);
 progress.collections.monsters = catalog.monsters.map((monster) => monster.id);

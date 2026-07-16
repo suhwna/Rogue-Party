@@ -159,7 +159,7 @@ export const SKILL_UPGRADES = {
       "slot": "r",
       "minLevel": 4,
       "name": "레인 에로우",
-      "text": "R: 넓은 조준 지점에 3.2초 동안 화살비를 내려 다수의 적을 지속 타격합니다."
+      "text": "R: 넓은 조준 지점에 3.2초 동안 화살비를 내려 다수의 적을 지속 타격합니다. 화살비가 끝난 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "ranger_rain_slow",
@@ -279,7 +279,7 @@ export const SKILL_UPGRADES = {
       "slot": "f",
       "minLevel": 6,
       "name": "연쇄 번개",
-      "text": "F: 적 사이를 튕기는 번개를 방출합니다."
+      "text": "F: 첫 대상 이후 최대 5회, 적 사이 거리 260까지 연쇄되는 번개를 방출합니다."
     },
     {
       "id": "mage_chain_no_falloff",
@@ -324,7 +324,7 @@ export const SKILL_UPGRADES = {
       "slot": "e",
       "minLevel": 2,
       "name": "메카 탑승",
-      "text": "E: 8.5초 동안 메카에 탑승해 방어력과 방어막을 얻고, 빠른 양손 레이저 기본공격을 사용합니다."
+      "text": "E: 8.5초 동안 메카에 탑승해 방어력과 방어막을 얻고, 빠른 양손 레이저 기본공격을 사용합니다. 탑승이 끝난 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "engineer_rail_turret",
@@ -374,7 +374,7 @@ export const SKILL_UPGRADES = {
       "slot": "f",
       "minLevel": 6,
       "name": "호위 드론",
-      "text": "F: 14초 동안 주변을 비행하며 적을 빠르게 지원 사격하는 드론을 호출합니다."
+      "text": "F: 14초 동안 주변을 비행하며 적을 빠르게 지원 사격하는 드론을 호출합니다. 마지막 드론이 사라진 뒤 쿨타임이 시작됩니다."
     },
     {
       "id": "engineer_drone_missile",

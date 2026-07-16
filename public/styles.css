@@ -2926,7 +2926,6 @@ input:focus {
 .meta-currency-row,
 .meta-mode-switch,
 .meta-unlock-row,
-.meta-boss-craft,
 .meta-season > div {
   display: flex;
   align-items: center;
@@ -3314,6 +3313,13 @@ input:focus {
   box-shadow: inset 0 0 0 1px rgba(251, 113, 133, 0.5), inset 4px 0 0 rgba(251, 113, 133, 0.24), 0 0 12px rgba(251, 113, 133, 0.1);
 }
 
+.meta-item[data-rarity="unique"],
+.meta-equipped-card[data-rarity="unique"],
+.meta-forge-card[data-rarity="unique"] {
+  background-color: rgba(11, 62, 61, 0.5);
+  box-shadow: inset 0 0 0 1px rgba(94, 234, 212, 0.58), inset 4px 0 0 rgba(94, 234, 212, 0.3), 0 0 14px rgba(94, 234, 212, 0.12);
+}
+
 .meta-item[data-rarity="epic"] .meta-item-icon,
 .meta-equipped-card[data-rarity="epic"] .meta-item-icon { background: rgba(72, 38, 94, 0.58); }
 
@@ -3325,6 +3331,13 @@ input:focus {
   border-width: 2px;
   background: rgba(91, 27, 48, 0.7);
   font-variation-settings: "FILL" 1, "wght" 700, "GRAD" 80, "opsz" 20;
+}
+
+.meta-item[data-rarity="unique"] .meta-item-icon,
+.meta-equipped-card[data-rarity="unique"] .meta-item-icon {
+  border-width: 2px;
+  background: rgba(17, 94, 89, 0.72);
+  font-variation-settings: "FILL" 1, "wght" 700, "GRAD" 100, "opsz" 20;
 }
 
 .meta-item.selected {
@@ -3713,8 +3726,6 @@ input:focus {
 .meta-item-actions button,
 .meta-forge-list button,
 .meta-merge-list button,
-.meta-boss-craft button,
-.meta-boss-recipes button,
 .meta-cosmetic-pickers button,
 .meta-perk-list button,
 .meta-rune-list button {
@@ -3735,14 +3746,12 @@ input:focus {
 
 .meta-item-actions button:disabled,
 .meta-forge-list button:disabled,
-.meta-merge-list button:disabled,
-.meta-boss-craft button:disabled {
+.meta-merge-list button:disabled {
   cursor: default;
   opacity: 0.36;
 }
 
 .meta-set-list,
-.meta-boss-recipes,
 .meta-cosmetic-pickers,
 .meta-perk-list,
 .meta-leaderboard,
@@ -3769,7 +3778,6 @@ input:focus {
 .meta-set-list b { color: #c8d5e4; font-size: 10px; }
 .meta-set-list small { margin-top: 2px; color: #7f90a5; font-size: 8px; line-height: 1.45; }
 
-.meta-boss-recipes article,
 .meta-leaderboard > div {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -3780,29 +3788,6 @@ input:focus {
   padding: 8px;
 }
 
-.meta-boss-recipes strong,
-.meta-boss-recipes span { display: block; }
-.meta-boss-recipes strong { color: #ead3a1; font-size: 10px; }
-.meta-boss-recipes span { margin-top: 2px; color: #988665; font-size: 8px; }
-.meta-boss-recipes strong em {
-  display: inline-block;
-  margin-left: 5px;
-  border: 1px solid rgba(224, 112, 255, 0.52);
-  background: rgba(111, 42, 132, 0.34);
-  padding: 1px 4px;
-  color: #efb5ff;
-  font-size: 7px;
-  font-style: normal;
-}
-.meta-boss-recipes small {
-  display: block;
-  max-width: 390px;
-  margin-top: 4px;
-  color: #c9b27e;
-  font-size: 8px;
-  line-height: 1.45;
-}
-.meta-boss-recipes button:disabled,
 .meta-perk-list button:disabled { cursor: default; opacity: 0.38; }
 
 .meta-combat-records {
@@ -4081,6 +4066,27 @@ input:focus {
   gap: 5px;
 }
 
+.meta-forge-affix-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: -2px;
+}
+
+.meta-forge-affix-head strong { color: #cbd8e5; font-size: 10px; }
+.meta-forge-affix-head span { color: #7f94a8; font-size: 8px; text-align: right; }
+
+.meta-forge-no-affixes {
+  grid-column: 1 / -1;
+  margin: 0;
+  border: 1px dashed rgba(126, 159, 178, 0.2);
+  padding: 8px 10px;
+  color: #7f93a7;
+  font-size: 9px;
+  text-align: center;
+}
+
 .meta-forge-affix {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
@@ -4138,9 +4144,17 @@ input:focus {
 .meta-reforge-columns > div { display: grid; gap: 4px; min-width: 0; }
 .meta-reforge-columns > div > b { color: #8496aa; font-size: 9px; }
 .meta-reforge-columns > span { color: #7890a6; font-size: 18px; text-align: center; }
-.meta-reforge-columns .meta-affix-stat.changed { border-color: rgba(94, 234, 212, 0.42); background: rgba(18, 73, 70, 0.34); }
+.meta-reforge-columns .meta-affix-stat.changed { border-color: rgba(94, 234, 212, 0.58); }
 .meta-reforge-columns .meta-affix-stat.same { opacity: 0.62; }
-.meta-reforge-compare footer { display: flex; justify-content: flex-end; gap: 6px; margin-top: 9px; }
+.meta-affix-stat.quality-fill {
+  --affix-fill: rgba(113, 128, 150, 0.22);
+  --affix-track: rgba(20, 31, 47, 0.72);
+  background: linear-gradient(90deg, var(--affix-fill) 0 var(--affix-roll), var(--affix-track) var(--affix-roll) 100%);
+}
+.meta-affix-stat.quality-mid { --affix-fill: rgba(86, 169, 159, 0.25); }
+.meta-affix-stat.quality-high { --affix-fill: rgba(94, 234, 212, 0.29); }
+.meta-affix-stat.quality-peak { --affix-fill: rgba(242, 201, 76, 0.3); }
+.meta-reforge-compare footer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 9px; }
 .meta-reforge-compare button.secondary { border-color: rgba(148, 163, 184, 0.24); color: #aebdcd; background: rgba(30, 41, 59, 0.72); }
 
 .meta-forge-list button .material-symbols-rounded {
@@ -4168,33 +4182,6 @@ input:focus {
 .meta-merge-list button b {
   margin-left: 4px;
   color: #f4d86f;
-}
-
-.meta-boss-craft {
-  margin-top: 14px;
-  border-left: 3px solid #d09a35;
-  background: rgba(68, 43, 14, 0.42);
-  padding: 10px;
-}
-
-.meta-boss-craft > div {
-  min-width: 0;
-}
-
-.meta-boss-craft strong,
-.meta-boss-craft span {
-  display: block;
-}
-
-.meta-boss-craft strong {
-  color: #f1d092;
-  font-size: 11px;
-}
-
-.meta-boss-craft span {
-  margin-top: 3px;
-  color: #9a835e;
-  font-size: 9px;
 }
 
 .meta-collection-grid {
@@ -4569,7 +4556,7 @@ input:focus {
   z-index: 2;
   top: -12px;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1px;
   margin: -12px 0 10px;
   border: 1px solid rgba(126, 159, 178, 0.16);
@@ -4587,7 +4574,7 @@ input:focus {
 .meta-forge-card > header .meta-item-icon { color: #c6d4e1; }
 .meta-forge-primary {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) auto 18px auto;
+  grid-template-columns: minmax(80px, 1fr) auto;
   align-items: center;
   gap: 8px;
   border: 1px solid rgba(94, 234, 212, 0.18);
@@ -4595,9 +4582,10 @@ input:focus {
   padding: 7px 9px;
 }
 .meta-forge-primary small { color: #88a5a4; font-size: 9px; }
-.meta-forge-primary b { color: #b6c8c8; font-size: 11px; }
-.meta-forge-primary i { color: #5e827f; font-size: 15px; }
-.meta-forge-primary strong { color: #a7f0dc; font-size: 12px; }
+.meta-forge-primary-values { display: inline-flex; align-items: baseline; justify-content: flex-end; gap: 6px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meta-forge-primary-values b { color: #d3dee6; font-size: 12px; }
+.meta-forge-primary-values i { color: #647e80; font-size: 10px; font-style: normal; }
+.meta-forge-primary-values strong { color: #5eead4; font-size: 12px; }
 .meta-forge-actions > .meta-forge-fixed {
   display: grid;
   align-content: center;
@@ -4610,7 +4598,7 @@ input:focus {
 .meta-forge-fixed small { display: block; }
 .meta-forge-fixed b { color: #a9b8c7; font-size: 9px; }
 .meta-forge-fixed small { margin-top: 2px; color: #6f8193; font-size: 8px; }
-.meta-forge-lower { display: grid; grid-template-columns: minmax(280px, 0.72fr) minmax(440px, 1.28fr); gap: 10px; margin-top: 10px; align-items: start; }
+.meta-forge-lower { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-top: 10px; align-items: start; }
 .meta-forge-lower .meta-merge-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 .meta-cosmetic-current {
@@ -6582,4 +6570,149 @@ input:focus {
   .result-player-metrics {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+.pause-overlay {
+  z-index: 120;
+  background: rgba(2, 7, 14, 0.76);
+  backdrop-filter: blur(5px);
+}
+
+.pause-modal {
+  width: min(420px, calc(100vw - 48px));
+  padding: 34px;
+  text-align: center;
+  border-color: rgba(103, 232, 249, 0.32);
+  background: #08121f;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+}
+
+.pause-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border: 1px solid rgba(103, 232, 249, 0.42);
+  border-radius: 6px;
+  color: #a5f3fc;
+  background: rgba(8, 47, 73, 0.58);
+  font-size: 30px;
+}
+
+.pause-mark[data-icon]::before {
+  content: attr(data-icon) / "";
+  font-family: "Material Symbols Rounded";
+  font-size: 30px;
+  font-weight: 600;
+  font-variation-settings: "FILL" 0, "wght" 600, "GRAD" 0, "opsz" 32;
+  line-height: 1;
+}
+
+.pause-modal h2 {
+  margin: 4px 0 10px;
+  font-size: 28px;
+}
+
+.pause-modal > p:last-of-type {
+  margin: 0;
+  color: #9fb0c4;
+  line-height: 1.6;
+}
+
+.pause-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 28px;
+}
+
+.pause-actions button {
+  width: 100%;
+  min-height: 46px;
+}
+
+.pause-actions .danger[data-confirm="true"] {
+  color: #fff;
+  border-color: #ef4444;
+  background: #991b1b;
+}
+
+.equipment-pickup-toast {
+  position: fixed;
+  z-index: 118;
+  top: 88px;
+  left: 50%;
+  display: grid;
+  grid-template-columns: 54px minmax(220px, 1fr);
+  gap: 14px;
+  width: min(430px, calc(100vw - 48px));
+  padding: 14px 18px;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--pickup-rarity) 68%, #ffffff 8%);
+  border-left: 4px solid var(--pickup-rarity);
+  border-radius: 6px;
+  color: #edf6ff;
+  background: rgba(5, 13, 24, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.48), 0 0 30px var(--pickup-glow);
+  opacity: 0;
+  transform: translate(-50%, -14px);
+  transition: opacity 180ms ease, transform 220ms ease;
+  pointer-events: none;
+}
+
+.equipment-pickup-toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.equipment-pickup-icon {
+  position: static !important;
+  display: grid !important;
+  width: 52px;
+  height: 52px;
+  margin: 0 !important;
+  place-items: center;
+  border: 1px solid var(--pickup-rarity);
+  border-radius: 5px;
+  color: var(--pickup-rarity);
+  background: var(--pickup-glow);
+  font-size: 28px;
+  line-height: 1;
+  transform: none !important;
+}
+
+.equipment-pickup-visual {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  align-self: center;
+  justify-self: center;
+  overflow: visible;
+}
+
+.equipment-pickup-toast .equipment-pickup-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.equipment-pickup-toast small {
+  color: var(--pickup-rarity);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.equipment-pickup-toast strong {
+  overflow: hidden;
+  font-size: 18px;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.equipment-pickup-toast em {
+  color: #91a5ba;
+  font-size: 11px;
+  font-style: normal;
 }
